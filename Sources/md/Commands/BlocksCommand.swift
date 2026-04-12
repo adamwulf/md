@@ -13,7 +13,23 @@ struct BlocksCommand: AsyncParsableCommand {
 
     static var configuration = CommandConfiguration(
         commandName: "blocks",
-        abstract: "Print markdown blocks by index"
+        abstract: "List, count, or print markdown blocks by index (1-based)",
+        discussion: """
+            Three modes of operation:
+
+              No arguments — lists all blocks with type summaries and line ranges.
+              --count     — prints the total number of blocks.
+              START [END] — prints the raw content of blocks START through END \
+            (inclusive). END defaults to START.
+
+            Block types: heading, paragraph, code block, ordered list, unordered \
+            list, blockquote, table, and thematic break.
+
+              $ md blocks --file README.md
+              $ md blocks --count --file README.md
+              $ md blocks 2 --file README.md
+              $ md blocks 2 5 --file README.md
+            """
     )
 
     @Flag(name: .long, help: "Print the number of blocks")

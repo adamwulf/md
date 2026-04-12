@@ -13,7 +13,17 @@ struct TocCommand: AsyncParsableCommand {
 
     static var configuration = CommandConfiguration(
         commandName: "toc",
-        abstract: "Print a table of contents with line numbers"
+        abstract: "Print a table of contents from headings with block or line numbers",
+        discussion: """
+            Outputs one line per heading, indented by heading level, with dot-fill \
+            and right-aligned numbers. An EOF marker is printed as the last line.
+
+            Exactly one of --blocks or --lines is required. --blocks shows the \
+            1-based block index of each heading; --lines shows the line number.
+
+              $ md toc --lines --file README.md
+              $ md toc --blocks --file README.md
+            """
     )
 
     @Flag(name: .long, help: "Show block numbers instead of line numbers")

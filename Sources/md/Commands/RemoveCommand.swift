@@ -13,7 +13,16 @@ struct RemoveCommand: AsyncParsableCommand {
 
     static var configuration = CommandConfiguration(
         commandName: "remove",
-        abstract: "Remove one or more blocks from a markdown file"
+        abstract: "Remove one or more blocks from a markdown file",
+        discussion: """
+            Removes blocks START through END (inclusive, 1-based). END defaults \
+            to START. The remaining document is written to stdout unless \
+            -i/--in-place is used.
+
+              $ md remove 3 --file README.md
+              $ md remove 2 4 --file README.md
+              $ md remove 3 --file README.md -i
+            """
     )
 
     @Flag(name: .shortAndLong, help: "Edit the file in place")

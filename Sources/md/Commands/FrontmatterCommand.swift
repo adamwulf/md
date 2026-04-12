@@ -12,7 +12,32 @@ struct FrontmatterCommand: AsyncParsableCommand {
 
     static var configuration = CommandConfiguration(
         commandName: "frontmatter",
-        abstract: "Read, set, or remove frontmatter key/value pairs"
+        abstract: "Read, set, or remove frontmatter key/value pairs",
+        discussion: """
+            Supported frontmatter formats: YAML (--- delimiters), TOML \
+            (+++ delimiters), and JSON (;;; delimiters).
+
+            Modes of operation:
+
+              No flags       — prints the frontmatter data only (no delimiters).
+              --key KEY      — prints the value of KEY.
+              --set KEY=VAL  — sets KEY to VAL. Creates frontmatter if none exists.
+              --remove-key K — removes the key K.
+
+            Keys support dot syntax for nested access (e.g. "author.name"). \
+            --format converts output to the specified format (yaml, json, toml). \
+            When --set creates new frontmatter, the format defaults to YAML \
+            unless --format is specified.
+
+            Use -i/--in-place with --set or --remove-key to edit the file directly.
+
+              $ md frontmatter --file doc.md
+              $ md frontmatter --key title --file doc.md
+              $ md frontmatter --set "title=My Doc" --file doc.md -i
+              $ md frontmatter --set "author.name=Jane" --file doc.md -i
+              $ md frontmatter --remove-key draft --file doc.md -i
+              $ md frontmatter --format json --file doc.md
+            """
     )
 
     @Flag(name: .shortAndLong, help: "Edit the file in place")

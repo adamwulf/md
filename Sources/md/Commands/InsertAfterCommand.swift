@@ -13,7 +13,15 @@ struct InsertAfterCommand: AsyncParsableCommand {
 
     static var configuration = CommandConfiguration(
         commandName: "insert-after",
-        abstract: "Insert markdown content after a block"
+        abstract: "Insert markdown content after a block",
+        discussion: """
+            Inserts new markdown content immediately after the specified block. \
+            The new content is parsed and re-formatted. Output is written to \
+            stdout unless -i/--in-place is used.
+
+              $ md insert-after 1 "New paragraph." --file README.md
+              $ md insert-after 3 "## New Section" --file README.md -i
+            """
     )
 
     @Flag(name: .shortAndLong, help: "Edit the file in place")

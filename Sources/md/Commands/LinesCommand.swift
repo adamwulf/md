@@ -12,7 +12,20 @@ struct LinesCommand: AsyncParsableCommand {
 
     static var configuration = CommandConfiguration(
         commandName: "lines",
-        abstract: "Print lines from a file by line number"
+        abstract: "List, count, or print raw lines by number (1-based)",
+        discussion: """
+            Three modes of operation:
+
+              No arguments — lists all lines with left-padded line numbers.
+              --count     — prints the total number of lines.
+              START [END] — prints lines START through END (inclusive). END \
+            defaults to START.
+
+              $ md lines --file README.md
+              $ md lines --count --file README.md
+              $ md lines 10 --file README.md
+              $ md lines 10 20 --file README.md
+            """
     )
 
     @Flag(name: .long, help: "Print the number of lines")
