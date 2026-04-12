@@ -36,6 +36,12 @@ enum InputReader {
         return String(data: data, encoding: .utf8) ?? ""
     }
 
+    /// Write content to a file path, replacing its contents.
+    static func write(_ content: String, to path: String) throws {
+        let url = URL(fileURLWithPath: path)
+        try content.write(to: url, atomically: true, encoding: .utf8)
+    }
+
     /// Parse passthrough arguments into optional indices and optional file path.
     /// If the last argument doesn't parse as an Int, it's treated as a file path.
     /// If all arguments parse as Ints (or there are none), file is nil (use stdin).

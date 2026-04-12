@@ -16,14 +16,23 @@ struct InsertAfterCommand: AsyncParsableCommand {
         abstract: "Insert markdown content after a block"
     )
 
+    @Flag(name: .shortAndLong, help: "Edit the file in place")
+    var inPlace: Bool = false
+
     @Argument(help: "Block index (1-based) to insert after")
     var blockIndex: Int
 
     @Argument(help: "Markdown content to insert")
     var content: String
 
-    @Argument(help: "Path to the markdown file")
-    var file: String
+    @Argument(help: "Path to the markdown file (reads stdin if omitted)")
+    var file: String?
+
+    func validate() throws {
+        if inPlace && file == nil {
+            throw ValidationError("Cannot use --in-place with stdin")
+        }
+    }
 
     func run() async throws {
         let parser = MarkdownParser()
@@ -51,6 +60,10 @@ struct InsertAfterCommand: AsyncParsableCommand {
             }
         }
 
-        print(result, terminator: "")
+        if inPlace {
+            try InputReader.write(result, to: file!)
+        } else {
+            print(result, terminator: "")
+        }
     }
 }

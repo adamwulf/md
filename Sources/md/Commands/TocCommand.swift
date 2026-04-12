@@ -29,6 +29,9 @@ struct TocCommand: AsyncParsableCommand {
         if blocks && lines {
             throw ValidationError("Cannot specify both --blocks and --lines")
         }
+        if !blocks && !lines {
+            throw ValidationError("Must specify either --blocks or --lines")
+        }
     }
 
     func run() async throws {
