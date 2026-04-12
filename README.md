@@ -19,10 +19,81 @@ cp .build/release/md /usr/local/bin/
 
 ## Usage
 
-### Format/normalize a markdown file
+All commands require either `--file <path>` or `--stdin` to specify input.
+
+### Format
+
+Parse and normalize a markdown file:
 
 ```bash
-md format README.md
+md format --file README.md
+cat README.md | md format --stdin
+```
+
+### Table of Contents
+
+Print a table of contents with dot-fill and aligned numbers. Requires `--lines` or `--blocks`:
+
+```bash
+md toc --lines --file README.md
+md toc --blocks --file README.md
+```
+
+### Blocks
+
+List, count, or print blocks by index (1-based):
+
+```bash
+md blocks --file README.md              # list all blocks with summaries
+md blocks --count --file README.md      # print number of blocks
+md blocks 2 --file README.md            # print block 2
+md blocks 2 5 --file README.md          # print blocks 2-5
+```
+
+### Lines
+
+List, count, or print lines by number (1-based):
+
+```bash
+md lines --file README.md               # list all lines with numbers
+md lines --count --file README.md        # print number of lines
+md lines 10 --file README.md            # print line 10
+md lines 10 20 --file README.md         # print lines 10-20
+```
+
+### Insert
+
+Insert markdown content before or after a block (1-based index):
+
+```bash
+md insert-after 1 "New paragraph." --file README.md
+md insert-before 3 "## New Section" --file README.md
+```
+
+Use `-i` to edit the file in place:
+
+```bash
+md insert-after 1 "New paragraph." --file README.md -i
+```
+
+### Remove
+
+Remove one or more blocks (1-based index):
+
+```bash
+md remove 3 --file README.md            # remove block 3
+md remove 2 4 --file README.md          # remove blocks 2-4
+md remove 3 --file README.md -i         # remove in place
+```
+
+### Replace
+
+Replace one or more blocks with new markdown content:
+
+```bash
+md replace 1 "# New Title" --file README.md           # replace block 1
+md replace 2 4 "Replacement." --file README.md         # replace blocks 2-4
+md replace 1 "# New Title" --file README.md -i         # replace in place
 ```
 
 ## Library
