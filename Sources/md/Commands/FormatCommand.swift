@@ -33,14 +33,14 @@ struct FormatCommand: AsyncParsableCommand {
             }
 
             switch block {
-            case .heading(let level, let text, _, _):
+            case .heading(let level, let text, _, _, _):
                 let prefix = String(repeating: "#", count: level)
                 output += "\(prefix) \(text)\n"
 
-            case .paragraph(let text, _, _):
+            case .paragraph(let text, _, _, _):
                 output += "\(text)\n"
 
-            case .codeBlock(let language, let code, _, _):
+            case .codeBlock(let language, let code, _, _, _):
                 let lang = language ?? ""
                 output += "```\(lang)\n"
                 output += code
@@ -49,23 +49,23 @@ struct FormatCommand: AsyncParsableCommand {
                 }
                 output += "```\n"
 
-            case .list(let items, _, _, _):
+            case .list(let items, _, _, _, _):
                 for item in items {
                     let indent = String(repeating: "    ", count: item.indentLevel)
                     let marker = item.ordered ? "1." : "-"
                     output += "\(indent)\(marker) \(item.text)\n"
                 }
 
-            case .blockquote(let text, _, _):
+            case .blockquote(let text, _, _, _):
                 let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
                 for line in lines {
                     output += "> \(line)\n"
                 }
 
-            case .thematicBreak(_, _):
+            case .thematicBreak(_, _, _):
                 output += "---\n"
 
-            case .table(let rows, _, _):
+            case .table(let rows, _, _, _):
                 guard let header = rows.first else { break }
                 let colWidths = header.map { $0.count }
 

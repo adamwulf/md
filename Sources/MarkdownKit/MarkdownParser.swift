@@ -24,37 +24,50 @@ public struct ListItem: Sendable, Equatable {
 
 /// Represents a parsed block-level markdown element
 public enum MarkdownBlock: Sendable {
-    case heading(level: Int, text: String, charRange: NSRange, byteRange: NSRange)
-    case paragraph(text: String, charRange: NSRange, byteRange: NSRange)
-    case codeBlock(language: String?, code: String, charRange: NSRange, byteRange: NSRange)
-    case list(items: [ListItem], ordered: Bool, charRange: NSRange, byteRange: NSRange)
-    case blockquote(text: String, charRange: NSRange, byteRange: NSRange)
-    case thematicBreak(charRange: NSRange, byteRange: NSRange)
-    case table(rows: [[String]], charRange: NSRange, byteRange: NSRange)
+    case heading(level: Int, text: String, charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
+    case paragraph(text: String, charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
+    case codeBlock(language: String?, code: String, charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
+    case list(items: [ListItem], ordered: Bool, charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
+    case blockquote(text: String, charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
+    case thematicBreak(charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
+    case table(rows: [[String]], charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
 
     /// Character offset range (for text extraction and display)
     public var charRange: NSRange {
         switch self {
-        case .heading(_, _, let charRange, _): return charRange
-        case .paragraph(_, let charRange, _): return charRange
-        case .codeBlock(_, _, let charRange, _): return charRange
-        case .list(_, _, let charRange, _): return charRange
-        case .blockquote(_, let charRange, _): return charRange
-        case .thematicBreak(let charRange, _): return charRange
-        case .table(_, let charRange, _): return charRange
+        case .heading(_, _, let charRange, _, _): return charRange
+        case .paragraph(_, let charRange, _, _): return charRange
+        case .codeBlock(_, _, let charRange, _, _): return charRange
+        case .list(_, _, let charRange, _, _): return charRange
+        case .blockquote(_, let charRange, _, _): return charRange
+        case .thematicBreak(let charRange, _, _): return charRange
+        case .table(_, let charRange, _, _): return charRange
         }
     }
 
     /// Byte offset range (for byte-based operations)
     public var byteRange: NSRange {
         switch self {
-        case .heading(_, _, _, let byteRange): return byteRange
-        case .paragraph(_, _, let byteRange): return byteRange
-        case .codeBlock(_, _, _, let byteRange): return byteRange
-        case .list(_, _, _, let byteRange): return byteRange
-        case .blockquote(_, _, let byteRange): return byteRange
-        case .thematicBreak(_, let byteRange): return byteRange
-        case .table(_, _, let byteRange): return byteRange
+        case .heading(_, _, _, let byteRange, _): return byteRange
+        case .paragraph(_, _, let byteRange, _): return byteRange
+        case .codeBlock(_, _, _, let byteRange, _): return byteRange
+        case .list(_, _, _, let byteRange, _): return byteRange
+        case .blockquote(_, _, let byteRange, _): return byteRange
+        case .thematicBreak(_, let byteRange, _): return byteRange
+        case .table(_, _, let byteRange, _): return byteRange
+        }
+    }
+
+    /// 1-based line range in the source document
+    public var lineRange: ClosedRange<Int> {
+        switch self {
+        case .heading(_, _, _, _, let lineRange): return lineRange
+        case .paragraph(_, _, _, let lineRange): return lineRange
+        case .codeBlock(_, _, _, _, let lineRange): return lineRange
+        case .list(_, _, _, _, let lineRange): return lineRange
+        case .blockquote(_, _, _, let lineRange): return lineRange
+        case .thematicBreak(_, _, let lineRange): return lineRange
+        case .table(_, _, _, let lineRange): return lineRange
         }
     }
 }
@@ -77,6 +90,7 @@ public struct MarkdownParser {
     private struct RangePair {
         let charRange: NSRange
         let byteRange: NSRange
+        let lineRange: ClosedRange<Int>
     }
 
     /// Parse markdown using cmark-gfm with extensions
@@ -162,30 +176,30 @@ public struct MarkdownParser {
         case CMARK_NODE_HEADING:
             let level = Int(cmark_node_get_heading_level(node))
             let text = getChildrenText(node)
-            return .heading(level: level, text: text, charRange: ranges.charRange, byteRange: ranges.byteRange)
+            return .heading(level: level, text: text, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_PARAGRAPH:
             let text = getChildrenText(node)
-            return .paragraph(text: text, charRange: ranges.charRange, byteRange: ranges.byteRange)
+            return .paragraph(text: text, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_CODE_BLOCK:
             let literal = cmark_node_get_literal(node)
             let code = literal != nil ? String(cString: literal!) : ""
             let fenceInfo = cmark_node_get_fence_info(node)
             let language = fenceInfo != nil ? String(cString: fenceInfo!) : nil
-            return .codeBlock(language: language, code: code, charRange: ranges.charRange, byteRange: ranges.byteRange)
+            return .codeBlock(language: language, code: code, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_LIST:
             let ordered = cmark_node_get_list_type(node) == CMARK_ORDERED_LIST
             let items = collectListItems(from: node, indentLevel: 0, ordered: ordered)
-            return .list(items: items, ordered: ordered, charRange: ranges.charRange, byteRange: ranges.byteRange)
+            return .list(items: items, ordered: ordered, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_BLOCK_QUOTE:
             let text = getChildrenText(node)
-            return .blockquote(text: text, charRange: ranges.charRange, byteRange: ranges.byteRange)
+            return .blockquote(text: text, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_THEMATIC_BREAK:
-            return .thematicBreak(charRange: ranges.charRange, byteRange: ranges.byteRange)
+            return .thematicBreak(charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         default:
             let typeName = String(cString: cmark_node_get_type_string(node))
@@ -215,7 +229,7 @@ public struct MarkdownParser {
             rows.append(row)
             rowNode = cmark_node_next(rowNode)
         }
-        return .table(rows: rows, charRange: ranges.charRange, byteRange: ranges.byteRange)
+        return .table(rows: rows, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
     }
 
     private func collectListItems(
@@ -305,7 +319,7 @@ public struct MarkdownParser {
 
         guard startLine > 0 && startLine <= lineTable.count &&
               endLine > 0 && endLine <= lineTable.count else {
-            return RangePair(charRange: NSRange(location: 0, length: 0), byteRange: NSRange(location: 0, length: 0))
+            return RangePair(charRange: NSRange(location: 0, length: 0), byteRange: NSRange(location: 0, length: 0), lineRange: 1...1)
         }
 
         let startLineInfo = lineTable[startLine - 1]
@@ -323,7 +337,7 @@ public struct MarkdownParser {
         let charRange = NSRange(location: startUTF16Index, length: Swift.max(0, endUTF16Index - startUTF16Index))
         let byteRange = NSRange(location: startByteIndex, length: Swift.max(0, endByteIndex - startByteIndex))
 
-        return RangePair(charRange: charRange, byteRange: byteRange)
+        return RangePair(charRange: charRange, byteRange: byteRange, lineRange: startLine...endLine)
     }
 
     private func byteToUTF16Offset(_ byteOffset: Int, in lineInfo: LineInfo) -> Int {
