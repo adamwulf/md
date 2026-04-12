@@ -28,15 +28,15 @@ struct Frontmatter {
     // MARK: - Extraction
 
     /// Parse frontmatter from markdown content. Returns nil if no frontmatter found.
+    /// Auto-detects format by delimiter: `---` (YAML), `+++` (TOML), `;;;` (JSON).
     static func parse(_ content: String) -> Frontmatter? {
-        if let result = parseYAML(content) {
+        if let result = parseFenced(content, delimiter: "---", format: .yaml) {
+            return result
+        }
+        if let result = parseFenced(content, delimiter: ";;;", format: .json) {
             return result
         }
         return nil
-    }
-
-    private static func parseYAML(_ content: String) -> Frontmatter? {
-        return parseFenced(content, delimiter: "---", format: .yaml)
     }
 
     /// Generic fenced frontmatter parser. Splits on delimiter lines.
@@ -65,9 +65,17 @@ struct Frontmatter {
         let body = bodyLines.joined(separator: "\n")
 
         let data: [String: Any]
-        if format == .yaml {
+        switch format {
+        case .yaml:
             data = (try? Yams.load(yaml: yamlString) as? [String: Any]) ?? [:]
-        } else {
+        case .json:
+            if let jsonData = yamlString.data(using: .utf8),
+               let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+                data = parsed
+            } else {
+                data = [:]
+            }
+        case .toml:
             data = [:]
         }
 
@@ -164,8 +172,12 @@ struct Frontmatter {
     }
 
     private func serializeJSON() throws -> String {
-        // Placeholder — will be implemented with JSON support
-        return rawContent + "\n"
+        guard !data.isEmpty else { return "" }
+        let jsonData = try JSONSerialization.data(withJSONObject: data, options: [.prettyPrinted, .sortedKeys])
+        guard let jsonString = String(data: jsonData, encoding: .utf8) else {
+            return ""
+        }
+        return jsonString + "\n"
     }
 
     // MARK: - Value Parsing

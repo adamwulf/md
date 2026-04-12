@@ -212,6 +212,104 @@ final class FrontmatterTests: XCTestCase {
         XCTAssertNil(fm2.get("draft"))
     }
 
+    // MARK: - JSON Parsing
+
+    func testParseJSONFrontmatter() {
+        let content = ";;;\n{\"title\": \"Hello\", \"author\": \"John\"}\n;;;\n# Heading\n"
+        let fm = Frontmatter.parse(content)
+        XCTAssertNotNil(fm)
+        XCTAssertEqual(fm?.format, .json)
+        XCTAssertEqual(fm?.data["title"] as? String, "Hello")
+        XCTAssertEqual(fm?.data["author"] as? String, "John")
+        XCTAssertEqual(fm?.body, "# Heading\n")
+    }
+
+    func testParseJSONWithNestedData() {
+        let content = ";;;\n{\"author\": {\"name\": \"John\", \"email\": \"john@test.com\"}}\n;;;\nBody\n"
+        let fm = Frontmatter.parse(content)
+        XCTAssertNotNil(fm)
+        let author = fm?.data["author"] as? [String: Any]
+        XCTAssertEqual(author?["name"] as? String, "John")
+        XCTAssertEqual(author?["email"] as? String, "john@test.com")
+    }
+
+    func testParseJSONWithArray() {
+        let content = ";;;\n{\"tags\": [\"swift\", \"markdown\"]}\n;;;\nBody\n"
+        let fm = Frontmatter.parse(content)
+        XCTAssertNotNil(fm)
+        let tags = fm?.data["tags"] as? [String]
+        XCTAssertEqual(tags, ["swift", "markdown"])
+    }
+
+    func testParseJSONMultiline() {
+        let content = ";;;\n{\n  \"title\": \"Hello\",\n  \"draft\": true\n}\n;;;\nBody\n"
+        let fm = Frontmatter.parse(content)
+        XCTAssertNotNil(fm)
+        XCTAssertEqual(fm?.data["title"] as? String, "Hello")
+        XCTAssertEqual(fm?.data["draft"] as? Bool, true)
+    }
+
+    func testParseEmptyJSONFrontmatter() {
+        let content = ";;;\n;;;\nBody\n"
+        let fm = Frontmatter.parse(content)
+        XCTAssertNotNil(fm)
+        XCTAssertEqual(fm?.format, .json)
+        XCTAssertTrue(fm?.data.isEmpty ?? false)
+    }
+
+    func testSerializeJSON() throws {
+        let content = ";;;\n{\"title\": \"Hello\"}\n;;;\nBody\n"
+        let fm = Frontmatter.parse(content)!
+        let serialized = try fm.serialize()
+        XCTAssertTrue(serialized.hasPrefix(";;;\n"))
+        XCTAssertTrue(serialized.contains("\"title\""))
+        XCTAssertTrue(serialized.contains("Hello"))
+        XCTAssertTrue(serialized.hasSuffix(";;;\nBody\n"))
+    }
+
+    func testSerializeJSONRoundTrip() throws {
+        let content = ";;;\n{\"title\": \"Hello\"}\n;;;\nBody\n"
+        let fm = Frontmatter.parse(content)!
+        let serialized = try fm.serialize()
+        let fm2 = Frontmatter.parse(serialized)
+        XCTAssertNotNil(fm2)
+        XCTAssertEqual(fm2?.get("title") as? String, "Hello")
+        XCTAssertEqual(fm2?.body, "Body\n")
+    }
+
+    func testJSONSetAndRoundTrip() throws {
+        let content = ";;;\n{\"title\": \"Hello\"}\n;;;\nBody\n"
+        var fm = Frontmatter.parse(content)!
+        fm.set("draft", value: true)
+        let serialized = try fm.serialize()
+        let fm2 = Frontmatter.parse(serialized)!
+        XCTAssertEqual(fm2.get("title") as? String, "Hello")
+        XCTAssertEqual(fm2.get("draft") as? Bool, true)
+    }
+
+    func testJSONDotSyntaxGet() {
+        let content = ";;;\n{\"author\": {\"name\": \"John\"}}\n;;;\nBody\n"
+        let fm = Frontmatter.parse(content)!
+        XCTAssertEqual(fm.get("author.name") as? String, "John")
+    }
+
+    func testJSONDotSyntaxSet() throws {
+        let content = ";;;\n{\"title\": \"Hello\"}\n;;;\nBody\n"
+        var fm = Frontmatter.parse(content)!
+        fm.set("author.name", value: "John")
+        let serialized = try fm.serialize()
+        let fm2 = Frontmatter.parse(serialized)!
+        XCTAssertEqual(fm2.get("author.name") as? String, "John")
+    }
+
+    // MARK: - YAML takes priority over JSON
+
+    func testYAMLTakesPriorityOverJSON() {
+        let content = "---\ntitle: Hello\n---\nBody\n"
+        let fm = Frontmatter.parse(content)
+        XCTAssertEqual(fm?.format, .yaml)
+    }
+
     // MARK: - Value Parsing
 
     func testParseValueBool() {
