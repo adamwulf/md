@@ -5,12 +5,11 @@
 //  Created by Adam Wulf on 4/12/26.
 //
 
-import ArgumentParser
 import Foundation
 import TOMLKit
 import Yams
 
-enum FrontmatterFormat: String, Equatable, CaseIterable, ExpressibleByArgument {
+enum FrontmatterFormat: String, Equatable, CaseIterable {
     case yaml
     case toml
     case json
@@ -64,31 +63,31 @@ struct Frontmatter {
             return nil
         }
 
-        let yamlLines = lines[1..<closer]
-        let yamlString = yamlLines.joined(separator: "\n")
+        let rawLines = lines[1..<closer]
+        let rawString = rawLines.joined(separator: "\n")
         let bodyLines = lines[(closer + 1)...]
         let body = bodyLines.joined(separator: "\n")
 
         let data: [String: Any]
         switch format {
         case .yaml:
-            data = (try? Yams.load(yaml: yamlString) as? [String: Any]) ?? [:]
+            data = (try? Yams.load(yaml: rawString) as? [String: Any]) ?? [:]
         case .json:
-            if let jsonData = yamlString.data(using: .utf8),
+            if let jsonData = rawString.data(using: .utf8),
                let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
                 data = parsed
             } else {
                 data = [:]
             }
         case .toml:
-            if let table = try? TOMLTable(string: yamlString) {
+            if let table = try? TOMLTable(string: rawString) {
                 data = Frontmatter.tomlTableToDict(table)
             } else {
                 data = [:]
             }
         }
 
-        return Frontmatter(format: format, data: data, rawContent: yamlString, body: body, originalContent: content)
+        return Frontmatter(format: format, data: data, rawContent: rawString, body: body, originalContent: content)
     }
 
     // MARK: - Key Access (dot syntax)

@@ -8,6 +8,8 @@
 import ArgumentParser
 import Foundation
 
+extension FrontmatterFormat: ExpressibleByArgument {}
+
 struct FrontmatterCommand: AsyncParsableCommand {
 
     static var configuration = CommandConfiguration(
@@ -140,10 +142,7 @@ struct FrontmatterCommand: AsyncParsableCommand {
     }
 
     private func output(_ content: String) throws {
-        if inPlace {
-            guard let file = input.file else {
-                throw ValidationError("Cannot use --in-place with --stdin")
-            }
+        if inPlace, let file = input.file {
             try InputReader.write(content, to: file)
         } else {
             print(content, terminator: "")

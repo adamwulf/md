@@ -41,14 +41,13 @@ struct FormatCommand: AsyncParsableCommand {
                 // Strip empty frontmatter
                 print(formattedBody, terminator: "")
             } else {
-                let serialized = try frontmatter.serializeData()
                 let delimiter: String
                 switch frontmatter.format {
                 case .yaml: delimiter = "---"
                 case .toml: delimiter = "+++"
                 case .json: delimiter = ";;;"
                 }
-                print("\(delimiter)\n\(serialized)\(delimiter)\n\(formattedBody)", terminator: "")
+                print("\(delimiter)\n\(frontmatter.rawContent)\n\(delimiter)\n\(formattedBody)", terminator: "")
             }
         } else {
             let blocks = parser.parse(content)
