@@ -13,7 +13,17 @@ struct FormatCommand: AsyncParsableCommand {
 
     static var configuration = CommandConfiguration(
         commandName: "format",
-        abstract: "Parse and normalize a markdown file"
+        abstract: "Normalize markdown formatting, preserving frontmatter",
+        discussion: """
+            Re-renders the markdown through cmark-gfm to produce consistent \
+            formatting. If frontmatter is present (YAML with ---, TOML with +++, \
+            or JSON with ;;;), it is preserved as-is. Empty frontmatter is stripped.
+
+            Output is written to stdout.
+
+              $ md format --file README.md
+              $ cat README.md | md format --stdin
+            """
     )
 
     @OptionGroup var input: InputOptions

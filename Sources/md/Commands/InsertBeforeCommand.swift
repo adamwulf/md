@@ -13,7 +13,15 @@ struct InsertBeforeCommand: AsyncParsableCommand {
 
     static var configuration = CommandConfiguration(
         commandName: "insert-before",
-        abstract: "Insert markdown content before a block"
+        abstract: "Insert markdown content before a block",
+        discussion: """
+            Inserts new markdown content immediately before the specified block. \
+            The new content is parsed and re-formatted. Output is written to \
+            stdout unless -i/--in-place is used.
+
+              $ md insert-before 3 "## New Section" --file README.md
+              $ md insert-before 1 "Intro paragraph." --file README.md -i
+            """
     )
 
     @Flag(name: .shortAndLong, help: "Edit the file in place")

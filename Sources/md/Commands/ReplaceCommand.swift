@@ -13,7 +13,24 @@ struct ReplaceCommand: AsyncParsableCommand {
 
     static var configuration = CommandConfiguration(
         commandName: "replace",
-        abstract: "Replace one or more blocks with new markdown content"
+        abstract: "Replace one or more blocks with new markdown content",
+        discussion: """
+            Two calling conventions:
+
+              md replace START "content" --file <path>
+                Replace a single block at START with "content".
+
+              md replace START END "content" --file <path>
+                Replace blocks START through END (inclusive) with "content".
+
+            The second argument is interpreted as an end index if it parses as \
+            an integer, otherwise it is treated as the replacement content. \
+            Output is written to stdout unless -i/--in-place is used.
+
+              $ md replace 1 "# New Title" --file README.md
+              $ md replace 2 4 "Replacement." --file README.md
+              $ md replace 1 "# New Title" --file README.md -i
+            """
     )
 
     @Flag(name: .shortAndLong, help: "Edit the file in place")

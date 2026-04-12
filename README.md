@@ -96,6 +96,27 @@ md replace 2 4 "Replacement." --file README.md         # replace blocks 2-4
 md replace 1 "# New Title" --file README.md -i         # replace in place
 ```
 
+### Frontmatter
+
+Read, set, or remove frontmatter key/value pairs. Supports YAML (`---`), TOML (`+++`), and JSON (`;;;`) delimiters.
+
+```bash
+md frontmatter --file doc.md                          # print frontmatter data
+md frontmatter --key title --file doc.md              # get a specific key
+md frontmatter --key author.name --file doc.md        # nested key via dot syntax
+md frontmatter --set "title=My Doc" --file doc.md -i  # set a key in place
+md frontmatter --set "author.name=Jane" --file doc.md -i  # set a nested key
+md frontmatter --remove-key draft --file doc.md -i    # remove a key in place
+md frontmatter --format json --file doc.md            # convert output to JSON
+```
+
+Setting a key on a file without frontmatter creates new YAML frontmatter (or the format specified by `--format`):
+
+```bash
+md frontmatter --set "title=Hello" --file plain.md
+md frontmatter --set "title=Hello" --format toml --file plain.md
+```
+
 ## Library
 
 The `MarkdownKit` library can be used independently in other Swift packages:
