@@ -334,6 +334,248 @@ final class FrontmatterTests: XCTestCase {
         XCTAssertEqual(Frontmatter.parseValue("hello world") as? String, "hello world")
     }
 
+    // MARK: - TOML Parsing
+
+    func testParseTOMLFrontmatter() {
+        let content = "+++\ntitle = \"Hello\"\nauthor = \"John\"\n+++\n# Heading\n"
+        let fm = Frontmatter.parse(content)
+        XCTAssertNotNil(fm)
+        XCTAssertEqual(fm?.format, .toml)
+        XCTAssertEqual(fm?.data["title"] as? String, "Hello")
+        XCTAssertEqual(fm?.data["author"] as? String, "John")
+        XCTAssertEqual(fm?.body, "# Heading\n")
+    }
+
+    func testParseTOMLWithNestedData() {
+        let content = "+++\n[author]\nname = \"John\"\nemail = \"john@test.com\"\n+++\nBody\n"
+        let fm = Frontmatter.parse(content)
+        XCTAssertNotNil(fm)
+        let author = fm?.data["author"] as? [String: Any]
+        XCTAssertEqual(author?["name"] as? String, "John")
+        XCTAssertEqual(author?["email"] as? String, "john@test.com")
+    }
+
+    func testParseTOMLWithArray() {
+        let content = "+++\ntags = [\"swift\", \"markdown\"]\n+++\nBody\n"
+        let fm = Frontmatter.parse(content)
+        XCTAssertNotNil(fm)
+        let tags = fm?.data["tags"] as? [Any]
+        XCTAssertEqual(tags?.count, 2)
+        XCTAssertEqual(tags?[0] as? String, "swift")
+        XCTAssertEqual(tags?[1] as? String, "markdown")
+    }
+
+    func testParseTOMLWithBooleans() {
+        let content = "+++\ndraft = true\npublished = false\n+++\nBody\n"
+        let fm = Frontmatter.parse(content)
+        XCTAssertNotNil(fm)
+        XCTAssertEqual(fm?.data["draft"] as? Bool, true)
+        XCTAssertEqual(fm?.data["published"] as? Bool, false)
+    }
+
+    func testParseTOMLWithNumbers() {
+        let content = "+++\ncount = 42\nversion = 1.5\n+++\nBody\n"
+        let fm = Frontmatter.parse(content)
+        XCTAssertNotNil(fm)
+        XCTAssertEqual(fm?.data["count"] as? Int, 42)
+        XCTAssertEqual(fm?.data["version"] as? Double, 1.5)
+    }
+
+    func testParseEmptyTOMLFrontmatter() {
+        let content = "+++\n+++\nBody\n"
+        let fm = Frontmatter.parse(content)
+        XCTAssertNotNil(fm)
+        XCTAssertEqual(fm?.format, .toml)
+        XCTAssertTrue(fm?.data.isEmpty ?? false)
+    }
+
+    func testParseTOMLAtEndOfFile() {
+        let content = "+++\ntitle = \"Hello\"\n+++"
+        let fm = Frontmatter.parse(content)
+        XCTAssertNotNil(fm)
+        XCTAssertEqual(fm?.data["title"] as? String, "Hello")
+        XCTAssertEqual(fm?.body, "")
+    }
+
+    // MARK: - TOML Dot Syntax
+
+    func testTOMLDotSyntaxGet() {
+        let content = "+++\n[author]\nname = \"John\"\n+++\nBody\n"
+        let fm = Frontmatter.parse(content)!
+        XCTAssertEqual(fm.get("author.name") as? String, "John")
+    }
+
+    func testTOMLDotSyntaxSet() throws {
+        let content = "+++\ntitle = \"Hello\"\n+++\nBody\n"
+        var fm = Frontmatter.parse(content)!
+        fm.set("author.name", value: "John")
+        XCTAssertEqual(fm.get("author.name") as? String, "John")
+    }
+
+    // MARK: - TOML Serialization
+
+    func testSerializeTOML() throws {
+        let content = "+++\ntitle = \"Hello\"\n+++\nBody\n"
+        let fm = Frontmatter.parse(content)!
+        let serialized = try fm.serialize()
+        XCTAssertTrue(serialized.hasPrefix("+++\n"))
+        XCTAssertTrue(serialized.contains("title"))
+        XCTAssertTrue(serialized.contains("Hello"))
+        XCTAssertTrue(serialized.hasSuffix("+++\nBody\n"))
+    }
+
+    func testSerializeTOMLRoundTrip() throws {
+        let content = "+++\ntitle = \"Hello\"\n+++\nBody\n"
+        let fm = Frontmatter.parse(content)!
+        let serialized = try fm.serialize()
+        let fm2 = Frontmatter.parse(serialized)
+        XCTAssertNotNil(fm2)
+        XCTAssertEqual(fm2?.format, .toml)
+        XCTAssertEqual(fm2?.get("title") as? String, "Hello")
+        XCTAssertEqual(fm2?.body, "Body\n")
+    }
+
+    func testTOMLSetAndRoundTrip() throws {
+        let content = "+++\ntitle = \"Hello\"\n+++\nBody\n"
+        var fm = Frontmatter.parse(content)!
+        fm.set("draft", value: true)
+        let serialized = try fm.serialize()
+        let fm2 = Frontmatter.parse(serialized)!
+        XCTAssertEqual(fm2.get("title") as? String, "Hello")
+        XCTAssertEqual(fm2.get("draft") as? Bool, true)
+    }
+
+    func testTOMLNestedRoundTrip() throws {
+        let content = "+++\n[author]\nname = \"John\"\nemail = \"john@test.com\"\n+++\nBody\n"
+        let fm = Frontmatter.parse(content)!
+        let serialized = try fm.serialize()
+        let fm2 = Frontmatter.parse(serialized)!
+        XCTAssertEqual(fm2.get("author.name") as? String, "John")
+        XCTAssertEqual(fm2.get("author.email") as? String, "john@test.com")
+    }
+
+    // MARK: - Format Conversion
+
+    func testConvertYAMLToJSON() throws {
+        let content = "---\ntitle: Hello\nauthor: John\n---\nBody\n"
+        var fm = Frontmatter.parse(content)!
+        XCTAssertEqual(fm.format, .yaml)
+        fm.format = .json
+        let serialized = try fm.serialize()
+        XCTAssertTrue(serialized.hasPrefix(";;;\n"))
+        XCTAssertTrue(serialized.hasSuffix(";;;\nBody\n"))
+        let fm2 = Frontmatter.parse(serialized)!
+        XCTAssertEqual(fm2.format, .json)
+        XCTAssertEqual(fm2.get("title") as? String, "Hello")
+        XCTAssertEqual(fm2.get("author") as? String, "John")
+    }
+
+    func testConvertYAMLToTOML() throws {
+        let content = "---\ntitle: Hello\n---\nBody\n"
+        var fm = Frontmatter.parse(content)!
+        fm.format = .toml
+        let serialized = try fm.serialize()
+        XCTAssertTrue(serialized.hasPrefix("+++\n"))
+        XCTAssertTrue(serialized.hasSuffix("+++\nBody\n"))
+        let fm2 = Frontmatter.parse(serialized)!
+        XCTAssertEqual(fm2.format, .toml)
+        XCTAssertEqual(fm2.get("title") as? String, "Hello")
+    }
+
+    func testConvertTOMLToYAML() throws {
+        let content = "+++\ntitle = \"Hello\"\n+++\nBody\n"
+        var fm = Frontmatter.parse(content)!
+        fm.format = .yaml
+        let serialized = try fm.serialize()
+        XCTAssertTrue(serialized.hasPrefix("---\n"))
+        XCTAssertTrue(serialized.hasSuffix("---\nBody\n"))
+        let fm2 = Frontmatter.parse(serialized)!
+        XCTAssertEqual(fm2.format, .yaml)
+        XCTAssertEqual(fm2.get("title") as? String, "Hello")
+    }
+
+    func testConvertJSONToYAML() throws {
+        let content = ";;;\n{\"title\": \"Hello\"}\n;;;\nBody\n"
+        var fm = Frontmatter.parse(content)!
+        fm.format = .yaml
+        let serialized = try fm.serialize()
+        XCTAssertTrue(serialized.hasPrefix("---\n"))
+        let fm2 = Frontmatter.parse(serialized)!
+        XCTAssertEqual(fm2.format, .yaml)
+        XCTAssertEqual(fm2.get("title") as? String, "Hello")
+    }
+
+    func testConvertJSONToTOML() throws {
+        let content = ";;;\n{\"title\": \"Hello\"}\n;;;\nBody\n"
+        var fm = Frontmatter.parse(content)!
+        fm.format = .toml
+        let serialized = try fm.serialize()
+        XCTAssertTrue(serialized.hasPrefix("+++\n"))
+        let fm2 = Frontmatter.parse(serialized)!
+        XCTAssertEqual(fm2.format, .toml)
+        XCTAssertEqual(fm2.get("title") as? String, "Hello")
+    }
+
+    func testConvertTOMLToJSON() throws {
+        let content = "+++\ntitle = \"Hello\"\n+++\nBody\n"
+        var fm = Frontmatter.parse(content)!
+        fm.format = .json
+        let serialized = try fm.serialize()
+        XCTAssertTrue(serialized.hasPrefix(";;;\n"))
+        let fm2 = Frontmatter.parse(serialized)!
+        XCTAssertEqual(fm2.format, .json)
+        XCTAssertEqual(fm2.get("title") as? String, "Hello")
+    }
+
+    func testConvertPreservesBody() throws {
+        let content = "---\ntitle: Hello\n---\n# Heading\n\nParagraph text.\n"
+        var fm = Frontmatter.parse(content)!
+        fm.format = .json
+        let serialized = try fm.serialize()
+        let fm2 = Frontmatter.parse(serialized)!
+        XCTAssertEqual(fm2.body, "# Heading\n\nParagraph text.\n")
+    }
+
+    func testConvertWithNestedData() throws {
+        let content = "---\nauthor:\n  name: John\n  email: john@test.com\n---\nBody\n"
+        var fm = Frontmatter.parse(content)!
+        fm.format = .json
+        let serialized = try fm.serialize()
+        let fm2 = Frontmatter.parse(serialized)!
+        XCTAssertEqual(fm2.get("author.name") as? String, "John")
+        XCTAssertEqual(fm2.get("author.email") as? String, "john@test.com")
+    }
+
+    // MARK: - Format Command Integration
+
+    func testFormatPreservesFrontmatter() throws {
+        let content = "---\ntitle: Hello\n---\n# Heading\n\nParagraph.\n"
+        let fm = Frontmatter.parse(content)!
+        XCTAssertFalse(fm.data.isEmpty)
+        XCTAssertEqual(fm.get("title") as? String, "Hello")
+        XCTAssertEqual(fm.body, "# Heading\n\nParagraph.\n")
+    }
+
+    func testFormatStripsEmptyFrontmatter() {
+        let content = "---\n---\n# Heading\n"
+        let fm = Frontmatter.parse(content)!
+        XCTAssertTrue(fm.data.isEmpty)
+    }
+
+    func testFormatPreservesTomlFrontmatter() throws {
+        let content = "+++\ntitle = \"Hello\"\n+++\n# Heading\n"
+        let fm = Frontmatter.parse(content)!
+        XCTAssertFalse(fm.data.isEmpty)
+        XCTAssertEqual(fm.get("title") as? String, "Hello")
+    }
+
+    func testFormatPreservesJsonFrontmatter() throws {
+        let content = ";;;\n{\"title\": \"Hello\"}\n;;;\n# Heading\n"
+        let fm = Frontmatter.parse(content)!
+        XCTAssertFalse(fm.data.isEmpty)
+        XCTAssertEqual(fm.get("title") as? String, "Hello")
+    }
+
     // MARK: - Equatable Format
 
     func testFormatEquatable() {

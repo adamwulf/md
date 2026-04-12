@@ -5,17 +5,19 @@
 //  Created by Adam Wulf on 4/12/26.
 //
 
+import ArgumentParser
 import Foundation
+import TOMLKit
 import Yams
 
-enum FrontmatterFormat: Equatable {
+enum FrontmatterFormat: String, Equatable, CaseIterable, ExpressibleByArgument {
     case yaml
     case toml
     case json
 }
 
 struct Frontmatter {
-    let format: FrontmatterFormat
+    var format: FrontmatterFormat
     var data: [String: Any]
     let rawContent: String
 
@@ -31,6 +33,9 @@ struct Frontmatter {
     /// Auto-detects format by delimiter: `---` (YAML), `+++` (TOML), `;;;` (JSON).
     static func parse(_ content: String) -> Frontmatter? {
         if let result = parseFenced(content, delimiter: "---", format: .yaml) {
+            return result
+        }
+        if let result = parseFenced(content, delimiter: "+++", format: .toml) {
             return result
         }
         if let result = parseFenced(content, delimiter: ";;;", format: .json) {
@@ -76,7 +81,11 @@ struct Frontmatter {
                 data = [:]
             }
         case .toml:
-            data = [:]
+            if let table = try? TOMLTable(string: yamlString) {
+                data = Frontmatter.tomlTableToDict(table)
+            } else {
+                data = [:]
+            }
         }
 
         return Frontmatter(format: format, data: data, rawContent: yamlString, body: body, originalContent: content)
@@ -162,13 +171,15 @@ struct Frontmatter {
 
     private func serializeYAML() throws -> String {
         guard !data.isEmpty else { return "" }
-        let yaml = try Yams.dump(object: data, sortKeys: true)
+        let normalized = Frontmatter.normalizeForYAML(data)
+        let yaml = try Yams.dump(object: normalized, sortKeys: true)
         return yaml
     }
 
     private func serializeTOML() -> String {
-        // Placeholder — will be implemented with TOML support
-        return rawContent + "\n"
+        guard !data.isEmpty else { return "" }
+        let table = Frontmatter.dictToTOMLTable(data)
+        return table.convert(to: .toml) + "\n"
     }
 
     private func serializeJSON() throws -> String {
@@ -178,6 +189,101 @@ struct Frontmatter {
             return ""
         }
         return jsonString + "\n"
+    }
+
+    // MARK: - Normalization
+
+    /// Normalize Foundation types (NSString, NSNumber) to Swift native types for Yams compatibility.
+    static func normalizeForYAML(_ value: Any) -> Any {
+        if let dict = value as? [String: Any] {
+            return dict.mapValues { normalizeForYAML($0) }
+        }
+        if let array = value as? [Any] {
+            return array.map { normalizeForYAML($0) }
+        }
+        if let b = value as? Bool {
+            return b
+        }
+        if let i = value as? Int {
+            return i
+        }
+        if let d = value as? Double {
+            return d
+        }
+        if let s = value as? String {
+            return s
+        }
+        return "\(value)"
+    }
+
+    // MARK: - TOML Conversion
+
+    /// Convert a TOMLTable to a [String: Any] dictionary.
+    static func tomlTableToDict(_ table: TOMLTable) -> [String: Any] {
+        var result: [String: Any] = [:]
+        for (key, value) in table {
+            result[key] = tomlValueToAny(value)
+        }
+        return result
+    }
+
+    /// Convert a TOMLValueConvertible to a Swift Any value.
+    private static func tomlValueToAny(_ value: TOMLValueConvertible) -> Any {
+        switch value.type {
+        case .string:
+            return value.string ?? ""
+        case .int:
+            return value.int ?? 0
+        case .double:
+            return value.double ?? 0.0
+        case .bool:
+            return value.bool ?? false
+        case .table:
+            if let table = value.table {
+                return tomlTableToDict(table)
+            }
+            return [String: Any]()
+        case .array:
+            if let array = value.array {
+                return array.map { tomlValueToAny($0) }
+            }
+            return [Any]()
+        case .date:
+            return value.date?.debugDescription ?? ""
+        case .time:
+            return value.time?.debugDescription ?? ""
+        case .dateTime:
+            return value.dateTime?.debugDescription ?? ""
+        }
+    }
+
+    /// Convert a [String: Any] dictionary to a TOMLTable.
+    static func dictToTOMLTable(_ dict: [String: Any]) -> TOMLTable {
+        let table = TOMLTable()
+        for (key, value) in dict {
+            table[key] = anyToTOMLValue(value)
+        }
+        return table
+    }
+
+    /// Convert a Swift Any value to a TOMLValueConvertible.
+    private static func anyToTOMLValue(_ value: Any) -> TOMLValueConvertible {
+        switch value {
+        case let b as Bool:
+            return b
+        case let i as Int:
+            return i
+        case let d as Double:
+            return d
+        case let s as String:
+            return s
+        case let dict as [String: Any]:
+            return dictToTOMLTable(dict)
+        case let arr as [Any]:
+            return TOMLArray(arr.map { anyToTOMLValue($0) })
+        default:
+            return String(describing: value)
+        }
     }
 
     // MARK: - Value Parsing

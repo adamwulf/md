@@ -27,6 +27,9 @@ struct FrontmatterCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Remove a frontmatter key (supports dot syntax for nested keys)")
     var removeKey: String?
 
+    @Option(name: .long, help: "Output format for frontmatter (yaml, json, or toml)")
+    var format: FrontmatterFormat?
+
     @OptionGroup var input: InputOptions
 
     func validate() throws {
@@ -51,7 +54,8 @@ struct FrontmatterCommand: AsyncParsableCommand {
         guard var frontmatter = Frontmatter.parse(content) else {
             if `set` != nil {
                 // Create new frontmatter if setting a value
-                var fm = Frontmatter(format: .yaml, data: [:], rawContent: "", body: content, originalContent: content)
+                let outputFormat = format ?? .yaml
+                var fm = Frontmatter(format: outputFormat, data: [:], rawContent: "", body: content, originalContent: content)
                 try applySet(&fm)
                 let result = try fm.serialize()
                 try output(result)
@@ -66,6 +70,10 @@ struct FrontmatterCommand: AsyncParsableCommand {
                 return
             }
             return
+        }
+
+        if let outputFormat = format {
+            frontmatter.format = outputFormat
         }
 
         if let keyPath = key {
@@ -84,9 +92,14 @@ struct FrontmatterCommand: AsyncParsableCommand {
             let result = try frontmatter.serialize()
             try output(result)
         } else {
-            // Print all frontmatter
-            let serialized = try frontmatter.serializeData()
-            print(serialized, terminator: "")
+            // Print all frontmatter (or full document if --format is specified)
+            if format != nil {
+                let result = try frontmatter.serialize()
+                try output(result)
+            } else {
+                let serialized = try frontmatter.serializeData()
+                print(serialized, terminator: "")
+            }
         }
     }
 

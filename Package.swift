@@ -13,7 +13,8 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
         .package(url: "https://github.com/apple/swift-cmark", from: "0.7.1"),
-        .package(url: "https://github.com/jpsim/Yams", from: "5.0.0")
+        .package(url: "https://github.com/jpsim/Yams", from: "5.0.0"),
+        .package(url: "https://github.com/LebJe/TOMLKit", from: "0.6.0")
     ],
     targets: [
         .target(
@@ -28,7 +29,8 @@ let package = Package(
             dependencies: [
                 "MarkdownKit",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
-                .product(name: "Yams", package: "Yams")
+                .product(name: "Yams", package: "Yams"),
+                .product(name: "TOMLKit", package: "TOMLKit")
             ]
         ),
         .testTarget(
