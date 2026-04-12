@@ -8,18 +8,14 @@
 import Foundation
 
 enum InputReader {
-    /// Read content from a file path or stdin if path is nil.
-    static func read(from path: String?) throws -> String {
-        if let path = path {
-            let url = URL(fileURLWithPath: path)
-            return try String(contentsOf: url, encoding: .utf8)
-        } else {
-            return readFromStdin()
-        }
+    /// Read content from a file path.
+    static func read(from path: String) throws -> String {
+        let url = URL(fileURLWithPath: path)
+        return try String(contentsOf: url, encoding: .utf8)
     }
 
     /// Read all of stdin into a string.
-    private static func readFromStdin() -> String {
+    static func readFromStdin() -> String {
         var data = Data()
         let bufferSize = 64 * 1024
         let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
@@ -40,28 +36,5 @@ enum InputReader {
     static func write(_ content: String, to path: String) throws {
         let url = URL(fileURLWithPath: path)
         try content.write(to: url, atomically: true, encoding: .utf8)
-    }
-
-    /// Parse passthrough arguments into optional indices and optional file path.
-    /// If the last argument doesn't parse as an Int, it's treated as a file path.
-    /// If all arguments parse as Ints (or there are none), file is nil (use stdin).
-    static func parsePassthrough(_ arguments: [String]) -> (indices: [Int], file: String?) {
-        guard !arguments.isEmpty else {
-            return (indices: [], file: nil)
-        }
-
-        // If the last arg is not an integer, treat it as a file path
-        guard let lastArg = arguments.last else {
-            return (indices: [], file: nil)
-        }
-        if Int(lastArg) == nil {
-            let file = lastArg
-            let indices = arguments.dropLast().compactMap { Int($0) }
-            return (indices: indices, file: file)
-        }
-
-        // All args are integers — no file, read from stdin
-        let indices = arguments.compactMap { Int($0) }
-        return (indices: indices, file: nil)
     }
 }

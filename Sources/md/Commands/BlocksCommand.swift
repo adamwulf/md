@@ -19,12 +19,22 @@ struct BlocksCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Print the number of blocks")
     var count: Bool = false
 
-    @Argument(help: "Block index or range (start end) followed by optional file path (reads stdin if omitted)")
-    var input: [String] = []
+    @Argument(help: "Start block index (1-based)")
+    var start: Int?
+
+    @Argument(help: "End block index (inclusive, defaults to start)")
+    var end: Int?
+
+    @OptionGroup var input: InputOptions
+
+    func validate() throws {
+        if end != nil && start == nil {
+            throw ValidationError("Cannot specify end without start")
+        }
+    }
 
     func run() async throws {
-        let parsed = InputReader.parsePassthrough(input)
-        let content = try InputReader.read(from: parsed.file)
+        let content = try input.readContent()
         let parser = MarkdownParser()
         let blocks = parser.parse(content)
 
@@ -33,9 +43,7 @@ struct BlocksCommand: AsyncParsableCommand {
             return
         }
 
-        let indices = parsed.indices
-
-        guard !indices.isEmpty else {
+        guard let start = start else {
             // No index given, print all blocks with their indices (1-based)
             for (i, block) in blocks.enumerated() {
                 print("[\(i + 1)] \(summary(of: block))")
@@ -43,8 +51,7 @@ struct BlocksCommand: AsyncParsableCommand {
             return
         }
 
-        let start = indices[0]
-        let end = indices.count > 1 ? indices[1] : start
+        let end = end ?? start
 
         guard start >= 1, end >= start, end <= blocks.count else {
             throw ValidationError("Block indices must be in range 1...\(blocks.count), got \(start)...\(end)")

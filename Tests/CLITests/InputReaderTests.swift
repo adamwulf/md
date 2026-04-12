@@ -10,44 +10,6 @@ import XCTest
 
 final class InputReaderTests: XCTestCase {
 
-    // MARK: - parsePassthrough
-
-    func testParsePassthroughEmpty() {
-        let result = InputReader.parsePassthrough([])
-        XCTAssertEqual(result.indices, [])
-        XCTAssertNil(result.file)
-    }
-
-    func testParsePassthroughFileOnly() {
-        let result = InputReader.parsePassthrough(["README.md"])
-        XCTAssertEqual(result.indices, [])
-        XCTAssertEqual(result.file, "README.md")
-    }
-
-    func testParsePassthroughSingleIndexAndFile() {
-        let result = InputReader.parsePassthrough(["5", "README.md"])
-        XCTAssertEqual(result.indices, [5])
-        XCTAssertEqual(result.file, "README.md")
-    }
-
-    func testParsePassthroughRangeAndFile() {
-        let result = InputReader.parsePassthrough(["1", "10", "README.md"])
-        XCTAssertEqual(result.indices, [1, 10])
-        XCTAssertEqual(result.file, "README.md")
-    }
-
-    func testParsePassthroughSingleIndexNoFile() {
-        let result = InputReader.parsePassthrough(["5"])
-        XCTAssertEqual(result.indices, [5])
-        XCTAssertNil(result.file)
-    }
-
-    func testParsePassthroughRangeNoFile() {
-        let result = InputReader.parsePassthrough(["1", "10"])
-        XCTAssertEqual(result.indices, [1, 10])
-        XCTAssertNil(result.file)
-    }
-
     // MARK: - read(from:) with file
 
     func testReadFromFile() throws {
@@ -62,5 +24,58 @@ final class InputReaderTests: XCTestCase {
 
     func testReadFromNonexistentFile() {
         XCTAssertThrowsError(try InputReader.read(from: "/tmp/nonexistent-\(UUID().uuidString).md"))
+    }
+
+    // MARK: - write(_:to:)
+
+    func testWriteToFile() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+        let file = tmpDir.appendingPathComponent("md-test-\(UUID().uuidString).md")
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        try InputReader.write("# Written\n", to: file.path)
+        let content = try String(contentsOf: file, encoding: .utf8)
+        XCTAssertEqual(content, "# Written\n")
+    }
+
+    func testWriteOverwritesExisting() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+        let file = tmpDir.appendingPathComponent("md-test-\(UUID().uuidString).md")
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        try "original".write(to: file, atomically: true, encoding: .utf8)
+        try InputReader.write("replaced", to: file.path)
+        let content = try String(contentsOf: file, encoding: .utf8)
+        XCTAssertEqual(content, "replaced")
+    }
+
+    // MARK: - InputOptions validation
+
+    func testInputOptionsRequiresFileOrStdin() throws {
+        var opts = InputOptions()
+        opts.file = nil
+        opts.stdin = false
+        XCTAssertThrowsError(try opts.validate())
+    }
+
+    func testInputOptionsRejectsFileAndStdin() throws {
+        var opts = InputOptions()
+        opts.file = "/some/file.md"
+        opts.stdin = true
+        XCTAssertThrowsError(try opts.validate())
+    }
+
+    func testInputOptionsAcceptsFile() throws {
+        var opts = InputOptions()
+        opts.file = "/some/file.md"
+        opts.stdin = false
+        XCTAssertNoThrow(try opts.validate())
+    }
+
+    func testInputOptionsAcceptsStdin() throws {
+        var opts = InputOptions()
+        opts.file = nil
+        opts.stdin = true
+        XCTAssertNoThrow(try opts.validate())
     }
 }

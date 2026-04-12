@@ -18,12 +18,22 @@ struct LinesCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Print the number of lines")
     var count: Bool = false
 
-    @Argument(help: "Line number or range (start end) followed by optional file path (reads stdin if omitted)")
-    var input: [String] = []
+    @Argument(help: "Start line number (1-based)")
+    var start: Int?
+
+    @Argument(help: "End line number (inclusive, defaults to start)")
+    var end: Int?
+
+    @OptionGroup var input: InputOptions
+
+    func validate() throws {
+        if end != nil && start == nil {
+            throw ValidationError("Cannot specify end without start")
+        }
+    }
 
     func run() async throws {
-        let parsed = InputReader.parsePassthrough(input)
-        let content = try InputReader.read(from: parsed.file)
+        let content = try input.readContent()
         let lines = content.components(separatedBy: "\n")
 
         if count {
@@ -31,9 +41,7 @@ struct LinesCommand: AsyncParsableCommand {
             return
         }
 
-        let indices = parsed.indices
-
-        guard !indices.isEmpty else {
+        guard let start = start else {
             // No line number given, print all lines with numbers
             let width = String(lines.count).count
             for (i, line) in lines.enumerated() {
@@ -43,8 +51,7 @@ struct LinesCommand: AsyncParsableCommand {
             return
         }
 
-        let start = indices[0]
-        let end = indices.count > 1 ? indices[1] : start
+        let end = end ?? start
 
         guard start >= 1, end >= start, end <= lines.count else {
             throw ValidationError("Line numbers must be in range 1...\(lines.count), got \(start)...\(end)")

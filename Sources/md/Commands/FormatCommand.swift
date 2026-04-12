@@ -16,11 +16,10 @@ struct FormatCommand: AsyncParsableCommand {
         abstract: "Parse and normalize a markdown file"
     )
 
-    @Argument(help: "Path to the markdown file (reads stdin if omitted)")
-    var file: String?
+    @OptionGroup var input: InputOptions
 
     func run() async throws {
-        let content = try InputReader.read(from: file)
+        let content = try input.readContent()
         let parser = MarkdownParser()
         let blocks = parser.parse(content)
         print(BlockFormatter.format(blocks), terminator: "")
