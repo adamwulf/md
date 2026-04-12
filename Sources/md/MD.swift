@@ -16,6 +16,6 @@ struct MD: AsyncParsableCommand {
         commandName: "md",
         abstract: "A CLI tool for parsing and operating on Markdown files",
         version: "0.1.0",
-        subcommands: [FormatCommand.self, TocCommand.self, BlocksCommand.self, LinesCommand.self]
+        subcommands: [FormatCommand.self, TocCommand.self, BlocksCommand.self, LinesCommand.self, InsertAfterCommand.self, InsertBeforeCommand.self]
     )
 }
