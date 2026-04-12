@@ -19,23 +19,12 @@ struct BlocksCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Print the number of blocks")
     var count: Bool = false
 
-    @Argument(
-        parsing: .captureForPassthrough,
-        help: "Block index or range (start end) followed by file path"
-    )
-    var arguments: [String]
+    @Argument(help: "Block index or range (start end) followed by file path (reads stdin if no file)")
+    var arguments: [String] = []
 
     func run() async throws {
-        // Parse arguments: optional start [end] then required file (last arg)
-        guard !arguments.isEmpty else {
-            throw ValidationError("Missing file path")
-        }
-
-        let file = arguments.last!
-        let indices = arguments.dropLast()
-
-        let url = URL(fileURLWithPath: file)
-        let content = try String(contentsOf: url, encoding: .utf8)
+        let parsed = InputReader.parsePassthrough(arguments)
+        let content = try InputReader.read(from: parsed.file)
         let parser = MarkdownParser()
         let blocks = parser.parse(content)
 
@@ -43,6 +32,8 @@ struct BlocksCommand: AsyncParsableCommand {
             print(blocks.count)
             return
         }
+
+        let indices = parsed.indices
 
         guard !indices.isEmpty else {
             // No index given, print all blocks with their indices (1-based)
@@ -52,19 +43,8 @@ struct BlocksCommand: AsyncParsableCommand {
             return
         }
 
-        guard let start = Int(indices.first!) else {
-            throw ValidationError("Invalid block index: \(indices.first!)")
-        }
-
-        let end: Int
-        if indices.count > 1 {
-            guard let e = Int(indices.dropFirst().first!) else {
-                throw ValidationError("Invalid end index: \(indices.dropFirst().first!)")
-            }
-            end = e
-        } else {
-            end = start
-        }
+        let start = indices[0]
+        let end = indices.count > 1 ? indices[1] : start
 
         guard start >= 1, end >= start, end <= blocks.count else {
             throw ValidationError("Block indices must be in range 1...\(blocks.count), got \(start)...\(end)")

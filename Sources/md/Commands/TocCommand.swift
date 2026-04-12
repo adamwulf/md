@@ -22,8 +22,8 @@ struct TocCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Show line numbers (default)")
     var lines: Bool = false
 
-    @Argument(help: "Path to the markdown file")
-    var file: String
+    @Argument(help: "Path to the markdown file (reads stdin if omitted)")
+    var file: String?
 
     func validate() throws {
         if blocks && lines {
@@ -32,8 +32,7 @@ struct TocCommand: AsyncParsableCommand {
     }
 
     func run() async throws {
-        let url = URL(fileURLWithPath: file)
-        let content = try String(contentsOf: url, encoding: .utf8)
+        let content = try InputReader.read(from: file)
         let parser = MarkdownParser()
         let parsedBlocks = parser.parse(content)
 
