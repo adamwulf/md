@@ -32,6 +32,13 @@ let package = Package(
         .testTarget(
             name: "MarkdownKitTests",
             dependencies: ["MarkdownKit"]
+        ),
+        .testTarget(
+            name: "CLITests",
+            dependencies: [
+                "md",
+                .product(name: "ArgumentParser", package: "swift-argument-parser")
+            ]
         )
     ]
 )
