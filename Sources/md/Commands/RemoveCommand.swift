@@ -31,10 +31,6 @@ struct RemoveCommand: AsyncParsableCommand {
             throw ValidationError("Must specify at least a block index")
         }
 
-        if inPlace && parsed.file == nil {
-            throw ValidationError("Cannot use --in-place with stdin")
-        }
-
         let start = indices[0]
         let end = indices.count > 1 ? indices[1] : start
 
@@ -56,7 +52,10 @@ struct RemoveCommand: AsyncParsableCommand {
 
         let result = BlockFormatter.format(remaining)
         if inPlace {
-            try InputReader.write(result, to: parsed.file!)
+            guard let file = parsed.file else {
+                throw ValidationError("Cannot use --in-place with stdin")
+            }
+            try InputReader.write(result, to: file)
         } else {
             print(result, terminator: "")
         }

@@ -57,10 +57,6 @@ struct ReplaceCommand: AsyncParsableCommand {
             }
         }
 
-        if inPlace && file == nil {
-            throw ValidationError("Cannot use --in-place with stdin")
-        }
-
         let parser = MarkdownParser()
         let fileContent = try InputReader.read(from: file)
         let blocks = parser.parse(fileContent)
@@ -87,7 +83,10 @@ struct ReplaceCommand: AsyncParsableCommand {
         }
 
         if inPlace {
-            try InputReader.write(result, to: file!)
+            guard let file = file else {
+                throw ValidationError("Cannot use --in-place with stdin")
+            }
+            try InputReader.write(result, to: file)
         } else {
             print(result, terminator: "")
         }

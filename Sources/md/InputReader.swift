@@ -51,8 +51,11 @@ enum InputReader {
         }
 
         // If the last arg is not an integer, treat it as a file path
-        if Int(arguments.last!) == nil {
-            let file = arguments.last!
+        guard let lastArg = arguments.last else {
+            return (indices: [], file: nil)
+        }
+        if Int(lastArg) == nil {
+            let file = lastArg
             let indices = arguments.dropLast().compactMap { Int($0) }
             return (indices: indices, file: file)
         }

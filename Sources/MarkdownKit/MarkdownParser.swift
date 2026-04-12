@@ -184,9 +184,9 @@ public struct MarkdownParser {
 
         case CMARK_NODE_CODE_BLOCK:
             let literal = cmark_node_get_literal(node)
-            let code = literal != nil ? String(cString: literal!) : ""
+            let code = literal.map { String(cString: $0) } ?? ""
             let fenceInfo = cmark_node_get_fence_info(node)
-            let language = fenceInfo != nil ? String(cString: fenceInfo!) : nil
+            let language = fenceInfo.map { String(cString: $0) }
             return .codeBlock(language: language, code: code, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_LIST:
@@ -249,7 +249,8 @@ public struct MarkdownParser {
 
                 if childType == CMARK_NODE_LIST {
                     let nestedOrdered = cmark_node_get_list_type(child) == CMARK_ORDERED_LIST
-                    let nestedItems = collectListItems(from: child!, indentLevel: indentLevel + 1, ordered: nestedOrdered)
+                    guard let child = child else { continue }
+                    let nestedItems = collectListItems(from: child, indentLevel: indentLevel + 1, ordered: nestedOrdered)
                     if !itemText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         items.append(ListItem(
                             text: itemText.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -298,7 +299,7 @@ public struct MarkdownParser {
         let type = cmark_node_get_type(node)
         if type == CMARK_NODE_TEXT {
             let literal = cmark_node_get_literal(node)
-            return literal != nil ? String(cString: literal!) : ""
+            return literal.map { String(cString: $0) } ?? ""
         }
 
         let rendered = cmark_render_commonmark(node, 0, 0)

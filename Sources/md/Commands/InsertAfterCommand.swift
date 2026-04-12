@@ -61,7 +61,10 @@ struct InsertAfterCommand: AsyncParsableCommand {
         }
 
         if inPlace {
-            try InputReader.write(result, to: file!)
+            guard let file = file else {
+                throw ValidationError("Cannot use --in-place with stdin")
+            }
+            try InputReader.write(result, to: file)
         } else {
             print(result, terminator: "")
         }
