@@ -18,11 +18,11 @@ struct LinesCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Print the number of lines")
     var count: Bool = false
 
-    @Argument(help: "Line number or range (start end) followed by file path (reads stdin if no file)")
-    var arguments: [String] = []
+    @Argument(help: "Line number or range (start end) followed by optional file path (reads stdin if omitted)")
+    var input: [String] = []
 
     func run() async throws {
-        let parsed = InputReader.parsePassthrough(arguments)
+        let parsed = InputReader.parsePassthrough(input)
         let content = try InputReader.read(from: parsed.file)
         let lines = content.components(separatedBy: "\n")
 

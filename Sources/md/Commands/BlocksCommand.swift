@@ -19,11 +19,11 @@ struct BlocksCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Print the number of blocks")
     var count: Bool = false
 
-    @Argument(help: "Block index or range (start end) followed by file path (reads stdin if no file)")
-    var arguments: [String] = []
+    @Argument(help: "Block index or range (start end) followed by optional file path (reads stdin if omitted)")
+    var input: [String] = []
 
     func run() async throws {
-        let parsed = InputReader.parsePassthrough(arguments)
+        let parsed = InputReader.parsePassthrough(input)
         let content = try InputReader.read(from: parsed.file)
         let parser = MarkdownParser()
         let blocks = parser.parse(content)

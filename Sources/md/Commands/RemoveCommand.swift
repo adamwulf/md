@@ -19,11 +19,11 @@ struct RemoveCommand: AsyncParsableCommand {
     @Flag(name: .shortAndLong, help: "Edit the file in place")
     var inPlace: Bool = false
 
-    @Argument(help: "Block index or range (start end) followed by file path")
-    var arguments: [String] = []
+    @Argument(help: "Block index or range (start end) followed by optional file path (reads stdin if omitted)")
+    var input: [String] = []
 
     func run() async throws {
-        let parsed = InputReader.parsePassthrough(arguments)
+        let parsed = InputReader.parsePassthrough(input)
         let content = try InputReader.read(from: parsed.file)
         let indices = parsed.indices
 

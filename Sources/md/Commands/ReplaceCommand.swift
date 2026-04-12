@@ -22,36 +22,36 @@ struct ReplaceCommand: AsyncParsableCommand {
     @Argument(help: "Start block index (1-based)")
     var start: Int
 
-    @Argument(help: "End block index (inclusive) or markdown content")
-    var secondArg: String
+    @Argument(help: "End block index (inclusive), or markdown content if replacing a single block")
+    var endOrContent: String
 
-    @Argument(help: "Markdown content (when replacing a range) and file path")
-    var remaining: [String] = []
+    @Argument(help: "Markdown content followed by optional file path (reads stdin if omitted)")
+    var input: [String] = []
 
     func run() async throws {
         let end: Int
         let newContent: String
         let file: String?
 
-        if let e = Int(secondArg) {
+        if let e = Int(endOrContent) {
             // md replace <start> <end> "content" [file]
-            guard remaining.count >= 1 else {
+            guard input.count >= 1 else {
                 throw ValidationError("Expected: md replace <start> <end> \"content\" [file]")
             }
             end = e
-            if remaining.count >= 2 {
-                newContent = remaining[remaining.count - 2]
-                file = remaining[remaining.count - 1]
+            if input.count >= 2 {
+                newContent = input[input.count - 2]
+                file = input[input.count - 1]
             } else {
-                newContent = remaining[0]
+                newContent = input[0]
                 file = nil
             }
         } else {
             // md replace <start> "content" [file]
             end = start
-            newContent = secondArg
-            if !remaining.isEmpty {
-                file = remaining[remaining.count - 1]
+            newContent = endOrContent
+            if !input.isEmpty {
+                file = input[input.count - 1]
             } else {
                 file = nil
             }
