@@ -647,6 +647,19 @@ final class FrontmatterTests: XCTestCase {
         XCTAssertEqual(fm2.get("published_at") as? String, "2026-04-18T12:34:56Z")
     }
 
+    func testFixtureYAMLNestedDatesConvertToJSON() throws {
+        let content = try loadFixture("yaml-nested-dates")
+        var fm = try XCTUnwrap(Frontmatter.parse(content))
+        fm.format = .json
+
+        let serialized = try fm.serialize()
+        let fm2 = try XCTUnwrap(Frontmatter.parse(serialized))
+        XCTAssertEqual(fm2.get("schedule.start") as? String, "2026-04-18T00:00:00Z")
+        XCTAssertEqual(fm2.get("schedule.end") as? String, "2026-05-01T09:00:00Z")
+        let milestones = try XCTUnwrap(fm2.get("milestones") as? [String])
+        XCTAssertEqual(milestones, ["2026-04-20T00:00:00Z", "2026-04-27T00:00:00Z"])
+    }
+
     func testFixtureJSONLoadsAndRoundTrips() throws {
         let content = try loadFixture("json-simple")
         var fm = try XCTUnwrap(Frontmatter.parse(content))
