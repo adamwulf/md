@@ -117,6 +117,24 @@ md frontmatter --set "title=Hello" --file plain.md
 md frontmatter --set "title=Hello" --format toml --file plain.md
 ```
 
+### List
+
+List frontmatter for every `.md` file in one or more directories. Output defaults to YAML, one block per file.
+
+```bash
+md list ./notes                                       # top-level .md files
+md list -r ./notes                                    # recurse into subdirectories
+md list ./notes --format json                         # normalize all frontmatter to JSON
+md list ./notes --key title                           # path<TAB>value lines, one per file
+md list ./notes --keys title,author                   # project a subset of keys
+md list -r . --output json                            # single JSON array of {path, format, frontmatter}
+md list -r . --output ndjson                          # one JSON object per line
+md list ./notes --missing skip                        # omit files without frontmatter
+md list ./notes --missing only                        # list only files without frontmatter
+```
+
+Files with no frontmatter appear with `(no frontmatter)` in plain output (or `null` in JSON). Parse errors for individual files are reported to stderr and the run continues.
+
 ## Library
 
 The `MarkdownKit` library can be used independently in other Swift packages:
