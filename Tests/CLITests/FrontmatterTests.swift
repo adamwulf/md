@@ -582,4 +582,94 @@ final class FrontmatterTests: XCTestCase {
         XCTAssertEqual(FrontmatterFormat.yaml, FrontmatterFormat.yaml)
         XCTAssertNotEqual(FrontmatterFormat.yaml, FrontmatterFormat.toml)
     }
+
+    // MARK: - Fixture Loading
+
+    private func loadFixture(_ name: String) throws -> String {
+        guard let url = Bundle.module.url(forResource: name, withExtension: "md", subdirectory: "Fixtures") else {
+            XCTFail("Missing fixture: \(name).md")
+            throw CocoaError(.fileReadNoSuchFile)
+        }
+        return try String(contentsOf: url, encoding: .utf8)
+    }
+
+    func testFixtureYAMLSimpleLoads() throws {
+        let content = try loadFixture("yaml-simple")
+        let fm = Frontmatter.parse(content)
+        XCTAssertEqual(fm?.format, .yaml)
+        XCTAssertEqual(fm?.get("title") as? String, "Simple")
+        XCTAssertEqual(fm?.get("draft") as? Bool, true)
+        XCTAssertEqual(fm?.get("count") as? Int, 3)
+    }
+
+    func testFixtureYAMLWithDateConvertsToJSON() throws {
+        let content = try loadFixture("yaml-with-date")
+        var fm = try XCTUnwrap(Frontmatter.parse(content))
+        XCTAssertEqual(fm.format, .yaml)
+        fm.format = .json
+
+        let serialized = try fm.serialize()
+        XCTAssertTrue(serialized.hasPrefix(";;;\n"))
+
+        let fm2 = try XCTUnwrap(Frontmatter.parse(serialized))
+        XCTAssertEqual(fm2.format, .json)
+        XCTAssertEqual(fm2.get("title") as? String, "Dated Post")
+        XCTAssertEqual(fm2.get("author") as? String, "Jane")
+        XCTAssertEqual(fm2.get("date") as? String, "2026-04-18T00:00:00Z")
+    }
+
+    func testFixtureYAMLWithDatetimeConvertsToJSON() throws {
+        let content = try loadFixture("yaml-with-datetime")
+        var fm = try XCTUnwrap(Frontmatter.parse(content))
+        fm.format = .json
+
+        let serialized = try fm.serialize()
+        let fm2 = try XCTUnwrap(Frontmatter.parse(serialized))
+        XCTAssertEqual(fm2.get("title") as? String, "Timestamped")
+        XCTAssertEqual(fm2.get("published_at") as? String, "2026-04-18T12:34:56Z")
+    }
+
+    // TOMLKit pre-stringifies date/time/dateTime values via debugDescription
+    // in tomlValueToAny, so by the time they reach serializeJSON they are
+    // already Strings — this test covers the TOML pre-stringification path,
+    // not the Date-object normalization path.
+    func testFixtureTOMLWithDateConvertsToJSON() throws {
+        let content = try loadFixture("toml-with-date")
+        var fm = try XCTUnwrap(Frontmatter.parse(content))
+        XCTAssertEqual(fm.format, .toml)
+        fm.format = .json
+
+        let serialized = try fm.serialize()
+        let fm2 = try XCTUnwrap(Frontmatter.parse(serialized))
+        XCTAssertEqual(fm2.format, .json)
+        XCTAssertEqual(fm2.get("title") as? String, "Dated TOML")
+        XCTAssertEqual(fm2.get("date") as? String, "2026-04-18")
+        XCTAssertEqual(fm2.get("published_at") as? String, "2026-04-18T12:34:56Z")
+    }
+
+    func testFixtureYAMLNestedDatesConvertToJSON() throws {
+        let content = try loadFixture("yaml-nested-dates")
+        var fm = try XCTUnwrap(Frontmatter.parse(content))
+        fm.format = .json
+
+        let serialized = try fm.serialize()
+        let fm2 = try XCTUnwrap(Frontmatter.parse(serialized))
+        XCTAssertEqual(fm2.get("schedule.start") as? String, "2026-04-18T00:00:00Z")
+        XCTAssertEqual(fm2.get("schedule.end") as? String, "2026-05-01T09:00:00Z")
+        let milestones = try XCTUnwrap(fm2.get("milestones") as? [String])
+        XCTAssertEqual(milestones, ["2026-04-20T00:00:00Z", "2026-04-27T00:00:00Z"])
+    }
+
+    func testFixtureJSONLoadsAndRoundTrips() throws {
+        let content = try loadFixture("json-simple")
+        var fm = try XCTUnwrap(Frontmatter.parse(content))
+        XCTAssertEqual(fm.format, .json)
+        XCTAssertEqual(fm.get("title") as? String, "JSON Doc")
+
+        fm.format = .json
+        let serialized = try fm.serialize()
+        let fm2 = try XCTUnwrap(Frontmatter.parse(serialized))
+        XCTAssertEqual(fm2.get("title") as? String, "JSON Doc")
+        XCTAssertEqual(fm2.get("date") as? String, "2026-04-18")
+    }
 }
