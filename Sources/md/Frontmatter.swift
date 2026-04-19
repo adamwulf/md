@@ -183,7 +183,8 @@ struct Frontmatter {
 
     private func serializeJSON() throws -> String {
         guard !data.isEmpty else { return "" }
-        let jsonData = try JSONSerialization.data(withJSONObject: data, options: [.prettyPrinted, .sortedKeys])
+        let normalized = Frontmatter.normalizeForJSON(data)
+        let jsonData = try JSONSerialization.data(withJSONObject: normalized, options: [.prettyPrinted, .sortedKeys])
         guard let jsonString = String(data: jsonData, encoding: .utf8) else {
             return ""
         }
@@ -191,6 +192,42 @@ struct Frontmatter {
     }
 
     // MARK: - Normalization
+
+    private static let jsonDateFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    /// Normalize values into JSON-serializable types. Dates become ISO-8601 strings;
+    /// unsupported types fall back to their String description.
+    static func normalizeForJSON(_ value: Any) -> Any {
+        if let dict = value as? [String: Any] {
+            return dict.mapValues { normalizeForJSON($0) }
+        }
+        if let array = value as? [Any] {
+            return array.map { normalizeForJSON($0) }
+        }
+        if let date = value as? Date {
+            return jsonDateFormatter.string(from: date)
+        }
+        if let b = value as? Bool {
+            return b
+        }
+        if let i = value as? Int {
+            return i
+        }
+        if let d = value as? Double {
+            return d
+        }
+        if let s = value as? String {
+            return s
+        }
+        if value is NSNull {
+            return NSNull()
+        }
+        return "\(value)"
+    }
 
     /// Normalize Foundation types (NSString, NSNumber) to Swift native types for Yams compatibility.
     static func normalizeForYAML(_ value: Any) -> Any {

@@ -42,6 +42,9 @@ let package = Package(
             dependencies: [
                 "md",
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
+            ],
+            resources: [
+                .copy("Fixtures")
             ]
         )
     ]
