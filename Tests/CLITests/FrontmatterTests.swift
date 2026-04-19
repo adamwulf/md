@@ -615,7 +615,7 @@ final class FrontmatterTests: XCTestCase {
         XCTAssertEqual(fm2.format, .json)
         XCTAssertEqual(fm2.get("title") as? String, "Dated Post")
         XCTAssertEqual(fm2.get("author") as? String, "Jane")
-        XCTAssertNotNil(fm2.get("date"))
+        XCTAssertEqual(fm2.get("date") as? String, "2026-04-18T00:00:00Z")
     }
 
     func testFixtureYAMLWithDatetimeConvertsToJSON() throws {
@@ -626,9 +626,13 @@ final class FrontmatterTests: XCTestCase {
         let serialized = try fm.serialize()
         let fm2 = try XCTUnwrap(Frontmatter.parse(serialized))
         XCTAssertEqual(fm2.get("title") as? String, "Timestamped")
-        XCTAssertNotNil(fm2.get("published_at"))
+        XCTAssertEqual(fm2.get("published_at") as? String, "2026-04-18T12:34:56Z")
     }
 
+    // TOMLKit pre-stringifies date/time/dateTime values via debugDescription
+    // in tomlValueToAny, so by the time they reach serializeJSON they are
+    // already Strings — this test covers the TOML pre-stringification path,
+    // not the Date-object normalization path.
     func testFixtureTOMLWithDateConvertsToJSON() throws {
         let content = try loadFixture("toml-with-date")
         var fm = try XCTUnwrap(Frontmatter.parse(content))
@@ -639,6 +643,8 @@ final class FrontmatterTests: XCTestCase {
         let fm2 = try XCTUnwrap(Frontmatter.parse(serialized))
         XCTAssertEqual(fm2.format, .json)
         XCTAssertEqual(fm2.get("title") as? String, "Dated TOML")
+        XCTAssertEqual(fm2.get("date") as? String, "2026-04-18")
+        XCTAssertEqual(fm2.get("published_at") as? String, "2026-04-18T12:34:56Z")
     }
 
     func testFixtureJSONLoadsAndRoundTrips() throws {
