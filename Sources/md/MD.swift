@@ -23,6 +23,6 @@ struct MD: AsyncParsableCommand {
             Every command requires input via --file <path> or --stdin (but not both).
             """,
         version: "0.1.0",
-        subcommands: [FormatCommand.self, TocCommand.self, BlocksCommand.self, LinesCommand.self, InsertAfterCommand.self, InsertBeforeCommand.self, RemoveCommand.self, ReplaceCommand.self, FrontmatterCommand.self]
+        subcommands: [FormatCommand.self, TocCommand.self, BlocksCommand.self, LinesCommand.self, InsertAfterCommand.self, InsertBeforeCommand.self, RemoveCommand.self, ReplaceCommand.self, FrontmatterCommand.self, ListCommand.self]
     )
 }
