@@ -75,6 +75,21 @@ struct FrontmatterCommand: AsyncParsableCommand {
         }
     }
 
+    /// Compute the string to emit for read mode (no `--set`, no `--remove-key`,
+    /// no `--key`). When `format` is supplied the data is re-serialized to that
+    /// format; otherwise the existing format is used. The output is always the
+    /// bare frontmatter data — no delimiters, no body — so it can be piped into
+    /// tools like `jq`.
+    static func readModeOutput(content: String, format: FrontmatterFormat?) throws -> String {
+        guard var frontmatter = Frontmatter.parse(content) else {
+            return ""
+        }
+        if let format {
+            frontmatter.format = format
+        }
+        return try frontmatter.serializeData()
+    }
+
     func run() async throws {
         let content = try input.readContent()
 
@@ -119,14 +134,8 @@ struct FrontmatterCommand: AsyncParsableCommand {
             let result = try frontmatter.serialize()
             try output(result)
         } else {
-            // Print all frontmatter (or full document if --format is specified)
-            if format != nil {
-                let result = try frontmatter.serialize()
-                try output(result)
-            } else {
-                let serialized = try frontmatter.serializeData()
-                print(serialized, terminator: "")
-            }
+            let serialized = try FrontmatterCommand.readModeOutput(content: content, format: format)
+            print(serialized, terminator: "")
         }
     }
 
