@@ -159,6 +159,32 @@ final class FormatCommandTests: XCTestCase {
         XCTAssertFalse(out.contains(";;;"))
     }
 
+    /// Regression test: JSONSerialization returns numeric values as `NSNumber`,
+    /// which bridges to `Bool` first — so `as? Bool` matches any non-zero number.
+    /// Without explicit unbridging, integers like `1` were silently turned into
+    /// `true` when converted to YAML or TOML. This ensures int / bool / double
+    /// preserve their types across JSON → YAML and JSON → TOML.
+    func testJSONSourceNumericTypesSurviveConversion() {
+        let input = """
+            ;;;
+            {"version": 1, "active": true, "ratio": 1.5, "title": "Doc"}
+            ;;;
+            #   Body
+            """
+
+        let yaml = runFormat(input, frontmatter: .yaml)
+        XCTAssertTrue(yaml.contains("version: 1"), "expected 'version: 1' in YAML output, got: \(yaml)")
+        XCTAssertFalse(yaml.contains("version: true"))
+        XCTAssertTrue(yaml.contains("active: true"))
+        XCTAssertTrue(yaml.contains("title: Doc"))
+
+        let toml = runFormat(input, frontmatter: .toml)
+        XCTAssertTrue(toml.contains("version = 1"), "expected 'version = 1' in TOML output, got: \(toml)")
+        XCTAssertFalse(toml.contains("version = true"))
+        XCTAssertTrue(toml.contains("active = true"))
+        XCTAssertTrue(toml.contains("ratio = 1.5"))
+    }
+
     // MARK: - Body normalization regardless of conversion
 
     func testBodyIsNormalizedInAllPaths() {

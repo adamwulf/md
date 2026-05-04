@@ -75,7 +75,7 @@ struct Frontmatter {
         case .json:
             if let jsonData = rawString.data(using: .utf8),
                let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
-                data = parsed
+                data = (Frontmatter.unbridgeNSNumber(parsed) as? [String: Any]) ?? [:]
             } else {
                 data = [:]
             }
@@ -192,6 +192,32 @@ struct Frontmatter {
     }
 
     // MARK: - Normalization
+
+    /// Recursively convert `NSNumber` values inside a JSON-parsed structure to
+    /// their native Swift counterparts (`Bool`, `Int`, or `Double`). Necessary
+    /// because `JSONSerialization` returns numeric values as `NSNumber`, and
+    /// `NSNumber` bridges to Swift such that `as? Bool` matches every non-zero
+    /// number — silently turning integers like `1` into `true` downstream.
+    static func unbridgeNSNumber(_ value: Any) -> Any {
+        if let dict = value as? [String: Any] {
+            return dict.mapValues { unbridgeNSNumber($0) }
+        }
+        if let array = value as? [Any] {
+            return array.map { unbridgeNSNumber($0) }
+        }
+        if let num = value as? NSNumber {
+            if CFGetTypeID(num) == CFBooleanGetTypeID() {
+                return num.boolValue
+            }
+            let objCType = String(cString: num.objCType)
+            // Floating-point types: 'f' (float), 'd' (double).
+            if objCType == "f" || objCType == "d" {
+                return num.doubleValue
+            }
+            return num.intValue
+        }
+        return value
+    }
 
     private static let jsonDateFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()

@@ -60,18 +60,19 @@ struct FormatCommand: AsyncParsableCommand {
             return formattedBody
         }
 
-        var frontmatter = parsed
-        if let targetFrontmatter, targetFrontmatter != frontmatter.format {
-            frontmatter.format = targetFrontmatter
-            if let serialized = try? frontmatter.serializeData() {
-                let delimiter = delimiter(for: frontmatter.format)
+        if let targetFrontmatter, targetFrontmatter != parsed.format {
+            var converted = parsed
+            converted.format = targetFrontmatter
+            if let serialized = try? converted.serializeData() {
+                let delimiter = delimiter(for: targetFrontmatter)
                 return "\(delimiter)\n\(serialized)\(delimiter)\n\(formattedBody)"
             }
-            // Fall through to verbatim emission on serialization failure.
+            // Serialization failed — fall through to verbatim emission of the
+            // source frontmatter, using the source's original delimiters.
         }
 
-        let delimiter = delimiter(for: frontmatter.format)
-        return "\(delimiter)\n\(frontmatter.rawContent)\n\(delimiter)\n\(formattedBody)"
+        let delimiter = delimiter(for: parsed.format)
+        return "\(delimiter)\n\(parsed.rawContent)\n\(delimiter)\n\(formattedBody)"
     }
 
     private static func delimiter(for format: FrontmatterFormat) -> String {
