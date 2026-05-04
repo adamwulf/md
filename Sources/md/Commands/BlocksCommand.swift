@@ -52,7 +52,7 @@ struct BlocksCommand: AsyncParsableCommand {
     func run() async throws {
         let content = try input.readContent()
         let parser = MarkdownParser()
-        let blocks = parser.parse(content)
+        let blocks = parser.parseDocument(content)
 
         if count {
             print(blocks.count)
