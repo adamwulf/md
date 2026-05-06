@@ -672,4 +672,43 @@ final class FrontmatterTests: XCTestCase {
         XCTAssertEqual(fm2.get("title") as? String, "JSON Doc")
         XCTAssertEqual(fm2.get("date") as? String, "2026-04-18")
     }
+
+    // MARK: - Read-mode output (--format json/toml/yaml emits bare data)
+
+    func testReadModeJSONFormatEmitsBareJSON() throws {
+        let content = try loadFixture("yaml-simple")
+        let output = try FrontmatterCommand.readModeOutput(content: content, format: .json)
+        XCTAssertFalse(output.contains(";;;"), "read-mode JSON output must not contain ;;; delimiters; got:\n\(output)")
+        XCTAssertFalse(output.contains("# Heading"), "read-mode output must not include the body; got:\n\(output)")
+        let data = try XCTUnwrap(output.data(using: .utf8))
+        let parsed = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(parsed["title"] as? String, "Simple")
+        XCTAssertEqual(parsed["draft"] as? Bool, true)
+        XCTAssertEqual(parsed["count"] as? Int, 3)
+    }
+
+    func testReadModeTOMLFormatEmitsBareTOML() throws {
+        let content = try loadFixture("yaml-simple")
+        let output = try FrontmatterCommand.readModeOutput(content: content, format: .toml)
+        XCTAssertFalse(output.contains("+++"), "read-mode TOML output must not contain +++ delimiters; got:\n\(output)")
+        XCTAssertFalse(output.contains("# Heading"), "read-mode output must not include the body; got:\n\(output)")
+        XCTAssertTrue(output.contains("title"))
+        XCTAssertTrue(output.contains("Simple"))
+    }
+
+    func testReadModeYAMLFormatEmitsBareYAML() throws {
+        let content = try loadFixture("yaml-simple")
+        let output = try FrontmatterCommand.readModeOutput(content: content, format: .yaml)
+        XCTAssertFalse(output.contains("---"), "read-mode YAML output must not contain --- delimiters; got:\n\(output)")
+        XCTAssertFalse(output.contains("# Heading"), "read-mode output must not include the body; got:\n\(output)")
+        XCTAssertTrue(output.contains("title: Simple"))
+    }
+
+    func testReadModeNoFormatEmitsBareData() throws {
+        let content = try loadFixture("yaml-simple")
+        let output = try FrontmatterCommand.readModeOutput(content: content, format: nil)
+        XCTAssertFalse(output.contains("---"))
+        XCTAssertFalse(output.contains("# Heading"))
+        XCTAssertTrue(output.contains("title: Simple"))
+    }
 }

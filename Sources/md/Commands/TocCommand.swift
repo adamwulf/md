@@ -46,7 +46,7 @@ struct TocCommand: AsyncParsableCommand {
     func run() async throws {
         let content = try input.readContent()
         let parser = MarkdownParser()
-        let parsedBlocks = parser.parse(content)
+        let parsedBlocks = parser.parseDocument(content)
 
         let useBlocks = blocks
 
