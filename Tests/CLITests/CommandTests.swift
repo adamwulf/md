@@ -290,6 +290,18 @@ final class CommandTests: XCTestCase {
         )
     }
 
+    func testInsertBeforePreservesCRLFBoundaries() throws {
+        let original = "# One\r\n\r\n# Two\r\n"
+        let blocks = parser.parse(original)
+        let target = try XCTUnwrap(blocks.last)
+
+        let result = try XCTUnwrap(
+            MarkdownSourceEditor.inserting("Inserted.\n\n", before: target, in: original)
+        )
+
+        XCTAssertEqual(result, "# One\r\n\r\nInserted.\n\n# Two\r\n")
+    }
+
     // MARK: - In-Place Write
 
     func testInPlaceWrite() throws {
