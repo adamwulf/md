@@ -228,6 +228,68 @@ final class CommandTests: XCTestCase {
         XCTAssertTrue(beforeRange.lowerBound < lastRange.lowerBound)
     }
 
+    func testInsertBeforePreservesUnrelatedSourceExactly() throws {
+        let original = """
+            ---
+            description: "A wrapped value"
+            tags:
+              - markdown
+              - source-editing
+            ---
+
+            # Architecture
+
+            This paragraph is deliberately
+            wrapped across source lines with an escaped \\*asterisk\\*.
+
+            [^1]: First footnote keeps its own line.
+            [^2]: Second footnote keeps its own line.
+
+            4. Existing numbering
+            9. Must remain unchanged
+
+            ## Target
+
+            Target paragraph.
+            """
+        let blocks = parser.parseDocument(original)
+        let target = try XCTUnwrap(blocks.first { block in
+            guard case .heading(_, let text, _, _, _) = block else {
+                return false
+            }
+            return text == "Target"
+        })
+        let inserted = "- **Post-capture amendment:** test content\n\n"
+
+        let result = try XCTUnwrap(
+            MarkdownSourceEditor.inserting(inserted, before: target, in: original)
+        )
+        let expected = original.replacingOccurrences(
+            of: "## Target",
+            with: "- **Post-capture amendment:** test content\n\n## Target"
+        )
+
+        XCTAssertEqual(result, expected)
+    }
+
+    func testInsertBeforeIndentedBlockStartsAtBeginningOfLine() throws {
+        let original = """
+              # Indented heading
+
+            Paragraph.
+            """
+        let target = try XCTUnwrap(parser.parse(original).first)
+
+        let result = try XCTUnwrap(
+            MarkdownSourceEditor.inserting("Inserted.\n\n", before: target, in: original)
+        )
+
+        XCTAssertEqual(
+            result,
+            "Inserted.\n\n  # Indented heading\n\nParagraph."
+        )
+    }
+
     // MARK: - In-Place Write
 
     func testInPlaceWrite() throws {
