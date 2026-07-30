@@ -93,6 +93,20 @@ final class BlockParsingFrontmatterTests: XCTestCase {
         XCTAssertFalse(text.contains("title: Sample"), "byte range should not include frontmatter")
     }
 
+    func testParseDocumentCRLFByteRangesMatchOriginal() {
+        let document = "---\r\ntitle: Sample\r\n---\r\n\r\n# One\r\n\r\n# Two\r\n"
+        let blocks = parser.parseDocument(document)
+        XCTAssertEqual(blocks.count, 2)
+
+        let utf8 = Array(document.utf8)
+        let expected = ["# One", "# Two"]
+        for (block, expectedSource) in zip(blocks, expected) {
+            let range = block.byteRange
+            let bytes = utf8[range.location..<(range.location + range.length)]
+            XCTAssertEqual(String(decoding: bytes, as: UTF8.self), expectedSource)
+        }
+    }
+
     // MARK: - TOML
 
     func testParseDocumentSkipsTOMLFrontmatter() {

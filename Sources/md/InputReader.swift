@@ -35,6 +35,13 @@ enum InputReader {
     /// Write content to a file path, replacing its contents.
     static func write(_ content: String, to path: String) throws {
         let url = URL(fileURLWithPath: path)
-        try content.write(to: url, atomically: true, encoding: .utf8)
+        let existingData = try? Data(contentsOf: url, options: .mappedIfSafe)
+        if existingData?.starts(with: [0xEF, 0xBB, 0xBF]) == true {
+            var data = Data([0xEF, 0xBB, 0xBF])
+            data.append(contentsOf: content.utf8)
+            try data.write(to: url, options: .atomic)
+        } else {
+            try content.write(to: url, atomically: true, encoding: .utf8)
+        }
     }
 }

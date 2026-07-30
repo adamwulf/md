@@ -108,7 +108,8 @@ struct Frontmatter {
         var index = lineStart
 
         while index < content.endIndex {
-            if content[index].isNewline {
+            let character = content[index]
+            if character == "\n" || character == "\r" || character == "\r\n" {
                 let nextIndex = content.index(after: index)
                 lines.append(
                     SourceLine(

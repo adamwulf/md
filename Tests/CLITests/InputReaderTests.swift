@@ -49,6 +49,22 @@ final class InputReaderTests: XCTestCase {
         XCTAssertEqual(content, "replaced")
     }
 
+    func testWritePreservesExistingUTF8ByteOrderMark() throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("md-test-\(UUID().uuidString).md")
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        var original = Data([0xEF, 0xBB, 0xBF])
+        original.append(contentsOf: Data("# Original\n".utf8))
+        try original.write(to: file)
+
+        try InputReader.write("# Replaced\n", to: file.path)
+
+        var expected = Data([0xEF, 0xBB, 0xBF])
+        expected.append(contentsOf: Data("# Replaced\n".utf8))
+        XCTAssertEqual(try Data(contentsOf: file), expected)
+    }
+
     // MARK: - InputOptions validation
 
     func testInputOptionsRequiresFileOrStdin() throws {

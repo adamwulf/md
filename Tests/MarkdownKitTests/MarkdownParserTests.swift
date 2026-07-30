@@ -223,6 +223,25 @@ final class MarkdownParserTests: XCTestCase {
         XCTAssertGreaterThan(blocks[0].charRange.length, 0)
     }
 
+    func testCRLFByteAndCharacterRangesMatchSource() throws {
+        let markdown = "# One\r\n\r\n# Two\r\n"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.count, 2)
+
+        let utf8 = Array(markdown.utf8)
+        let nsString = markdown as NSString
+        let expected = ["# One", "# Two"]
+
+        for (block, expectedSource) in zip(blocks, expected) {
+            let byteRange = block.byteRange
+            let bytes = utf8[
+                byteRange.location..<(byteRange.location + byteRange.length)
+            ]
+            XCTAssertEqual(String(decoding: bytes, as: UTF8.self), expectedSource)
+            XCTAssertEqual(nsString.substring(with: block.charRange), expectedSource)
+        }
+    }
+
     // MARK: - Multiple Block Types
 
     func testParseMultipleBlocks() {
