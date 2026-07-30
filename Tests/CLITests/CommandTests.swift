@@ -299,7 +299,41 @@ final class CommandTests: XCTestCase {
             MarkdownSourceEditor.inserting("Inserted.\n\n", before: target, in: original)
         )
 
-        XCTAssertEqual(result, "# One\r\n\r\nInserted.\n\n# Two\r\n")
+        XCTAssertEqual(result, "# One\r\n\r\nInserted.\r\n\r\n# Two\r\n")
+    }
+
+    func testInsertBeforePreservesCRLFFrontmatterAndBlockIndex() throws {
+        let original = """
+            ---\r
+            description: CRLF document\r
+            ---\r
+            \r
+            # First\r
+            \r
+            # Target\r
+            """
+        let blocks = parser.parseDocument(original)
+        XCTAssertEqual(blocks.count, 2)
+
+        let target = try XCTUnwrap(blocks.last)
+        let result = try XCTUnwrap(
+            MarkdownSourceEditor.inserting("Inserted.\n\n", before: target, in: original)
+        )
+
+        XCTAssertEqual(
+            result,
+            """
+            ---\r
+            description: CRLF document\r
+            ---\r
+            \r
+            # First\r
+            \r
+            Inserted.\r
+            \r
+            # Target\r
+            """
+        )
     }
 
     // MARK: - In-Place Write

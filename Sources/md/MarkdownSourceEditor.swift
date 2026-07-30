@@ -5,6 +5,7 @@
 //  Created by Codex on 7/29/26.
 //
 
+import Foundation
 import MarkdownKit
 
 enum MarkdownSourceEditor {
@@ -27,9 +28,36 @@ enum MarkdownSourceEditor {
             return nil
         }
 
+        let lineEnding = firstLineEnding(in: source) ?? "\n"
+        let normalizedInsertion = insertion
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .replacingOccurrences(of: "\n", with: lineEnding)
+
         var result = source
-        result.insert(contentsOf: insertion, at: insertionIndex)
+        result.insert(contentsOf: normalizedInsertion, at: insertionIndex)
         return result
+    }
+
+    private static func firstLineEnding(in source: String) -> String? {
+        let bytes = source.utf8
+        var index = bytes.startIndex
+
+        while index < bytes.endIndex {
+            if bytes[index] == 0x0A {
+                return "\n"
+            }
+            if bytes[index] == 0x0D {
+                let nextIndex = bytes.index(after: index)
+                if nextIndex < bytes.endIndex && bytes[nextIndex] == 0x0A {
+                    return "\r\n"
+                }
+                return "\r"
+            }
+            index = bytes.index(after: index)
+        }
+
+        return nil
     }
 
     /// Finds a 1-based line start without relying on parser character offsets.
