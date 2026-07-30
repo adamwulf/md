@@ -150,6 +150,16 @@ final class InputReaderTests: XCTestCase {
                 }
             )
         )
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(atPath: directory.path),
+            ["document.md"]
+        )
+        let directoryAttributes =
+            try FileManager.default.attributesOfItem(atPath: directory.path)
+        XCTAssertEqual(
+            (directoryAttributes[.posixPermissions] as? NSNumber)?.intValue,
+            0o500
+        )
         XCTAssertEqual(chmod(directory.path, 0o700), 0)
 
         let attributesAfter = try FileManager.default.attributesOfItem(
@@ -167,6 +177,44 @@ final class InputReaderTests: XCTestCase {
         )
     }
 
+    func testCommitFailureWithInaccessibleDirectoryLeavesNoStagingCopy()
+        throws
+    {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("md-test-\(UUID().uuidString)")
+        let file = directory.appendingPathComponent("document.md")
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: false
+        )
+        defer {
+            chmod(directory.path, 0o700)
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let original = Data("# Original\n".utf8)
+        try original.write(to: file)
+        XCTAssertThrowsError(
+            try InputReader.write(
+                "# Replacement\n",
+                to: file.path,
+                beforeCommit: { _ in
+                    XCTAssertEqual(chmod(directory.path, 0o000), 0)
+                }
+            )
+        )
+
+        var directoryStatus = stat()
+        XCTAssertEqual(lstat(directory.path, &directoryStatus), 0)
+        XCTAssertEqual(directoryStatus.st_mode & mode_t(0o777), 0)
+        XCTAssertEqual(chmod(directory.path, 0o700), 0)
+        XCTAssertEqual(try Data(contentsOf: file), original)
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(atPath: directory.path),
+            ["document.md"]
+        )
+    }
+
     func testWriteRestoresCompleteFileSizeSignalDisposition() throws {
         let file = FileManager.default.temporaryDirectory
             .appendingPathComponent("md-test-\(UUID().uuidString).md")
@@ -175,6 +223,78 @@ final class InputReaderTests: XCTestCase {
 
         try withCustomFileSizeSignalDisposition {
             try InputReader.write("# Replacement\n", to: file.path)
+        }
+    }
+
+    func testConcurrentWritesSerializeFileSizeSignalDisposition() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("md-test-\(UUID().uuidString)")
+        let firstFile = directory.appendingPathComponent("first.md")
+        let secondFile = directory.appendingPathComponent("second.md")
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: false
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try Data("# First\n".utf8).write(to: firstFile)
+        try Data("# Second\n".utf8).write(to: secondFile)
+
+        try withCustomFileSizeSignalDisposition {
+            let firstReachedCommit = DispatchSemaphore(value: 0)
+            let releaseFirst = DispatchSemaphore(value: 0)
+            let secondReachedCommit = DispatchSemaphore(value: 0)
+            let releaseSecond = DispatchSemaphore(value: 0)
+            let writes = DispatchGroup()
+
+            writes.enter()
+            DispatchQueue.global().async {
+                defer { writes.leave() }
+                do {
+                    try InputReader.write(
+                        "# First replacement\n",
+                        to: firstFile.path,
+                        beforeCommit: { _ in
+                            firstReachedCommit.signal()
+                            releaseFirst.wait()
+                        }
+                    )
+                } catch {
+                    XCTFail("First write failed: \(error)")
+                }
+            }
+            XCTAssertEqual(
+                firstReachedCommit.wait(timeout: .now() + 2),
+                .success
+            )
+
+            writes.enter()
+            DispatchQueue.global().async {
+                defer { writes.leave() }
+                do {
+                    try InputReader.write(
+                        "# Second replacement\n",
+                        to: secondFile.path,
+                        beforeCommit: { _ in
+                            secondReachedCommit.signal()
+                            releaseSecond.wait()
+                        }
+                    )
+                } catch {
+                    XCTFail("Second write failed: \(error)")
+                }
+            }
+            XCTAssertEqual(
+                secondReachedCommit.wait(timeout: .now() + 0.1),
+                .timedOut
+            )
+
+            releaseFirst.signal()
+            XCTAssertEqual(
+                secondReachedCommit.wait(timeout: .now() + 2),
+                .success
+            )
+            releaseSecond.signal()
+            XCTAssertEqual(writes.wait(timeout: .now() + 2), .success)
         }
     }
 

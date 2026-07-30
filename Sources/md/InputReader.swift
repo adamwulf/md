@@ -9,6 +9,8 @@ import Foundation
 import Darwin
 
 enum InputReader {
+    private static let fileSizeSignalLock = NSRecursiveLock()
+
     struct Source {
         let content: String
         let hasUTF8ByteOrderMark: Bool
@@ -124,11 +126,17 @@ enum InputReader {
                 .deletingLastPathComponent()
                 .appendingPathComponent(".md-write-\(UUID().uuidString)")
             var committed = false
+            var stagingHandle: FileHandle?
             defer {
                 if !committed {
-                    try? clearWriteBlockingFlags(at: stagingURL)
-                    try? FileManager.default.removeItem(at: stagingURL)
+                    if let stagingHandle {
+                        try? stagingHandle.seek(toOffset: 0)
+                        try? stagingHandle.truncate(atOffset: 0)
+                        try? stagingHandle.synchronize()
+                    }
+                    removeStagingFile(at: stagingURL)
                 }
+                try? stagingHandle?.close()
             }
             try FileManager.default.copyItem(
                 at: destinationURL,
@@ -137,12 +145,11 @@ enum InputReader {
             try clearWriteBlockingFlags(at: stagingURL)
 
             let handle = try FileHandle(forWritingTo: stagingURL)
-            defer { try? handle.close() }
+            stagingHandle = handle
             try handle.seek(toOffset: 0)
             try handle.write(contentsOf: data)
             try handle.truncate(atOffset: UInt64(data.count))
             try handle.synchronize()
-            try handle.close()
 
             try beforeCommit?(stagingURL)
             let result = stagingURL.path.withCString { sourcePath in
@@ -163,6 +170,9 @@ enum InputReader {
     private static func withIgnoredFileSizeLimitSignal<T>(
         _ body: () throws -> T
     ) throws -> T {
+        fileSizeSignalLock.lock()
+        defer { fileSizeSignalLock.unlock() }
+
         var previousDisposition = Darwin.sigaction()
         guard sigaction(
             SIGXFSZ,
@@ -194,6 +204,46 @@ enum InputReader {
             throw currentPOSIXError()
         }
         return try result.get()
+    }
+
+    /// The parent directory may become non-writable after staging. First scrub
+    /// through the already-open file descriptor, then temporarily restore only
+    /// the owner's directory access needed to unlink our private file.
+    private static func removeStagingFile(at url: URL) {
+        try? clearWriteBlockingFlags(at: url)
+        do {
+            try FileManager.default.removeItem(at: url)
+            return
+        } catch {
+            let directoryURL = url.deletingLastPathComponent()
+            var attributes = stat()
+            let status = directoryURL.path.withCString { path in
+                Darwin.lstat(path, &attributes)
+            }
+            guard status == 0 else {
+                return
+            }
+
+            let originalMode = attributes.st_mode & mode_t(0o7777)
+            let cleanupMode = originalMode | mode_t(S_IWUSR | S_IXUSR)
+            guard cleanupMode != originalMode else {
+                return
+            }
+            let changedMode = directoryURL.path.withCString { path in
+                Darwin.chmod(path, cleanupMode)
+            }
+            guard changedMode == 0 else {
+                return
+            }
+            defer {
+                _ = directoryURL.path.withCString { path in
+                    Darwin.chmod(path, originalMode)
+                }
+            }
+
+            try? clearWriteBlockingFlags(at: url)
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     /// Metadata copying can make the private staging file immutable or
