@@ -227,6 +227,42 @@ final class InputReaderTests: XCTestCase {
         }
     }
 
+    func testImmutableWriteFailureLeavesNoStagingCopy() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("md-test-\(UUID().uuidString)")
+        let file = directory.appendingPathComponent("document.md")
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: false
+        )
+        defer {
+            if let children = try? FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil
+            ) {
+                for child in children {
+                    chflags(child.path, 0)
+                    try? FileManager.default.removeItem(at: child)
+                }
+            }
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let original = Data("# Original\n".utf8)
+        try original.write(to: file)
+        XCTAssertEqual(chflags(file.path, UInt32(UF_IMMUTABLE)), 0)
+
+        XCTAssertThrowsError(
+            try InputReader.write("# Replacement\n", to: file.path)
+        )
+
+        XCTAssertEqual(try Data(contentsOf: file), original)
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(atPath: directory.path),
+            ["document.md"]
+        )
+    }
+
     func testWriteThroughSymbolicLinkPreservesLink() throws {
         let tmpDir = FileManager.default.temporaryDirectory
         let identifier = UUID().uuidString

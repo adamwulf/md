@@ -126,6 +126,7 @@ enum InputReader {
             var committed = false
             defer {
                 if !committed {
+                    try? clearWriteBlockingFlags(at: stagingURL)
                     try? FileManager.default.removeItem(at: stagingURL)
                 }
             }
@@ -133,6 +134,7 @@ enum InputReader {
                 at: destinationURL,
                 to: stagingURL
             )
+            try clearWriteBlockingFlags(at: stagingURL)
 
             let handle = try FileHandle(forWritingTo: stagingURL)
             defer { try? handle.close() }
@@ -192,6 +194,37 @@ enum InputReader {
             throw currentPOSIXError()
         }
         return try result.get()
+    }
+
+    /// Metadata copying can make the private staging file immutable or
+    /// append-only. Those flags belong to the live file, not the working copy:
+    /// leaving them set prevents both writing and failure cleanup.
+    private static func clearWriteBlockingFlags(at url: URL) throws {
+        var attributes = stat()
+        let status = url.path.withCString { path in
+            Darwin.lstat(path, &attributes)
+        }
+        guard status == 0 else {
+            if errno == ENOENT {
+                return
+            }
+            throw currentPOSIXError()
+        }
+
+        let writeBlockingFlags = UInt32(
+            UF_IMMUTABLE | UF_APPEND | SF_IMMUTABLE | SF_APPEND
+        )
+        let writableFlags = attributes.st_flags & ~writeBlockingFlags
+        guard writableFlags != attributes.st_flags else {
+            return
+        }
+
+        let result = url.path.withCString { path in
+            Darwin.chflags(path, writableFlags)
+        }
+        guard result == 0 else {
+            throw currentPOSIXError()
+        }
     }
 
     private static func currentPOSIXError() -> POSIXError {
