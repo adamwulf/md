@@ -513,6 +513,40 @@ final class CommandTests: XCTestCase {
         }
     }
 
+    func testInPlaceWriteFailureLeavesOriginalUntouched() throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("write_failure_\(UUID().uuidString).md")
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let original = "# First\n\n# Target\n\n"
+            + String(repeating: "Existing source bytes. ", count: 600)
+        let originalData = Data(original.utf8)
+        try originalData.write(to: file)
+
+        let executable = Bundle(for: CommandTests.self).bundleURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("md")
+        let process = Process()
+        let output = Pipe()
+        let errors = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [
+            "-c",
+            "ulimit -f 2; exec \"$1\" insert-before --in-place --file \"$2\" 2 \"$3\"",
+            "md-write-limit",
+            executable.path,
+            file.path,
+            String(repeating: "Replacement bytes. ", count: 300)
+        ]
+        process.standardOutput = output
+        process.standardError = errors
+        try process.run()
+        process.waitUntilExit()
+
+        XCTAssertNotEqual(process.terminationStatus, 0)
+        XCTAssertEqual(try Data(contentsOf: file), originalData)
+    }
+
     // MARK: - In-Place Write
 
     func testInPlaceWrite() throws {
