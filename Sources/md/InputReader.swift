@@ -119,44 +119,82 @@ enum InputReader {
         with data: Data,
         beforeCommit: ((URL) throws -> Void)?
     ) throws {
-        // A write beyond RLIMIT_FSIZE normally terminates the process before
-        // Swift can unwind. Ignore SIGXFSZ while staging so the write reports
-        // EFBIG instead and the cleanup defer below can remove the copy.
-        let previousFileSizeSignalHandler = signal(SIGXFSZ, SIG_IGN)
-        defer {
-            signal(SIGXFSZ, previousFileSizeSignalHandler)
-        }
-
-        let stagingURL = destinationURL
-            .deletingLastPathComponent()
-            .appendingPathComponent(".md-write-\(UUID().uuidString)")
-        var committed = false
-        defer {
-            if !committed {
-                try? FileManager.default.removeItem(at: stagingURL)
+        try withIgnoredFileSizeLimitSignal {
+            let stagingURL = destinationURL
+                .deletingLastPathComponent()
+                .appendingPathComponent(".md-write-\(UUID().uuidString)")
+            var committed = false
+            defer {
+                if !committed {
+                    try? FileManager.default.removeItem(at: stagingURL)
+                }
             }
-        }
-        try FileManager.default.copyItem(at: destinationURL, to: stagingURL)
-
-        let handle = try FileHandle(forWritingTo: stagingURL)
-        defer { try? handle.close() }
-        try handle.seek(toOffset: 0)
-        try handle.write(contentsOf: data)
-        try handle.truncate(atOffset: UInt64(data.count))
-        try handle.synchronize()
-        try handle.close()
-
-        try beforeCommit?(stagingURL)
-        let result = stagingURL.path.withCString { sourcePath in
-            destinationURL.path.withCString { destinationPath in
-                Darwin.rename(sourcePath, destinationPath)
-            }
-        }
-        guard result == 0 else {
-            throw POSIXError(
-                POSIXErrorCode(rawValue: errno) ?? .EIO
+            try FileManager.default.copyItem(
+                at: destinationURL,
+                to: stagingURL
             )
+
+            let handle = try FileHandle(forWritingTo: stagingURL)
+            defer { try? handle.close() }
+            try handle.seek(toOffset: 0)
+            try handle.write(contentsOf: data)
+            try handle.truncate(atOffset: UInt64(data.count))
+            try handle.synchronize()
+            try handle.close()
+
+            try beforeCommit?(stagingURL)
+            let result = stagingURL.path.withCString { sourcePath in
+                destinationURL.path.withCString { destinationPath in
+                    Darwin.rename(sourcePath, destinationPath)
+                }
+            }
+            guard result == 0 else {
+                throw currentPOSIXError()
+            }
+            committed = true
         }
-        committed = true
+    }
+
+    /// A write beyond RLIMIT_FSIZE normally terminates the process before
+    /// Swift can unwind. Temporarily ignore SIGXFSZ so the write reports EFBIG
+    /// and staging cleanup can run, then restore the complete prior disposition.
+    private static func withIgnoredFileSizeLimitSignal<T>(
+        _ body: () throws -> T
+    ) throws -> T {
+        var previousDisposition = Darwin.sigaction()
+        guard sigaction(
+            SIGXFSZ,
+            nil,
+            &previousDisposition
+        ) == 0 else {
+            throw currentPOSIXError()
+        }
+
+        var ignoredDisposition = Darwin.sigaction()
+        ignoredDisposition.__sigaction_u.__sa_handler = SIG_IGN
+        guard sigemptyset(&ignoredDisposition.sa_mask) == 0 else {
+            throw currentPOSIXError()
+        }
+        guard sigaction(
+            SIGXFSZ,
+            &ignoredDisposition,
+            nil
+        ) == 0 else {
+            throw currentPOSIXError()
+        }
+
+        let result = Result { try body() }
+        guard sigaction(
+            SIGXFSZ,
+            &previousDisposition,
+            nil
+        ) == 0 else {
+            throw currentPOSIXError()
+        }
+        return try result.get()
+    }
+
+    private static func currentPOSIXError() -> POSIXError {
+        POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
     }
 }

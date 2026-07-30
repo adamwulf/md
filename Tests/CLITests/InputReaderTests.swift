@@ -9,6 +9,8 @@ import XCTest
 import Darwin
 @testable import md
 
+private func inputReaderTestSignalHandler(_ signal: Int32) {}
+
 final class InputReaderTests: XCTestCase {
 
     // MARK: - read(from:) with file
@@ -165,6 +167,66 @@ final class InputReaderTests: XCTestCase {
         )
     }
 
+    func testWriteRestoresCompleteFileSizeSignalDisposition() throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("md-test-\(UUID().uuidString).md")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try Data("# Original\n".utf8).write(to: file)
+
+        try withCustomFileSizeSignalDisposition {
+            try InputReader.write("# Replacement\n", to: file.path)
+        }
+    }
+
+    func testWriteRestoresSignalDispositionAfterFileSizeFailure() throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("md-test-\(UUID().uuidString).md")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try Data(repeating: 0x41, count: 2_048).write(to: file)
+
+        try withCustomFileSizeSignalDisposition {
+            var originalLimit = rlimit()
+            XCTAssertEqual(getrlimit(RLIMIT_FSIZE, &originalLimit), 0)
+            var limited = originalLimit
+            limited.rlim_cur = 1_024
+            XCTAssertEqual(setrlimit(RLIMIT_FSIZE, &limited), 0)
+            defer {
+                var restored = originalLimit
+                XCTAssertEqual(setrlimit(RLIMIT_FSIZE, &restored), 0)
+            }
+
+            XCTAssertThrowsError(
+                try InputReader.write(
+                    String(repeating: "Replacement bytes. ", count: 300),
+                    to: file.path
+                )
+            )
+        }
+    }
+
+    func testWriteRestoresSignalDispositionAfterCopyFailure() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("md-test-\(UUID().uuidString)")
+        let file = directory.appendingPathComponent("document.md")
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: false
+        )
+        defer {
+            chmod(directory.path, 0o700)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        try Data("# Original\n".utf8).write(to: file)
+
+        try withCustomFileSizeSignalDisposition {
+            XCTAssertEqual(chmod(directory.path, 0o500), 0)
+            XCTAssertThrowsError(
+                try InputReader.write("# Replacement\n", to: file.path)
+            )
+            XCTAssertEqual(chmod(directory.path, 0o700), 0)
+        }
+    }
+
     func testWriteThroughSymbolicLinkPreservesLink() throws {
         let tmpDir = FileManager.default.temporaryDirectory
         let identifier = UUID().uuidString
@@ -190,6 +252,65 @@ final class InputReaderTests: XCTestCase {
         XCTAssertEqual(
             try String(contentsOf: target, encoding: .utf8),
             "# Replaced\n"
+        )
+    }
+
+    private func withCustomFileSizeSignalDisposition(
+        _ body: () throws -> Void
+    ) throws {
+        var originalDisposition = Darwin.sigaction()
+        XCTAssertEqual(
+            sigaction(SIGXFSZ, nil, &originalDisposition),
+            0
+        )
+        defer {
+            var restored = originalDisposition
+            XCTAssertEqual(sigaction(SIGXFSZ, &restored, nil), 0)
+        }
+
+        var customDisposition = Darwin.sigaction()
+        customDisposition.__sigaction_u.__sa_handler =
+            inputReaderTestSignalHandler
+        XCTAssertEqual(sigemptyset(&customDisposition.sa_mask), 0)
+        XCTAssertEqual(
+            sigaddset(&customDisposition.sa_mask, SIGUSR1),
+            0
+        )
+        customDisposition.sa_flags = SA_RESTART
+        XCTAssertEqual(
+            sigaction(SIGXFSZ, &customDisposition, nil),
+            0
+        )
+
+        var expectedDisposition = Darwin.sigaction()
+        XCTAssertEqual(
+            sigaction(SIGXFSZ, nil, &expectedDisposition),
+            0
+        )
+        try body()
+
+        var actualDisposition = Darwin.sigaction()
+        XCTAssertEqual(
+            sigaction(SIGXFSZ, nil, &actualDisposition),
+            0
+        )
+        XCTAssertEqual(
+            unsafeBitCast(
+                actualDisposition.__sigaction_u.__sa_handler,
+                to: UInt.self
+            ),
+            unsafeBitCast(
+                expectedDisposition.__sigaction_u.__sa_handler,
+                to: UInt.self
+            )
+        )
+        XCTAssertEqual(
+            actualDisposition.sa_mask,
+            expectedDisposition.sa_mask
+        )
+        XCTAssertEqual(
+            actualDisposition.sa_flags,
+            expectedDisposition.sa_flags
         )
     }
 
