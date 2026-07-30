@@ -215,6 +215,55 @@ final class InputReaderTests: XCTestCase {
         )
     }
 
+    func testCommitFailureWithFlaggedDirectoryLeavesNoStagingCopy()
+        throws
+    {
+        for directoryFlag in [UInt32(UF_IMMUTABLE), UInt32(UF_APPEND)] {
+            let directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("md-test-\(UUID().uuidString)")
+            let file = directory.appendingPathComponent("document.md")
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: false
+            )
+            defer {
+                chflags(directory.path, 0)
+                try? FileManager.default.removeItem(at: directory)
+            }
+
+            let original = Data("# Original\n".utf8)
+            try original.write(to: file)
+            XCTAssertThrowsError(
+                try InputReader.write(
+                    "# Replacement\n",
+                    to: file.path,
+                    beforeCommit: { _ in
+                        XCTAssertEqual(
+                            chflags(directory.path, directoryFlag),
+                            0
+                        )
+                    }
+                )
+            )
+
+            var directoryStatus = stat()
+            XCTAssertEqual(lstat(directory.path, &directoryStatus), 0)
+            XCTAssertEqual(
+                directoryStatus.st_flags & directoryFlag,
+                directoryFlag
+            )
+            XCTAssertEqual(try Data(contentsOf: file), original)
+            XCTAssertEqual(
+                try FileManager.default.contentsOfDirectory(
+                    atPath: directory.path
+                ),
+                ["document.md"]
+            )
+            XCTAssertEqual(chflags(directory.path, 0), 0)
+            try FileManager.default.removeItem(at: directory)
+        }
+    }
+
     func testWriteRestoresCompleteFileSizeSignalDisposition() throws {
         let file = FileManager.default.temporaryDirectory
             .appendingPathComponent("md-test-\(UUID().uuidString).md")

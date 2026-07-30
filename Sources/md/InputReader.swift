@@ -10,6 +10,9 @@ import Darwin
 
 enum InputReader {
     private static let fileSizeSignalLock = NSRecursiveLock()
+    private static let writeBlockingFlags = UInt32(
+        UF_IMMUTABLE | UF_APPEND | SF_IMMUTABLE | SF_APPEND
+    )
 
     struct Source {
         let content: String
@@ -226,19 +229,41 @@ enum InputReader {
 
             let originalMode = attributes.st_mode & mode_t(0o7777)
             let cleanupMode = originalMode | mode_t(S_IWUSR | S_IXUSR)
-            guard cleanupMode != originalMode else {
-                return
-            }
-            let changedMode = directoryURL.path.withCString { path in
-                Darwin.chmod(path, cleanupMode)
-            }
-            guard changedMode == 0 else {
-                return
-            }
+            let originalFlags = attributes.st_flags
+            let cleanupFlags = originalFlags & ~writeBlockingFlags
+            var changedMode = false
+            var changedFlags = false
             defer {
-                _ = directoryURL.path.withCString { path in
-                    Darwin.chmod(path, originalMode)
+                if changedMode {
+                    _ = directoryURL.path.withCString { path in
+                        Darwin.chmod(path, originalMode)
+                    }
                 }
+                if changedFlags {
+                    _ = directoryURL.path.withCString { path in
+                        Darwin.chflags(path, originalFlags)
+                    }
+                }
+            }
+
+            if cleanupFlags != originalFlags {
+                let result = directoryURL.path.withCString { path in
+                    Darwin.chflags(path, cleanupFlags)
+                }
+                guard result == 0 else {
+                    return
+                }
+                changedFlags = true
+            }
+
+            if cleanupMode != originalMode {
+                let result = directoryURL.path.withCString { path in
+                    Darwin.chmod(path, cleanupMode)
+                }
+                guard result == 0 else {
+                    return
+                }
+                changedMode = true
             }
 
             try? clearWriteBlockingFlags(at: url)
@@ -261,9 +286,6 @@ enum InputReader {
             throw currentPOSIXError()
         }
 
-        let writeBlockingFlags = UInt32(
-            UF_IMMUTABLE | UF_APPEND | SF_IMMUTABLE | SF_APPEND
-        )
         let writableFlags = attributes.st_flags & ~writeBlockingFlags
         guard writableFlags != attributes.st_flags else {
             return
