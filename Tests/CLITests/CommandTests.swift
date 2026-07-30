@@ -336,6 +336,64 @@ final class CommandTests: XCTestCase {
         )
     }
 
+    func testInsertBeforePreservesLoneCRFrontmatterAndBlockIndex() throws {
+        let original = "---\rdescription: CR document\r---\r\r# First\r\r# Target\r"
+        let blocks = parser.parseDocument(original)
+        XCTAssertEqual(blocks.count, 2)
+
+        let target = try XCTUnwrap(blocks.last)
+        let result = try XCTUnwrap(
+            MarkdownSourceEditor.inserting("Inserted.\n\n", before: target, in: original)
+        )
+
+        XCTAssertEqual(
+            result,
+            "---\rdescription: CR document\r---\r\r# First\r\rInserted.\r\r# Target\r"
+        )
+    }
+
+    func testInsertBeforeMixedFrontmatterLineEndings() throws {
+        let original = "---\r\ntitle: mixed\n---\r# First\n\n# Target"
+        let blocks = parser.parseDocument(original)
+        XCTAssertEqual(blocks.count, 2)
+
+        let target = try XCTUnwrap(blocks.last)
+        let result = try XCTUnwrap(
+            MarkdownSourceEditor.inserting("Inserted.\n\n", before: target, in: original)
+        )
+
+        XCTAssertEqual(
+            result,
+            "---\r\ntitle: mixed\n---\r# First\n\nInserted.\n\n# Target"
+        )
+    }
+
+    func testInsertBeforeCommandUsesTargetLineEndingInMixedDocument() async throws {
+        let original = "---\ntitle: mixed\n---\n\r\n# First\r\n\r\n# Target\r\n"
+        let tmpFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("insert_before_\(UUID().uuidString).md")
+        defer { try? FileManager.default.removeItem(at: tmpFile) }
+        try original.write(to: tmpFile, atomically: true, encoding: .utf8)
+
+        let command = try InsertBeforeCommand.parse([
+            "--file", tmpFile.path,
+            "--in-place",
+            "2",
+            "--",
+            "- **Post-capture amendment:** test content"
+        ])
+        try await command.run()
+
+        let result = try String(contentsOf: tmpFile, encoding: .utf8)
+        XCTAssertEqual(
+            result,
+            original.replacingOccurrences(
+                of: "# Target",
+                with: "- **Post-capture amendment:** test content\r\n\r\n# Target"
+            )
+        )
+    }
+
     // MARK: - In-Place Write
 
     func testInPlaceWrite() throws {

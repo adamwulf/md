@@ -28,7 +28,9 @@ enum MarkdownSourceEditor {
             return nil
         }
 
-        let lineEnding = firstLineEnding(in: source) ?? "\n"
+        let lineEnding = lineEnding(before: insertionIndex, in: source)
+            ?? firstLineEnding(in: source)
+            ?? "\n"
         let normalizedInsertion = insertion
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
@@ -37,6 +39,19 @@ enum MarkdownSourceEditor {
         var result = source
         result.insert(contentsOf: normalizedInsertion, at: insertionIndex)
         return result
+    }
+
+    private static func lineEnding(
+        before index: String.Index,
+        in source: String
+    ) -> String? {
+        guard index > source.startIndex else {
+            return nil
+        }
+
+        let previousIndex = source.index(before: index)
+        let character = source[previousIndex]
+        return character.isNewline ? String(character) : nil
     }
 
     private static func firstLineEnding(in source: String) -> String? {
