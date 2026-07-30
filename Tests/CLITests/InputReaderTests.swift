@@ -6,6 +6,7 @@
 //
 
 import XCTest
+import Darwin
 @testable import md
 
 final class InputReaderTests: XCTestCase {
@@ -24,6 +25,20 @@ final class InputReaderTests: XCTestCase {
 
     func testReadFromNonexistentFile() {
         XCTAssertThrowsError(try InputReader.read(from: "/tmp/nonexistent-\(UUID().uuidString).md"))
+    }
+
+    func testReadSourceReportsByteOrderMarkSeparately() throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("md-test-\(UUID().uuidString).md")
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        var data = Data([0xEF, 0xBB, 0xBF])
+        data.append(contentsOf: Data("# Heading\n".utf8))
+        try data.write(to: file)
+
+        let source = try InputReader.readSource(from: file.path)
+        XCTAssertTrue(source.hasUTF8ByteOrderMark)
+        XCTAssertEqual(source.content, "# Heading\n")
     }
 
     // MARK: - write(_:to:)
@@ -63,6 +78,83 @@ final class InputReaderTests: XCTestCase {
         var expected = Data([0xEF, 0xBB, 0xBF])
         expected.append(contentsOf: Data("# Replaced\n".utf8))
         XCTAssertEqual(try Data(contentsOf: file), expected)
+    }
+
+    func testEncodedUTF8CanIncludeByteOrderMark() {
+        XCTAssertEqual(
+            InputReader.encodedUTF8("# Heading", includeByteOrderMark: true),
+            Data([0xEF, 0xBB, 0xBF]) + Data("# Heading".utf8)
+        )
+    }
+
+    func testWritePreservesFileIdentityAndExtendedAttributes() throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("md-test-\(UUID().uuidString).md")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try Data("# Original\n".utf8).write(to: file)
+
+        let attributeName = "com.openai.md.tests"
+        let attributeValue = Data("preserved".utf8)
+        let setResult = file.path.withCString { path in
+            attributeName.withCString { name in
+                attributeValue.withUnsafeBytes { bytes in
+                    setxattr(path, name, bytes.baseAddress, bytes.count, 0, 0)
+                }
+            }
+        }
+        XCTAssertEqual(setResult, 0)
+
+        let attributesBefore = try FileManager.default.attributesOfItem(
+            atPath: file.path
+        )
+        try InputReader.write("# Replaced\n", to: file.path)
+        let attributesAfter = try FileManager.default.attributesOfItem(
+            atPath: file.path
+        )
+
+        XCTAssertEqual(
+            attributesAfter[.systemFileNumber] as? NSNumber,
+            attributesBefore[.systemFileNumber] as? NSNumber
+        )
+
+        var buffer = [UInt8](repeating: 0, count: 64)
+        let length = file.path.withCString { path in
+            attributeName.withCString { name in
+                getxattr(path, name, &buffer, buffer.count, 0, 0)
+            }
+        }
+        XCTAssertEqual(
+            String(decoding: buffer.prefix(max(0, length)), as: UTF8.self),
+            "preserved"
+        )
+    }
+
+    func testWriteThroughSymbolicLinkPreservesLink() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+        let identifier = UUID().uuidString
+        let target = tmpDir.appendingPathComponent("md-target-\(identifier).md")
+        let link = tmpDir.appendingPathComponent("md-link-\(identifier).md")
+        defer {
+            try? FileManager.default.removeItem(at: link)
+            try? FileManager.default.removeItem(at: target)
+        }
+
+        try Data("# Original\n".utf8).write(to: target)
+        try FileManager.default.createSymbolicLink(
+            atPath: link.path,
+            withDestinationPath: target.path
+        )
+
+        try InputReader.write("# Replaced\n", to: link.path)
+
+        XCTAssertEqual(
+            try FileManager.default.destinationOfSymbolicLink(atPath: link.path),
+            target.path
+        )
+        XCTAssertEqual(
+            try String(contentsOf: target, encoding: .utf8),
+            "# Replaced\n"
+        )
     }
 
     // MARK: - InputOptions validation

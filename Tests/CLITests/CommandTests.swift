@@ -416,6 +416,38 @@ final class CommandTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: tmpFile), expected)
     }
 
+    func testInsertBeforeCommandPreservesUTF8ByteOrderMarkOnStdout() throws {
+        let tmpFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("insert_before_\(UUID().uuidString).md")
+        defer { try? FileManager.default.removeItem(at: tmpFile) }
+
+        var original = Data([0xEF, 0xBB, 0xBF])
+        original.append(contentsOf: Data("# First\n\n# Target\n".utf8))
+        try original.write(to: tmpFile)
+
+        let executable = Bundle(for: CommandTests.self).bundleURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("md")
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = executable
+        process.arguments = [
+            "insert-before",
+            "2",
+            "Inserted.",
+            "--file",
+            tmpFile.path
+        ]
+        process.standardOutput = output
+        try process.run()
+        process.waitUntilExit()
+
+        var expected = Data([0xEF, 0xBB, 0xBF])
+        expected.append(contentsOf: Data("# First\n\nInserted.\n\n# Target\n".utf8))
+        XCTAssertEqual(process.terminationStatus, 0)
+        XCTAssertEqual(output.fileHandleForReading.readDataToEndOfFile(), expected)
+    }
+
     // MARK: - In-Place Write
 
     func testInPlaceWrite() throws {

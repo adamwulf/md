@@ -52,14 +52,14 @@ struct Frontmatter {
     private static func parseFenced(_ content: String, delimiter: String, format: FrontmatterFormat) -> Frontmatter? {
         let lines = sourceLines(in: content)
         guard let firstLine = lines.first,
-              content[firstLine.contentRange].trimmingCharacters(in: .whitespacesAndNewlines) == delimiter else {
+              content[firstLine.contentRange].trimmingCharacters(in: .whitespaces) == delimiter else {
             return nil
         }
 
         // Find closing delimiter (skip line 0)
         var closerIndex: Int?
         for i in 1..<lines.count {
-            if content[lines[i].contentRange].trimmingCharacters(in: .whitespacesAndNewlines) == delimiter {
+            if content[lines[i].contentRange].trimmingCharacters(in: .whitespaces) == delimiter {
                 closerIndex = i
                 break
             }

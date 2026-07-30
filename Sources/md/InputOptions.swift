@@ -25,10 +25,14 @@ struct InputOptions: ParsableArguments {
     }
 
     func readContent() throws -> String {
+        try readSource().content
+    }
+
+    func readSource() throws -> InputReader.Source {
         if let file = file {
-            return try InputReader.read(from: file)
+            return try InputReader.readSource(from: file)
         } else {
-            return InputReader.readFromStdin()
+            return InputReader.readSourceFromStdin()
         }
     }
 }

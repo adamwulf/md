@@ -43,7 +43,8 @@ struct InsertBeforeCommand: AsyncParsableCommand {
 
     func run() async throws {
         let parser = MarkdownParser()
-        let fileContent = try input.readContent()
+        let source = try input.readSource()
+        let fileContent = source.content
         let blocks = parser.parseDocument(fileContent)
 
         guard blockIndex >= 1, blockIndex <= blocks.count else {
@@ -72,7 +73,10 @@ struct InsertBeforeCommand: AsyncParsableCommand {
             }
             try InputReader.write(result, to: file)
         } else {
-            print(result, terminator: "")
+            try InputReader.writeToStdout(
+                result,
+                includeByteOrderMark: source.hasUTF8ByteOrderMark
+            )
         }
     }
 }
