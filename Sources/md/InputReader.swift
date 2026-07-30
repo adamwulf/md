@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Darwin
 
 enum InputReader {
     struct Source {
@@ -57,11 +58,15 @@ enum InputReader {
     }
 
     /// Write content to a file path, replacing its contents.
-    static func write(_ content: String, to path: String) throws {
-        let url = URL(fileURLWithPath: path)
+    static func write(
+        _ content: String,
+        to path: String,
+        beforeCommit: ((URL) throws -> Void)? = nil
+    ) throws {
+        let requestedURL = URL(fileURLWithPath: path)
         let fileExists = FileManager.default.fileExists(atPath: path)
         let existingData = fileExists
-            ? try Data(contentsOf: url, options: .mappedIfSafe)
+            ? try Data(contentsOf: requestedURL, options: .mappedIfSafe)
             : nil
         let data = encodedUTF8(
             content,
@@ -70,25 +75,15 @@ enum InputReader {
             ) == true
         )
 
-        if let existingData {
-            try stage(data)
-
-            let handle = try FileHandle(forWritingTo: url)
-            defer { try? handle.close() }
-            do {
-                try handle.seek(toOffset: 0)
-                try handle.write(contentsOf: data)
-                try handle.truncate(atOffset: UInt64(data.count))
-                try handle.synchronize()
-            } catch {
-                try? handle.seek(toOffset: 0)
-                try? handle.write(contentsOf: existingData)
-                try? handle.truncate(atOffset: UInt64(existingData.count))
-                try? handle.synchronize()
-                throw error
-            }
+        if existingData != nil {
+            let destinationURL = requestedURL.resolvingSymlinksInPath()
+            try replaceExistingFile(
+                at: destinationURL,
+                with: data,
+                beforeCommit: beforeCommit
+            )
         } else {
-            try data.write(to: url, options: .atomic)
+            try data.write(to: requestedURL, options: .atomic)
         }
     }
 
@@ -116,30 +111,44 @@ enum InputReader {
         return data
     }
 
-    /// Verifies that the complete replacement can be written before touching
-    /// the live file. The temporary file is unlinked while open, so a process
-    /// killed by a write limit cannot leave staging debris behind.
-    private static func stage(_ data: Data) throws {
-        let stagingURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("md-write-\(UUID().uuidString)")
-        guard FileManager.default.createFile(
-            atPath: stagingURL.path,
-            contents: nil
-        ) else {
-            throw CocoaError(.fileWriteUnknown)
+    /// Builds a complete replacement beside the destination, then atomically
+    /// renames it into place. Until the rename succeeds, the live file is never
+    /// opened for writing, so staging and commit failures leave it untouched.
+    private static func replaceExistingFile(
+        at destinationURL: URL,
+        with data: Data,
+        beforeCommit: ((URL) throws -> Void)?
+    ) throws {
+        let stagingURL = destinationURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(".md-write-\(UUID().uuidString)")
+        try FileManager.default.copyItem(at: destinationURL, to: stagingURL)
+        var committed = false
+        defer {
+            if !committed {
+                try? FileManager.default.removeItem(at: stagingURL)
+            }
         }
 
         let handle = try FileHandle(forWritingTo: stagingURL)
-        do {
-            try FileManager.default.removeItem(at: stagingURL)
-        } catch {
-            try? handle.close()
-            try? FileManager.default.removeItem(at: stagingURL)
-            throw error
-        }
         defer { try? handle.close() }
-
+        try handle.seek(toOffset: 0)
         try handle.write(contentsOf: data)
+        try handle.truncate(atOffset: UInt64(data.count))
         try handle.synchronize()
+        try handle.close()
+
+        try beforeCommit?(stagingURL)
+        let result = stagingURL.path.withCString { sourcePath in
+            destinationURL.path.withCString { destinationPath in
+                Darwin.rename(sourcePath, destinationPath)
+            }
+        }
+        guard result == 0 else {
+            throw POSIXError(
+                POSIXErrorCode(rawValue: errno) ?? .EIO
+            )
+        }
+        committed = true
     }
 }

@@ -87,7 +87,7 @@ final class InputReaderTests: XCTestCase {
         )
     }
 
-    func testWritePreservesFileIdentityAndExtendedAttributes() throws {
+    func testWritePreservesExtendedAttributes() throws {
         let file = FileManager.default.temporaryDirectory
             .appendingPathComponent("md-test-\(UUID().uuidString).md")
         defer { try? FileManager.default.removeItem(at: file) }
@@ -104,18 +104,7 @@ final class InputReaderTests: XCTestCase {
         }
         XCTAssertEqual(setResult, 0)
 
-        let attributesBefore = try FileManager.default.attributesOfItem(
-            atPath: file.path
-        )
         try InputReader.write("# Replaced\n", to: file.path)
-        let attributesAfter = try FileManager.default.attributesOfItem(
-            atPath: file.path
-        )
-
-        XCTAssertEqual(
-            attributesAfter[.systemFileNumber] as? NSNumber,
-            attributesBefore[.systemFileNumber] as? NSNumber
-        )
 
         var buffer = [UInt8](repeating: 0, count: 64)
         let length = file.path.withCString { path in
@@ -126,6 +115,53 @@ final class InputReaderTests: XCTestCase {
         XCTAssertEqual(
             String(decoding: buffer.prefix(max(0, length)), as: UTF8.self),
             "preserved"
+        )
+    }
+
+    func testCommitFailureLeavesExistingFileUntouched() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("md-test-\(UUID().uuidString)")
+        let file = directory.appendingPathComponent("document.md")
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: false
+        )
+        defer {
+            chmod(directory.path, 0o700)
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let original = Data("# Original\n".utf8)
+        try original.write(to: file)
+        let attributesBefore = try FileManager.default.attributesOfItem(
+            atPath: file.path
+        )
+        var reachedCommit = false
+
+        XCTAssertThrowsError(
+            try InputReader.write(
+                "# Replacement\n",
+                to: file.path,
+                beforeCommit: { _ in
+                    reachedCommit = true
+                    XCTAssertEqual(chmod(directory.path, 0o500), 0)
+                }
+            )
+        )
+        XCTAssertEqual(chmod(directory.path, 0o700), 0)
+
+        let attributesAfter = try FileManager.default.attributesOfItem(
+            atPath: file.path
+        )
+        XCTAssertTrue(reachedCommit)
+        XCTAssertEqual(try Data(contentsOf: file), original)
+        XCTAssertEqual(
+            attributesAfter[.systemFileNumber] as? NSNumber,
+            attributesBefore[.systemFileNumber] as? NSNumber
+        )
+        XCTAssertEqual(
+            attributesAfter[.modificationDate] as? Date,
+            attributesBefore[.modificationDate] as? Date
         )
     }
 
