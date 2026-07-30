@@ -3,3 +3,4 @@
 .env
 .claude/scheduled_tasks.lock
 .codex/
+AGENTS.md
