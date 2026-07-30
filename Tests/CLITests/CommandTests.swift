@@ -514,9 +514,14 @@ final class CommandTests: XCTestCase {
     }
 
     func testInPlaceWriteFailureLeavesOriginalUntouched() throws {
-        let file = FileManager.default.temporaryDirectory
-            .appendingPathComponent("write_failure_\(UUID().uuidString).md")
-        defer { try? FileManager.default.removeItem(at: file) }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("write_failure_\(UUID().uuidString)")
+        let file = directory.appendingPathComponent("document.md")
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: false
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
 
         let original = "# First\n\n# Target\n\n"
             + String(repeating: "Existing source bytes. ", count: 600)
@@ -545,6 +550,10 @@ final class CommandTests: XCTestCase {
 
         XCTAssertNotEqual(process.terminationStatus, 0)
         XCTAssertEqual(try Data(contentsOf: file), originalData)
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(atPath: directory.path),
+            ["document.md"]
+        )
     }
 
     // MARK: - In-Place Write

@@ -119,16 +119,24 @@ enum InputReader {
         with data: Data,
         beforeCommit: ((URL) throws -> Void)?
     ) throws {
+        // A write beyond RLIMIT_FSIZE normally terminates the process before
+        // Swift can unwind. Ignore SIGXFSZ while staging so the write reports
+        // EFBIG instead and the cleanup defer below can remove the copy.
+        let previousFileSizeSignalHandler = signal(SIGXFSZ, SIG_IGN)
+        defer {
+            signal(SIGXFSZ, previousFileSizeSignalHandler)
+        }
+
         let stagingURL = destinationURL
             .deletingLastPathComponent()
             .appendingPathComponent(".md-write-\(UUID().uuidString)")
-        try FileManager.default.copyItem(at: destinationURL, to: stagingURL)
         var committed = false
         defer {
             if !committed {
                 try? FileManager.default.removeItem(at: stagingURL)
             }
         }
+        try FileManager.default.copyItem(at: destinationURL, to: stagingURL)
 
         let handle = try FileHandle(forWritingTo: stagingURL)
         defer { try? handle.close() }
