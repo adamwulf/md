@@ -2,3 +2,4 @@
 .ittybitty
 .env
 .claude/scheduled_tasks.lock
+.codex/
