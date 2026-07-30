@@ -91,7 +91,8 @@ struct FrontmatterCommand: AsyncParsableCommand {
     }
 
     func run() async throws {
-        let content = try input.readContent()
+        let source = try input.readSource()
+        let content = source.content
 
         guard var frontmatter = Frontmatter.parse(content) else {
             if `set` != nil {
@@ -100,13 +101,19 @@ struct FrontmatterCommand: AsyncParsableCommand {
                 var fm = Frontmatter(format: outputFormat, data: [:], rawContent: "", body: content, originalContent: content)
                 try applySet(&fm)
                 let result = try fm.serialize()
-                try output(result)
+                try output(
+                    result,
+                    includeByteOrderMark: source.hasUTF8ByteOrderMark
+                )
             } else if key != nil {
                 // No frontmatter, nothing to get
                 return
             } else if removeKey != nil {
                 // No frontmatter, nothing to remove — output as-is
-                print(content, terminator: "")
+                try output(
+                    content,
+                    includeByteOrderMark: source.hasUTF8ByteOrderMark
+                )
             } else {
                 // No frontmatter found
                 return
@@ -127,12 +134,18 @@ struct FrontmatterCommand: AsyncParsableCommand {
             // Set mode
             try applySet(&frontmatter)
             let result = try frontmatter.serialize()
-            try output(result)
+            try output(
+                result,
+                includeByteOrderMark: source.hasUTF8ByteOrderMark
+            )
         } else if let keyPath = removeKey {
             // Remove mode
             frontmatter.removeKey(keyPath)
             let result = try frontmatter.serialize()
-            try output(result)
+            try output(
+                result,
+                includeByteOrderMark: source.hasUTF8ByteOrderMark
+            )
         } else {
             let serialized = try FrontmatterCommand.readModeOutput(content: content, format: format)
             print(serialized, terminator: "")
@@ -150,11 +163,17 @@ struct FrontmatterCommand: AsyncParsableCommand {
         frontmatter.set(keyPath, value: value)
     }
 
-    private func output(_ content: String) throws {
+    private func output(
+        _ content: String,
+        includeByteOrderMark: Bool
+    ) throws {
         if inPlace, let file = input.file {
             try InputReader.write(content, to: file)
         } else {
-            print(content, terminator: "")
+            try InputReader.writeToStdout(
+                content,
+                includeByteOrderMark: includeByteOrderMark
+            )
         }
     }
 

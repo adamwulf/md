@@ -43,7 +43,8 @@ struct RemoveCommand: AsyncParsableCommand {
     }
 
     func run() async throws {
-        let content = try input.readContent()
+        let source = try input.readSource()
+        let content = source.content
         let end = end ?? start
 
         let parser = MarkdownParser()
@@ -75,7 +76,10 @@ struct RemoveCommand: AsyncParsableCommand {
             }
             try InputReader.write(result, to: file)
         } else {
-            print(result, terminator: "")
+            try InputReader.writeToStdout(
+                result,
+                includeByteOrderMark: source.hasUTF8ByteOrderMark
+            )
         }
     }
 }

@@ -448,6 +448,71 @@ final class CommandTests: XCTestCase {
         XCTAssertEqual(output.fileHandleForReading.readDataToEndOfFile(), expected)
     }
 
+    func testDocumentEditingCommandsPreserveByteOrderMarkOnStdout() throws {
+        let executable = Bundle(for: CommandTests.self).bundleURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("md")
+        let cases: [(name: String, content: String, arguments: [String])] = [
+            (
+                "insert-after",
+                "# First\n\n# Second\n",
+                ["insert-after", "1", "Inserted."]
+            ),
+            (
+                "remove",
+                "# First\n\n# Second\n",
+                ["remove", "2"]
+            ),
+            (
+                "replace",
+                "# First\n\n# Second\n",
+                ["replace", "2", "Replacement."]
+            ),
+            (
+                "format",
+                "# First\n\n# Second\n",
+                ["format"]
+            ),
+            (
+                "frontmatter",
+                "---\ntitle: Old\n---\n# First\n",
+                ["frontmatter", "--set", "title=New"]
+            )
+        ]
+
+        for testCase in cases {
+            let file = FileManager.default.temporaryDirectory
+                .appendingPathComponent("bom_\(UUID().uuidString).md")
+            defer { try? FileManager.default.removeItem(at: file) }
+            var source = Data([0xEF, 0xBB, 0xBF])
+            source.append(contentsOf: Data(testCase.content.utf8))
+            try source.write(to: file)
+
+            let process = Process()
+            let output = Pipe()
+            process.executableURL = executable
+            process.arguments = testCase.arguments + ["--file", file.path]
+            process.standardOutput = output
+            try process.run()
+            process.waitUntilExit()
+
+            let result = output.fileHandleForReading.readDataToEndOfFile()
+            XCTAssertEqual(
+                process.terminationStatus,
+                0,
+                "\(testCase.name) should succeed"
+            )
+            XCTAssertTrue(
+                result.starts(with: [0xEF, 0xBB, 0xBF]),
+                "\(testCase.name) should preserve the input BOM"
+            )
+            XCTAssertFalse(
+                result.dropFirst(3).starts(with: [0xEF, 0xBB, 0xBF]),
+                "\(testCase.name) should not duplicate the input BOM"
+            )
+        }
+    }
+
     // MARK: - In-Place Write
 
     func testInPlaceWrite() throws {
