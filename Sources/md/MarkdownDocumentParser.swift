@@ -25,8 +25,15 @@ extension MarkdownParser {
         let bodyBlocks = parse(frontmatter.body)
         let byteOffset = content.utf8.count - frontmatter.body.utf8.count
         let charOffset = content.utf16.count - frontmatter.body.utf16.count
-        let lineOffset = content.components(separatedBy: "\n").count
-            - frontmatter.body.components(separatedBy: "\n").count
+        let lineOffset = content.reduce(into: 0) { count, character in
+            if character == "\n" || character == "\r" || character == "\r\n" {
+                count += 1
+            }
+        } - frontmatter.body.reduce(into: 0) { count, character in
+            if character == "\n" || character == "\r" || character == "\r\n" {
+                count += 1
+            }
+        }
         return bodyBlocks.map { block in
             block.shifted(byteOffset: byteOffset, charOffset: charOffset, lineOffset: lineOffset)
         }

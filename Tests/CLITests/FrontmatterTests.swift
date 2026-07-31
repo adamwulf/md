@@ -85,6 +85,16 @@ final class FrontmatterTests: XCTestCase {
         XCTAssertEqual(fm?.body, "")
     }
 
+    func testUnicodeLineSeparatorDoesNotCreateFrontmatterLines() {
+        let content = "---\u{2028}title: Hello\u{2028}---\n# Heading\n"
+        XCTAssertNil(Frontmatter.parse(content))
+    }
+
+    func testUnicodeLineSeparatorBeforeLFDoesNotCreateDelimiter() {
+        let content = "---\u{2028}\ntitle: Hello\n---\n# Heading\n"
+        XCTAssertNil(Frontmatter.parse(content))
+    }
+
     // MARK: - Dot Syntax Get
 
     func testGetTopLevelKey() {

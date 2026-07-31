@@ -16,6 +16,11 @@ enum FrontmatterFormat: String, Equatable, CaseIterable {
 }
 
 struct Frontmatter {
+    private struct SourceLine {
+        let contentRange: Range<String.Index>
+        let fullRange: Range<String.Index>
+    }
+
     var format: FrontmatterFormat
     var data: [String: Any]
     let rawContent: String
@@ -45,15 +50,16 @@ struct Frontmatter {
 
     /// Generic fenced frontmatter parser. Splits on delimiter lines.
     private static func parseFenced(_ content: String, delimiter: String, format: FrontmatterFormat) -> Frontmatter? {
-        let lines = content.components(separatedBy: "\n")
-        guard let firstLine = lines.first, firstLine.trimmingCharacters(in: .whitespaces) == delimiter else {
+        let lines = sourceLines(in: content)
+        guard let firstLine = lines.first,
+              content[firstLine.contentRange].trimmingCharacters(in: .whitespaces) == delimiter else {
             return nil
         }
 
         // Find closing delimiter (skip line 0)
         var closerIndex: Int?
         for i in 1..<lines.count {
-            if lines[i].trimmingCharacters(in: .whitespaces) == delimiter {
+            if content[lines[i].contentRange].trimmingCharacters(in: .whitespaces) == delimiter {
                 closerIndex = i
                 break
             }
@@ -63,10 +69,13 @@ struct Frontmatter {
             return nil
         }
 
-        let rawLines = lines[1..<closer]
-        let rawString = rawLines.joined(separator: "\n")
-        let bodyLines = lines[(closer + 1)...]
-        let body = bodyLines.joined(separator: "\n")
+        let rawStart = lines[0].fullRange.upperBound
+        let rawEnd = closer > 1
+            ? lines[closer - 1].contentRange.upperBound
+            : rawStart
+        let rawString = String(content[rawStart..<rawEnd])
+        let bodyStart = lines[closer].fullRange.upperBound
+        let body = String(content[bodyStart...])
 
         let data: [String: Any]
         switch format {
@@ -88,6 +97,40 @@ struct Frontmatter {
         }
 
         return Frontmatter(format: format, data: data, rawContent: rawString, body: body, originalContent: content)
+    }
+
+    /// Splits source into logical lines while retaining each original line
+    /// ending in `fullRange`. Swift treats CRLF as one newline character, so
+    /// this supports LF, CRLF, and lone CR without normalizing source bytes.
+    private static func sourceLines(in content: String) -> [SourceLine] {
+        var lines: [SourceLine] = []
+        var lineStart = content.startIndex
+        var index = lineStart
+
+        while index < content.endIndex {
+            let character = content[index]
+            if character == "\n" || character == "\r" || character == "\r\n" {
+                let nextIndex = content.index(after: index)
+                lines.append(
+                    SourceLine(
+                        contentRange: lineStart..<index,
+                        fullRange: lineStart..<nextIndex
+                    )
+                )
+                lineStart = nextIndex
+                index = nextIndex
+            } else {
+                index = content.index(after: index)
+            }
+        }
+
+        lines.append(
+            SourceLine(
+                contentRange: lineStart..<content.endIndex,
+                fullRange: lineStart..<content.endIndex
+            )
+        )
+        return lines
     }
 
     // MARK: - Key Access (dot syntax)

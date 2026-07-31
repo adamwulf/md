@@ -228,6 +228,334 @@ final class CommandTests: XCTestCase {
         XCTAssertTrue(beforeRange.lowerBound < lastRange.lowerBound)
     }
 
+    func testInsertBeforePreservesUnrelatedSourceExactly() throws {
+        let original = """
+            ---
+            description: "A wrapped value"
+            tags:
+              - markdown
+              - source-editing
+            ---
+
+            # Architecture
+
+            This paragraph is deliberately
+            wrapped across source lines with an escaped \\*asterisk\\*.
+
+            [^1]: First footnote keeps its own line.
+            [^2]: Second footnote keeps its own line.
+
+            4. Existing numbering
+            9. Must remain unchanged
+
+            ## Target
+
+            Target paragraph.
+            """
+        let blocks = parser.parseDocument(original)
+        let target = try XCTUnwrap(blocks.first { block in
+            guard case .heading(_, let text, _, _, _) = block else {
+                return false
+            }
+            return text == "Target"
+        })
+        let inserted = "- **Post-capture amendment:** test content\n\n"
+
+        let result = try XCTUnwrap(
+            MarkdownSourceEditor.inserting(inserted, before: target, in: original)
+        )
+        let expected = original.replacingOccurrences(
+            of: "## Target",
+            with: "- **Post-capture amendment:** test content\n\n## Target"
+        )
+
+        XCTAssertEqual(result, expected)
+    }
+
+    func testInsertBeforeIndentedBlockStartsAtBeginningOfLine() throws {
+        let original = """
+              # Indented heading
+
+            Paragraph.
+            """
+        let target = try XCTUnwrap(parser.parse(original).first)
+
+        let result = try XCTUnwrap(
+            MarkdownSourceEditor.inserting("Inserted.\n\n", before: target, in: original)
+        )
+
+        XCTAssertEqual(
+            result,
+            "Inserted.\n\n  # Indented heading\n\nParagraph."
+        )
+    }
+
+    func testInsertBeforePreservesCRLFBoundaries() throws {
+        let original = "# One\r\n\r\n# Two\r\n"
+        let blocks = parser.parse(original)
+        let target = try XCTUnwrap(blocks.last)
+
+        let result = try XCTUnwrap(
+            MarkdownSourceEditor.inserting("Inserted.\n\n", before: target, in: original)
+        )
+
+        XCTAssertEqual(result, "# One\r\n\r\nInserted.\r\n\r\n# Two\r\n")
+    }
+
+    func testInsertBeforePreservesCRLFFrontmatterAndBlockIndex() throws {
+        let original = """
+            ---\r
+            description: CRLF document\r
+            ---\r
+            \r
+            # First\r
+            \r
+            # Target\r
+            """
+        let blocks = parser.parseDocument(original)
+        XCTAssertEqual(blocks.count, 2)
+
+        let target = try XCTUnwrap(blocks.last)
+        let result = try XCTUnwrap(
+            MarkdownSourceEditor.inserting("Inserted.\n\n", before: target, in: original)
+        )
+
+        XCTAssertEqual(
+            result,
+            """
+            ---\r
+            description: CRLF document\r
+            ---\r
+            \r
+            # First\r
+            \r
+            Inserted.\r
+            \r
+            # Target\r
+            """
+        )
+    }
+
+    func testInsertBeforePreservesLoneCRFrontmatterAndBlockIndex() throws {
+        let original = "---\rdescription: CR document\r---\r\r# First\r\r# Target\r"
+        let blocks = parser.parseDocument(original)
+        XCTAssertEqual(blocks.count, 2)
+
+        let target = try XCTUnwrap(blocks.last)
+        let result = try XCTUnwrap(
+            MarkdownSourceEditor.inserting("Inserted.\n\n", before: target, in: original)
+        )
+
+        XCTAssertEqual(
+            result,
+            "---\rdescription: CR document\r---\r\r# First\r\rInserted.\r\r# Target\r"
+        )
+    }
+
+    func testInsertBeforeMixedFrontmatterLineEndings() throws {
+        let original = "---\r\ntitle: mixed\n---\r# First\n\n# Target"
+        let blocks = parser.parseDocument(original)
+        XCTAssertEqual(blocks.count, 2)
+
+        let target = try XCTUnwrap(blocks.last)
+        let result = try XCTUnwrap(
+            MarkdownSourceEditor.inserting("Inserted.\n\n", before: target, in: original)
+        )
+
+        XCTAssertEqual(
+            result,
+            "---\r\ntitle: mixed\n---\r# First\n\nInserted.\n\n# Target"
+        )
+    }
+
+    func testInsertBeforeCommandUsesTargetLineEndingInMixedDocument() async throws {
+        let original = "---\ntitle: mixed\n---\n\r\n# First\r\n\r\n# Target\r\n"
+        let tmpFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("insert_before_\(UUID().uuidString).md")
+        defer { try? FileManager.default.removeItem(at: tmpFile) }
+        try original.write(to: tmpFile, atomically: true, encoding: .utf8)
+
+        let command = try InsertBeforeCommand.parse([
+            "--file", tmpFile.path,
+            "--in-place",
+            "2",
+            "--",
+            "- **Post-capture amendment:** test content"
+        ])
+        try await command.run()
+
+        let result = try String(contentsOf: tmpFile, encoding: .utf8)
+        XCTAssertEqual(
+            result,
+            original.replacingOccurrences(
+                of: "# Target",
+                with: "- **Post-capture amendment:** test content\r\n\r\n# Target"
+            )
+        )
+    }
+
+    func testInsertBeforeCommandPreservesUTF8ByteOrderMark() async throws {
+        let tmpFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("insert_before_\(UUID().uuidString).md")
+        defer { try? FileManager.default.removeItem(at: tmpFile) }
+
+        var original = Data([0xEF, 0xBB, 0xBF])
+        original.append(contentsOf: Data("# First\n\n# Target\n".utf8))
+        try original.write(to: tmpFile)
+
+        let command = try InsertBeforeCommand.parse([
+            "--file", tmpFile.path,
+            "--in-place",
+            "2",
+            "Inserted."
+        ])
+        try await command.run()
+
+        var expected = Data([0xEF, 0xBB, 0xBF])
+        expected.append(contentsOf: Data("# First\n\nInserted.\n\n# Target\n".utf8))
+        XCTAssertEqual(try Data(contentsOf: tmpFile), expected)
+    }
+
+    func testInsertBeforeCommandPreservesUTF8ByteOrderMarkOnStdout() throws {
+        let tmpFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("insert_before_\(UUID().uuidString).md")
+        defer { try? FileManager.default.removeItem(at: tmpFile) }
+
+        var original = Data([0xEF, 0xBB, 0xBF])
+        original.append(contentsOf: Data("# First\n\n# Target\n".utf8))
+        try original.write(to: tmpFile)
+
+        let executable = Bundle(for: CommandTests.self).bundleURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("md")
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = executable
+        process.arguments = [
+            "insert-before",
+            "2",
+            "Inserted.",
+            "--file",
+            tmpFile.path
+        ]
+        process.standardOutput = output
+        try process.run()
+        process.waitUntilExit()
+
+        var expected = Data([0xEF, 0xBB, 0xBF])
+        expected.append(contentsOf: Data("# First\n\nInserted.\n\n# Target\n".utf8))
+        XCTAssertEqual(process.terminationStatus, 0)
+        XCTAssertEqual(output.fileHandleForReading.readDataToEndOfFile(), expected)
+    }
+
+    func testDocumentEditingCommandsPreserveByteOrderMarkOnStdout() throws {
+        let executable = Bundle(for: CommandTests.self).bundleURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("md")
+        let cases: [(name: String, content: String, arguments: [String])] = [
+            (
+                "insert-after",
+                "# First\n\n# Second\n",
+                ["insert-after", "1", "Inserted."]
+            ),
+            (
+                "remove",
+                "# First\n\n# Second\n",
+                ["remove", "2"]
+            ),
+            (
+                "replace",
+                "# First\n\n# Second\n",
+                ["replace", "2", "Replacement."]
+            ),
+            (
+                "format",
+                "# First\n\n# Second\n",
+                ["format"]
+            ),
+            (
+                "frontmatter",
+                "---\ntitle: Old\n---\n# First\n",
+                ["frontmatter", "--set", "title=New"]
+            )
+        ]
+
+        for testCase in cases {
+            let file = FileManager.default.temporaryDirectory
+                .appendingPathComponent("bom_\(UUID().uuidString).md")
+            defer { try? FileManager.default.removeItem(at: file) }
+            var source = Data([0xEF, 0xBB, 0xBF])
+            source.append(contentsOf: Data(testCase.content.utf8))
+            try source.write(to: file)
+
+            let process = Process()
+            let output = Pipe()
+            process.executableURL = executable
+            process.arguments = testCase.arguments + ["--file", file.path]
+            process.standardOutput = output
+            try process.run()
+            process.waitUntilExit()
+
+            let result = output.fileHandleForReading.readDataToEndOfFile()
+            XCTAssertEqual(
+                process.terminationStatus,
+                0,
+                "\(testCase.name) should succeed"
+            )
+            XCTAssertTrue(
+                result.starts(with: [0xEF, 0xBB, 0xBF]),
+                "\(testCase.name) should preserve the input BOM"
+            )
+            XCTAssertFalse(
+                result.dropFirst(3).starts(with: [0xEF, 0xBB, 0xBF]),
+                "\(testCase.name) should not duplicate the input BOM"
+            )
+        }
+    }
+
+    func testInPlaceWriteFailureLeavesOriginalUntouched() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("write_failure_\(UUID().uuidString)")
+        let file = directory.appendingPathComponent("document.md")
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: false
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let original = "# First\n\n# Target\n\n"
+            + String(repeating: "Existing source bytes. ", count: 600)
+        let originalData = Data(original.utf8)
+        try originalData.write(to: file)
+
+        let executable = Bundle(for: CommandTests.self).bundleURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("md")
+        let process = Process()
+        let output = Pipe()
+        let errors = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [
+            "-c",
+            "ulimit -f 2; exec \"$1\" insert-before --in-place --file \"$2\" 2 \"$3\"",
+            "md-write-limit",
+            executable.path,
+            file.path,
+            String(repeating: "Replacement bytes. ", count: 300)
+        ]
+        process.standardOutput = output
+        process.standardError = errors
+        try process.run()
+        process.waitUntilExit()
+
+        XCTAssertNotEqual(process.terminationStatus, 0)
+        XCTAssertEqual(try Data(contentsOf: file), originalData)
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(atPath: directory.path),
+            ["document.md"]
+        )
+    }
+
     // MARK: - In-Place Write
 
     func testInPlaceWrite() throws {

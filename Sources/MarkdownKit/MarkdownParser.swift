@@ -153,9 +153,17 @@ public struct MarkdownParser {
             currentUTF16Offset += lineContent.utf16.count
             currentByteOffset += lineBytesCount
             if byteIdx < byteCount {
-                currentUTF16Offset += 1
-                currentByteOffset += 1
-                byteIdx += 1
+                let lineEndingLength: Int
+                if bytes[byteIdx] == Self.crByte,
+                   byteIdx + 1 < byteCount,
+                   bytes[byteIdx + 1] == Self.newlineByte {
+                    lineEndingLength = 2
+                } else {
+                    lineEndingLength = 1
+                }
+                currentUTF16Offset += lineEndingLength
+                currentByteOffset += lineEndingLength
+                byteIdx += lineEndingLength
             }
         }
 

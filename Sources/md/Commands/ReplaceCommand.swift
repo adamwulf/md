@@ -69,7 +69,8 @@ struct ReplaceCommand: AsyncParsableCommand {
         }
 
         let parser = MarkdownParser()
-        let fileContent = try input.readContent()
+        let source = try input.readSource()
+        let fileContent = source.content
         let blocks = parser.parse(fileContent)
 
         guard start >= 1 else {
@@ -105,7 +106,10 @@ struct ReplaceCommand: AsyncParsableCommand {
             }
             try InputReader.write(result, to: file)
         } else {
-            print(result, terminator: "")
+            try InputReader.writeToStdout(
+                result,
+                includeByteOrderMark: source.hasUTF8ByteOrderMark
+            )
         }
     }
 }

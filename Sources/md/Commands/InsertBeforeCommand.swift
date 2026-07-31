@@ -43,8 +43,9 @@ struct InsertBeforeCommand: AsyncParsableCommand {
 
     func run() async throws {
         let parser = MarkdownParser()
-        let fileContent = try input.readContent()
-        let blocks = parser.parse(fileContent)
+        let source = try input.readSource()
+        let fileContent = source.content
+        let blocks = parser.parseDocument(fileContent)
 
         guard blockIndex >= 1, blockIndex <= blocks.count else {
             throw ValidationError("Block index must be in range 1...\(blocks.count), got \(blockIndex)")
@@ -54,21 +55,16 @@ struct InsertBeforeCommand: AsyncParsableCommand {
         let newBlocks = parser.parse(content)
         let formattedNew = BlockFormatter.format(newBlocks)
 
-        // Build output: blocks before + new content + target block + blocks after
-        var result = ""
-        for (i, block) in blocks.enumerated() {
-            if i + 1 == blockIndex {
-                if i > 0 {
-                    result += "\n"
-                }
-                result += formattedNew + "\n"
-                result += BlockFormatter.format(block)
-            } else {
-                if i > 0 {
-                    result += "\n"
-                }
-                result += BlockFormatter.format(block)
-            }
+        // Splice into the original source instead of re-formatting every block.
+        // Re-formatting the full document loses syntax that MarkdownBlock does
+        // not model, including frontmatter and footnote definitions.
+        let targetBlock = blocks[blockIndex - 1]
+        guard let result = MarkdownSourceEditor.inserting(
+            formattedNew + "\n",
+            before: targetBlock,
+            in: fileContent
+        ) else {
+            throw ValidationError("Unable to locate block \(blockIndex) in the source")
         }
 
         if inPlace {
@@ -77,7 +73,10 @@ struct InsertBeforeCommand: AsyncParsableCommand {
             }
             try InputReader.write(result, to: file)
         } else {
-            print(result, terminator: "")
+            try InputReader.writeToStdout(
+                result,
+                includeByteOrderMark: source.hasUTF8ByteOrderMark
+            )
         }
     }
 }

@@ -36,8 +36,14 @@ struct FormatCommand: AsyncParsableCommand {
     @OptionGroup var input: InputOptions
 
     func run() async throws {
-        let content = try input.readContent()
-        print(FormatCommand.format(content: content, targetFrontmatter: frontmatter), terminator: "")
+        let source = try input.readSource()
+        try InputReader.writeToStdout(
+            FormatCommand.format(
+                content: source.content,
+                targetFrontmatter: frontmatter
+            ),
+            includeByteOrderMark: source.hasUTF8ByteOrderMark
+        )
     }
 
     /// Format markdown content. If the source has non-empty frontmatter and
