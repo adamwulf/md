@@ -363,9 +363,9 @@ enum MarkdownSourceEditor {
             .replacingOccurrences(of: "\n", with: lineEnding)
     }
 
-    /// Applies an edit only if the document keeps the expected number of
-    /// parsed blocks. Try an extra separator on either side before refusing
-    /// an edit whose new boundaries would merge otherwise unrelated blocks.
+    /// Applies an edit only if the resulting block kinds match an acceptable
+    /// sequence. Try an extra separator on either side before refusing an edit
+    /// whose new boundaries would merge otherwise unrelated blocks.
     private static func replacingSubrangeWithoutChangingBlockKinds(
         _ range: Range<String.Index>,
         with inserted: String,
