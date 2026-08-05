@@ -1,0 +1,5 @@
+- [ ] Ship \*not emphasis\* today
+- [x] Escape an entity \&amp; keep it
+- [ ] A backtick \` and an underscore \_
+- Plain item with \[brackets\] and a \\ backslash
+- [ ] Ship it \[x\] today

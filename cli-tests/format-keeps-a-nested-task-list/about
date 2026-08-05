@@ -1,0 +1,11 @@
+Every item of a nested task list keeps the box it owns, at the level it
+was written, under both a task parent and a plain one.
+
+The items of a list reach the writer as ONE flat array across every level
+of nesting, so a box that is read once per item and handed to each piece
+the item splits into lands on pieces that never had one. Here each level
+carries its own state, and the plain parent in the middle keeps no box.
+
+The ordered step gains a blank line above it. Changing the marker starts a
+new list in CommonMark, so those last two lines are a second block, and a
+blank line is what separates one block from the next.

@@ -1,0 +1,13 @@
+A continuation paragraph belongs to the item above it, so a task list of
+two items with a continuation is TWO items and not three, and the block
+covers the continuation.
+
+`format` can only show what the writer does. This case reads the block
+model instead, which is what every edit by index depends on: `insert-after`,
+`replace` and `remove` all count blocks and items. If the continuation were
+split off as an item of its own, the count here would say three and every
+later edit would land one item out.
+
+The line range matters as much as the count. L3-7 reaches the last line of
+the second item, so the continuation is inside the block rather than after
+it.

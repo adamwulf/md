@@ -31,10 +31,56 @@ enum BlockFormatter {
             output += "```\n"
 
         case .list(let items, _, _, _, _):
-            for item in items {
-                let indent = String(repeating: "    ", count: item.indentLevel)
+            // The items are one flat array across every level of nesting, so
+            // the level of the item before decides what a gap means.
+            var previousLevel = -1
+            var previousTight = true
+            for (index, item) in items.enumerated() {
+                // An item may not stand more than one level deeper than the
+                // item before it. A wider jump writes an indent that reads
+                // back as an indented code block instead of a nested list.
+                // Clamping only ever pulls an item outwards, so the chain of
+                // levels stays unbroken. `max(0,)` also keeps the count out of
+                // negative territory, where `String(repeating:count:)` traps.
+                let level = min(max(0, item.indentLevel), previousLevel + 1)
+
+                if index > 0 {
+                    // A loose list has a blank line between its items, and the
+                    // gap belongs to the SHALLOWER of the two items around it.
+                    // When this item is the deeper one the gap falls between a
+                    // parent and its own sublist, so the parent's list decides.
+                    // Asking the deeper item there would put a blank line
+                    // inside the parent item and make the parent list loose,
+                    // which gains a level of indent on every pass.
+                    let gapIsTight = level > previousLevel ? previousTight : item.tight
+                    if !gapIsTight {
+                        output += "\n"
+                    }
+                }
+                previousLevel = level
+                previousTight = item.tight
+
+                let indent = String(repeating: "    ", count: level)
                 let marker = item.ordered ? "1." : "-"
-                output += "\(indent)\(marker) \(item.text)\n"
+                let checkbox = Self.checkboxPrefix(for: item.task)
+                // Continuation lines line up under the item content, which
+                // begins after the marker and its one space. The checkbox
+                // stands inside that content and so moves nothing: counting
+                // its width would put a continuation four columns past the
+                // content start, where it becomes an indented code block.
+                let continuation = String(repeating: " ", count: indent.count + marker.count + 1)
+                let lines = item.text.split(separator: "\n", omittingEmptySubsequences: false)
+                for (lineIndex, line) in lines.enumerated() {
+                    if lineIndex == 0 {
+                        output += "\(indent)\(marker) \(checkbox)\(line)\n"
+                    } else if line.isEmpty {
+                        // A blank line carries no indent, or it would be
+                        // trailing whitespace.
+                        output += "\n"
+                    } else {
+                        output += "\(continuation)\(line)\n"
+                    }
+                }
             }
 
         case .blockquote(let text, _, _, _):
@@ -58,6 +104,21 @@ enum BlockFormatter {
         }
 
         return output
+    }
+
+    /// The checkbox that opens a task list item, followed by the space that
+    /// separates it from the item text. An item with no checkbox contributes
+    /// the empty string, so nothing is written and no separator is added.
+    ///
+    /// The trailing space is part of the box as cmark reads it: `- [ ]` with
+    /// nothing after it is not a task item at all, so an item that is only a
+    /// box needs the space to survive a round trip.
+    private static func checkboxPrefix(for task: TaskState?) -> String {
+        switch task {
+        case .none: return ""
+        case .unchecked: return "[ ] "
+        case .checked: return "[x] "
+        }
     }
 
     /// Format an array of MarkdownBlocks into normalized markdown text.

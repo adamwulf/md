@@ -1,0 +1,19 @@
+An unfinished task stays unfinished when a `[x]` appears later in its own
+line.
+
+Upstream cmark decides "checked" in tasklist.c with
+
+    strstr(input, "[x]") || strstr(input, "[X]")
+
+over the WHOLE line rather than the three bytes it just consumed, so
+
+    - [ ] Ship it [x] today
+
+came back as `- [x] Ship it \[x\] today`. The document then said a task was
+finished that nobody ever finished, which a reader cannot tell from what
+the author wrote.
+
+Whether an item HAS a box still comes from cmark. Whether the box is TICKED
+is read from the source: the box opens the item content, so the first
+bracket pair on the line is the box and everything after it is prose. The
+third and fourth items check the rule in both directions.

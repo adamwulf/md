@@ -1,0 +1,12 @@
+An escape survives in the SECOND paragraph of a task item, and in a nested
+task item, not only in the first line of a top level one.
+
+These are the two places where escaping and task list support meet. A
+continuation paragraph is a separate child of the item, so it takes its own
+trip through the CommonMark writer; a nested item is reached by a recursive
+walk. Either path could hand on the text literal unescaped while the simple
+case kept working.
+
+The item text also carries a checkbox that is not a checkbox: `\[x\]` in
+the prose of the last item is escaped AND late, so it must neither be read
+as the box nor tick the real one in front of it.

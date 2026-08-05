@@ -1,0 +1,10 @@
+A checkbox is a marker and not text, so it survives a round trip as a
+checkbox rather than as escaped brackets.
+
+Without the tasklist extension cmark reads `- [ ] text` as an item whose
+text opens with a bracket. Escaping that bracket is right for text and
+wrong for a box, so every task list in every document came back as
+`- \[ \]` and the feature was gone.
+
+The `then-args` pass formats the first pass again, so this case asserts
+the bytes AND that a second pass changes nothing.

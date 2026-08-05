@@ -1,0 +1,18 @@
+An escaped bracket is text, so `- \[ \] text` is a plain item and not a
+task, and an escaped marker is not a list at all.
+
+This is the sharpest test of how the checkbox is read. Whether the box is
+TICKED is taken from the first bracket pair on the item's own source line,
+which is a rule about raw bytes — and these lines all hold bracket pairs
+that are NOT boxes. The rule survives because the two questions are asked
+separately: cmark decides whether the item has a box at all, and only then
+is the line read to see which box it is. cmark's tasklist extension never
+matches an escaped bracket, so the line is never scanned.
+
+    - \[ \] ...    a list item whose text opens with brackets
+    \- [ ] ...     an escaped marker, so a paragraph and not a list
+
+The escaped marker line gains ONE escape on the first pass and then settles:
+the paragraph text opens with `[`, which the CommonMark writer escapes so it
+cannot be read as a link reference next time round. Nothing is lost, and the
+`then-args` pass is what pins that it settles rather than drifting.
