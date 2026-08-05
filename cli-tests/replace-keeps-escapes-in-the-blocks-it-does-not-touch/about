@@ -1,0 +1,9 @@
+The user asks for block 2 only. `md replace` writes EVERY block back through
+the formatter, thus block 1 and block 3 go through it too.
+
+If they lose their backslashes, block 1 becomes a heading and block 3 becomes a
+list. The user never asked for that, and the file now holds two blocks that mean
+something else. Worse, block 3 is no longer block 3, thus the next command the
+user runs writes over the wrong block.
+
+Damage from an edit the user did not ask for is the worst shape this bug takes.

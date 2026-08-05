@@ -1,0 +1,9 @@
+This case says WHY the escapes matter, in the words that `md` itself uses.
+
+The count of blocks alone cannot see this bug: a paragraph that becomes a
+heading is still one block. It is the TYPE that moves. Thus this case reads the
+type of every block after the write, and blocks 2, 3 and 4 must all still say
+`paragraph`.
+
+Without the fix they say `heading(1)`, `unordered list(1 items)` and
+`blockquote`, and the document means something the writer never wrote.

@@ -158,12 +158,9 @@ final class FormatCommandRunTests: XCTestCase {
         XCTAssertEqual(output, "> A\n> \n> B\n")
     }
 
+    /// Fixed by `MarkdownEscaper`. See `EscapedMarkdownRoundTripTests` for the whole
+    /// set of cases that `md format` must not change.
     func testFormatKeepsAnEscapedAsteriskEscaped() async throws {
-        XCTExpectFailure("""
-            The parser resolves the backslash escapes away, so md format writes \
-            "an escaped *asterisk*" — which re-parses as emphasis. Formatting \
-            therefore changes the meaning of the paragraph.
-            """)
         let output = try await runFormat(on: "an escaped \\*asterisk\\*\n")
         XCTAssertEqual(output, "an escaped \\*asterisk\\*\n")
     }

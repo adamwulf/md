@@ -58,14 +58,9 @@ final class MarkdownParserTextExtractionTests: XCTestCase {
         )
     }
 
+    /// Fixed by `MarkdownEscaper`: the parser gives block text as markdown source, thus
+    /// a backslash that the source needs comes back. See `MarkdownEscapeTests`.
     func testEscapedCharactersKeepTheirBackslash() throws {
-        XCTExpectFailure("""
-            A backslash escape is resolved into a plain text node, and \
-            getNodeText returns that node's literal, so the backslashes are lost \
-            and the text reads "an escaped *asterisk*". Re-emitting that text \
-            turns the two literal asterisks into emphasis, so md format silently \
-            changes the meaning of the paragraph. The escapes should survive.
-            """)
         XCTAssertEqual(
             try paragraphText("an escaped \\*asterisk\\*"),
             "an escaped \\*asterisk\\*"

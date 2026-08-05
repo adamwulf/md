@@ -1,0 +1,9 @@
+Two escapes that lose data and not only markup.
+
+Two backslashes in the source are ONE backslash of text. If the pair does not
+come back as a pair, the path loses a level on every write: `C:\\Users` becomes
+`C:\Users`, then `C:Users`.
+
+A run of `#` at the END of a heading line is the closing sequence of the
+heading, and a reader takes it off. Thus `# Sharp \#` with no backslash reads
+back as `Sharp`, and the `#` is gone for good.

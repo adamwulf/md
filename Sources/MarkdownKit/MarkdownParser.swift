@@ -183,11 +183,11 @@ public struct MarkdownParser {
         switch type {
         case CMARK_NODE_HEADING:
             let level = Int(cmark_node_get_heading_level(node))
-            let text = getChildrenText(node)
+            let text = getChildrenText(node, context: .heading)
             return .heading(level: level, text: text, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_PARAGRAPH:
-            let text = getChildrenText(node)
+            let text = getChildrenText(node, context: .paragraph)
             return .paragraph(text: text, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_CODE_BLOCK:
@@ -203,7 +203,9 @@ public struct MarkdownParser {
             return .list(items: items, ordered: ordered, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_BLOCK_QUOTE:
-            let text = getChildrenText(node)
+            // The children of a block quote are whole blocks, thus each one comes back
+            // through the CommonMark writer and needs no work here.
+            let text = getChildrenText(node, context: .paragraph)
             return .blockquote(text: text, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_THEMATIC_BREAK:
@@ -228,7 +230,7 @@ public struct MarkdownParser {
                 var cellContent = ""
                 var child = cmark_node_first_child(cellNode)
                 while child != nil {
-                    cellContent += getNodeText(child)
+                    cellContent += getNodeText(child, context: .tableCell)
                     child = cmark_node_next(child)
                 }
                 row.append(cellContent.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -269,7 +271,9 @@ public struct MarkdownParser {
                     }
                     items.append(contentsOf: nestedItems)
                 } else {
-                    itemText += getNodeText(child)
+                    // The children of a list item are whole blocks, thus each one
+                    // comes back through the CommonMark writer with its backslashes.
+                    itemText += getNodeText(child, context: .paragraph)
                 }
 
                 child = cmark_node_next(child)
@@ -290,26 +294,39 @@ public struct MarkdownParser {
         return items
     }
 
-    private func getChildrenText(_ node: UnsafeMutablePointer<cmark_node>?) -> String {
+    private func getChildrenText(_ node: UnsafeMutablePointer<cmark_node>?, context: InlineTextContext) -> String {
         guard let node = node else { return "" }
         var text = ""
         var child = cmark_node_first_child(node)
         while child != nil {
-            text += getNodeText(child)
+            text += getNodeText(child, context: context)
             child = cmark_node_next(child)
         }
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func getNodeText(_ node: UnsafeMutablePointer<cmark_node>?) -> String {
+    private func getNodeText(_ node: UnsafeMutablePointer<cmark_node>?, context: InlineTextContext) -> String {
         guard let node = node else { return "" }
 
         let type = cmark_node_get_type(node)
         if type == CMARK_NODE_TEXT {
             let literal = cmark_node_get_literal(node)
-            return literal.map { String(cString: $0) } ?? ""
+            guard let text = literal.map({ String(cString: $0) }) else { return "" }
+            // `cmark` gives this text with each backslash already taken off. The text
+            // goes back into a file, thus each marker that is live where it sits needs
+            // its backslash again.
+            let next = cmark_node_next(node)
+            return MarkdownEscaper.escape(
+                text,
+                context: context,
+                startsLine: beginsLine(node),
+                endsBlock: next == nil,
+                isFollowedByLink: cmark_node_get_type(next) == CMARK_NODE_LINK
+            )
         }
 
+        // Every other kind of node comes back through the CommonMark writer, thus it
+        // is markdown source already, with the backslashes that it needs.
         let rendered = cmark_render_commonmark(node, 0, 0)
         defer { free(rendered) }
 
@@ -318,6 +335,14 @@ public struct MarkdownParser {
         }
 
         return ""
+    }
+
+    /// True when this node begins a line of its block: it is the first node, or a line
+    /// break comes before it. A block marker is live only at the start of a line.
+    private func beginsLine(_ node: UnsafeMutablePointer<cmark_node>) -> Bool {
+        guard let previous = cmark_node_previous(node) else { return true }
+        let previousType = cmark_node_get_type(previous)
+        return previousType == CMARK_NODE_SOFTBREAK || previousType == CMARK_NODE_LINEBREAK
     }
 
     private func calculateRanges(for node: UnsafeMutablePointer<cmark_node>, lineTable: [LineInfo]) -> RangePair {

@@ -1,0 +1,2 @@
+Taking one block out must not change the two that stay. Without the backslashes
+block 1 becomes a heading and block 3 becomes a list of one item.
