@@ -415,6 +415,32 @@ final class MarkdownParserTests: XCTestCase {
         XCTAssertTrue(items.allSatisfy { !$0.continuation })
     }
 
+    /// KNOWN FAILURE, kept as documentation for a later fix.
+    ///
+    /// A list item can hold more than one paragraph. `collectListItems` puts the text
+    /// of each paragraph one after the other, thus the two paragraphs of one item run
+    /// together, the same way that a blockquote loses its paragraph break. See
+    /// `testParseBlockquoteWithTwoParagraphsKeepsThemApart`.
+    ///
+    /// The fix must keep the two paragraphs apart. How many newlines to put between
+    /// them is for that fix to decide, thus this test only asks for a line break.
+    /// Remove the `XCTExpectFailure` when the fix is in.
+    func testParseListItemWithTwoParagraphsKeepsThemApart() {
+        let blocks = parser.parse("- para one\n\n  para two")
+        XCTAssertEqual(blocks.count, 1)
+        guard case .list(let items, _, _, _, _) = blocks[0] else {
+            XCTFail("Expected list block")
+            return
+        }
+        XCTAssertEqual(items.count, 1)
+        XCTExpectFailure("Two paragraphs of a list item are joined with no separator") {
+            XCTAssertTrue(
+                items[0].text.contains("\n"),
+                "The two paragraphs ran together: \(items[0].text.debugDescription)"
+            )
+        }
+    }
+
     // MARK: - Blockquotes
 
     func testParseBlockquote() {
@@ -424,6 +450,42 @@ final class MarkdownParserTests: XCTestCase {
             XCTAssertEqual(text, "This is a quote")
         } else {
             XCTFail("Expected blockquote")
+        }
+    }
+
+    /// A lazy continuation line (a line with no `>` below a quoted line) is part of
+    /// the same paragraph of the blockquote, thus it keeps its soft line break.
+    func testParseBlockquoteWithLazyContinuationKeepsSoftLineBreak() {
+        let blocks = parser.parse("> line1\nline2")
+        XCTAssertEqual(blocks.count, 1)
+        if case .blockquote(let text, _, _, _) = blocks[0] {
+            XCTAssertEqual(text, "line1\nline2")
+        } else {
+            XCTFail("Expected blockquote")
+        }
+    }
+
+    /// KNOWN FAILURE, kept as documentation for a later fix.
+    ///
+    /// A blockquote can hold more than one paragraph. `getChildrenText` puts the text
+    /// of each paragraph one after the other, and `getNodeText` trims the commonmark
+    /// that it renders for each one. Thus no separator stays between them and the last
+    /// word of the first paragraph touches the first word of the second.
+    ///
+    /// This is the same loss as the soft break bug, but between two blocks and not
+    /// inside one, thus the soft break fix does not correct it. The fix must keep the
+    /// two paragraphs apart. How many newlines to put between them is for that fix to
+    /// decide, thus this test only asks for a line break. Remove the
+    /// `XCTExpectFailure` when the fix is in.
+    func testParseBlockquoteWithTwoParagraphsKeepsThemApart() {
+        let blocks = parser.parse("> para one\n>\n> para two")
+        XCTAssertEqual(blocks.count, 1)
+        guard case .blockquote(let text, _, _, _) = blocks[0] else {
+            XCTFail("Expected blockquote")
+            return
+        }
+        XCTExpectFailure("Two paragraphs of a blockquote are joined with no separator") {
+            XCTAssertTrue(text.contains("\n"), "The two paragraphs ran together: \(text.debugDescription)")
         }
     }
 
@@ -478,6 +540,17 @@ final class MarkdownParserTests: XCTestCase {
         let blocks = parser.parse(markdown)
         XCTAssertEqual(blocks.count, 1)
         XCTAssertEqual(blocks[0].lineRange, 1...3)
+    }
+
+    /// A paragraph written on more than one line covers all of its lines. `md blocks`
+    /// prints this range as `paragraph L1-L3`, thus the range must not stop at the
+    /// first line.
+    func testMultiLineParagraphLineRange() {
+        let markdown = "line1\nline2\nline3\n\npara2"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.count, 2)
+        XCTAssertEqual(blocks[0].lineRange, 1...3)
+        XCTAssertEqual(blocks[1].lineRange, 5...5)
     }
 
     // MARK: - Byte and Char Ranges
