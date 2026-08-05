@@ -438,8 +438,9 @@ enum MarkdownSourceEditor {
     /// so it is not a new one, and the code inside the block is unchanged.
     /// Only the block that the edit would otherwise destroy is re-spelled.
     ///
-    /// Returns nil for a block that is already fenced, because re-spelling
-    /// that one would change no boundary.
+    /// Returns nil for a block that already begins at column 0, because that
+    /// one ends the list by itself and re-spelling it would change no
+    /// boundary.
     private static func fencedTrailingCodeBlock(
         _ block: MarkdownBlock?,
         startingAt start: String.Index,
@@ -449,7 +450,7 @@ enum MarkdownSourceEditor {
         guard let block, case .codeBlock = block else {
             return nil
         }
-        guard isIndentedFourColumns(from: start, in: source) else {
+        guard beginsIndented(from: start, in: source) else {
             return nil
         }
         let end = lineStartIndex(block.lineRange.upperBound + 1, in: source)
@@ -471,30 +472,24 @@ enum MarkdownSourceEditor {
         return (text, end)
     }
 
-    /// Whether a line opens with the four columns that mark indented code. A
-    /// fence opens with three columns of indentation at most, thus this also
-    /// tells the two spellings apart. A tab advances to the next multiple of
-    /// four, which reaches the fourth column on its own.
-    private static func isIndentedFourColumns(
+    /// Whether the block below the edit opens with indentation.
+    ///
+    /// A list item's content always begins at column 1 or further right, so
+    /// only an indented line can continue it. A block that opens at column 0
+    /// therefore ends the list on its own, whether it is a fence or anything
+    /// else, and re-spelling it would spend the user's bytes for nothing.
+    ///
+    /// Indentation covers both spellings that can be absorbed: an indented
+    /// code block, which opens with four columns, and a fenced one indented
+    /// by one to three.
+    private static func beginsIndented(
         from start: String.Index,
         in source: String
     ) -> Bool {
-        var cursor = start
-        var columns = 0
-
-        while cursor < source.endIndex, columns < 4 {
-            let character = source[cursor]
-            if character == "\t" {
-                columns += 4 - (columns % 4)
-            } else if character == " " {
-                columns += 1
-            } else {
-                break
-            }
-            cursor = source.index(after: cursor)
+        guard start < source.endIndex else {
+            return false
         }
-
-        return columns >= 4
+        return source[start].isCommonMarkBlankWhitespace
     }
 
     /// Lists and other blocks of the same kind can intentionally join when an

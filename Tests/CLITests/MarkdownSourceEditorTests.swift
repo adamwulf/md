@@ -568,6 +568,94 @@ final class MarkdownSourceEditorTests: XCTestCase {
         )
     }
 
+    /// Re-spelling reaches a code block and nothing else, thus an edit that
+    /// would absorb any other kind of block is still refused. Losing the
+    /// paragraph below into the list above would be silent, so no result at
+    /// all is the safe answer.
+    func testRemovalStillRefusesToAbsorbAnIndentedParagraph() {
+        let source = "* alpha\n\n> quoted\n\n  indented paragraph\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertNil(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "",
+                within: source
+            )
+        )
+    }
+
+    /// An indented fence is absorbed exactly as indented code is, because
+    /// two columns is enough to continue the item. Writing it at column 0
+    /// ends the list.
+    func testRemovalMovesAnIndentedFenceOutToColumnZero() {
+        let source = "* alpha\n\n> quoted\n\n  ```\n  code\n  ```\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "",
+                within: source
+            ),
+            "* alpha\n\n```\ncode\n```\n"
+        )
+    }
+
+    /// A tab indents the code as far as four spaces do, and it is absorbed
+    /// the same way.
+    func testRemovalFencesTabIndentedCode() {
+        let source = "* alpha\n\n> quoted\n\n\tcode\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "",
+                within: source
+            ),
+            "* alpha\n\n```\ncode\n```\n"
+        )
+    }
+
+    /// The formatter always closes a fence with a line ending. A document
+    /// that ended without one must not gain one here.
+    func testRemovalFencingKeepsAMissingFinalNewline() {
+        let source = "* alpha\n\n> quoted\n\n    code"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "",
+                within: source
+            ),
+            "* alpha\n\n```\ncode\n```"
+        )
+    }
+
+    /// A code block already at column 0 ends the list by itself, thus the
+    /// plain splice is enough and its bytes are kept as the author wrote
+    /// them. A four backtick fence stays four backticks long.
+    func testRemovalLeavesAColumnZeroFenceAlone() {
+        let source = "* alpha\n\n> quoted\n\n````\ncode\n````\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "",
+                within: source
+            ),
+            "* alpha\n\n````\ncode\n````\n"
+        )
+    }
+
     func testRemovalAllowsTwoListsToBecomeAdjacent() {
         let source = "* a\n\nMiddle.\n\n* b\n"
         let blocks = parser.parseDocument(source)
