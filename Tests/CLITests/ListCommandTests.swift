@@ -215,9 +215,19 @@ final class ListCommandTests: XCTestCase {
     func testPlainKeyOnNestedDict() throws {
         try write("---\nauthor:\n  name: Jane\n  email: j@e.com\n---\n", to: "a.md")
         let out = try runList(["--key", "author"])
-        XCTAssertTrue(out.contains("\"name\":\"Jane\""))
-        XCTAssertTrue(out.contains("\"email\":\"j@e.com\""))
-        XCTAssertFalse(out.contains("\"name\": \"Jane\""))
+        XCTAssertTrue(
+            out.hasSuffix("\t{email: j@e.com, name: Jane}\n"),
+            "got: \(out.debugDescription)"
+        )
+    }
+
+    func testPlainKeyOnNestedDictUsesTheRequestedTOMLFormat() throws {
+        try write("---\nauthor:\n  name: Jane\n  count: 1\n---\n", to: "a.md")
+        let out = try runList(["--format", "toml", "--key", "author"])
+        XCTAssertTrue(
+            out.hasSuffix("\t{ count = 1, name = 'Jane' }\n"),
+            "got: \(out.debugDescription)"
+        )
     }
 
     func testPlainKeyKeepsANonFiniteNumberAsAPlainScalar() throws {
