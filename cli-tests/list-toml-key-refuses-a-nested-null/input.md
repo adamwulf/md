@@ -1,0 +1,3 @@
+---
+values: [{x: null}, bad]
+---

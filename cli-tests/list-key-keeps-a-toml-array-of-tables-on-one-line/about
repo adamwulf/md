@@ -1,0 +1,2 @@
+`list --key` promises one row per file. A TOML array containing tables must use
+inline tables rather than expanding one file's value over table sections.

@@ -53,7 +53,7 @@ and the instrumented subprocess hits that limit writing its own profile.
 --skip-build`, that silently measures whatever test bundle is on disk. It
 reported 88.73% where the truth was 98.24%. `--build-tests` fixes it.
 
-## Defects: 24 found, 6 fixed, 18 open
+## Defects: 24 found, 8 fixed, 15 open, 1 withdrawn
 
 Each open defect is pinned by tests holding the CORRECT expectation, marked as
 known failures, so it turns green by itself when it is fixed. **The `known-fail`
@@ -68,13 +68,10 @@ Numbers are stable. A fixed defect keeps its number, because commit messages and
 | 4 | An HTML block is deleted. No `MarkdownBlock` case | 5 CLI, 1 Swift |
 | 6 | Two paragraphs in a blockquote flatten into one run | 1 CLI, 3 Swift |
 | 7 | An unused link reference definition is deleted | 3 CLI |
-| 8 | A wrapped list item reformats so the continuation escapes the item | 1 Swift |
 | 11 | A list block absorbs the blank line below it | 2 CLI |
 | 12 | `remove`, `replace`, `insert-after` use `parse`, not `parseDocument`, so frontmatter counts as blocks | 4 Swift |
 | 13 | An unparseable frontmatter fence reads as no frontmatter, exit 0 | 3 CLI |
 | 14 | `list` exits 0 for a missing directory, and for a file | 2 CLI |
-| 15 | `--key` on a mapping prints a Swift dictionary description | 1 CLI |
-| 16 | A null value reaches output as `<null>` | 2 CLI |
 | 17 | `format` rewrites CRLF as LF | 1 CLI |
 | 18 | `insert-after` and `replace` invent a final newline | 2 CLI |
 | 19 | Untouched blocks are re-spelled: `*`→`-`, `***`→`---`, two trailing spaces→`\` | 2 CLI |
@@ -86,7 +83,12 @@ Numbers are stable. A fixed defect keeps its number, because commit messages and
 
 Fixed: **1** non-finite JSON number abort, **2** soft line break dropped, **3**
 hard line break dropped, **5** backslash escapes resolved away, **9** non-ASCII
-YAML values escaped, **10** phantom final line counted.
+YAML values escaped, **10** phantom final line counted, **15** `--key` mapping
+printed as a Swift dictionary, **16** null value serialized as `<null>`.
+
+Withdrawn: **8** was an incorrect expectation, not a formatter defect. The
+continuation is indented beneath the list item's content and formatting the
+result again is idempotent, so it remains part of the same item.
 
 ## Two things to know before you fix
 
@@ -108,7 +110,7 @@ and this goes with it.
 
 Ordered by tests turned green for code changed:
 
-1. **24**, **14**, **15**, **16**, **23** — one command each, and small.
+1. **24**, **14**, **23** — one command each, and small.
 2. **13**, **21** — small, but each touches its callers.
 3. **12**, **18**, **19**, **20** together. `insert-before` already does the
    right thing: `parseDocument` plus a splice through `MarkdownSourceEditor`.

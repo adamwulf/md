@@ -182,10 +182,10 @@ final class ListCommandCoverageTests: XCTestCase {
         XCTAssertEqual(output, "\(url.path)\tone,two\n")
     }
 
-    func testAKeyHoldingADictionaryIsRenderedAsCompactJSON() async throws {
+    func testAKeyHoldingADictionaryUsesTheRequestedYAMLFormat() async throws {
         let url = try write("---\nauthor:\n  name: Jane\n---\n", to: "a.md")
         let output = try await runList(["--key", "author"])
-        XCTAssertEqual(output, "\(url.path)\t{\"name\":\"Jane\"}\n")
+        XCTAssertEqual(output, "\(url.path)\t{name: Jane}\n")
     }
 
     func testAKeyHoldingABooleanPrintsTheBoolean() async throws {

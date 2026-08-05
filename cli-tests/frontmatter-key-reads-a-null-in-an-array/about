@@ -1,0 +1,3 @@
+An array projected with `frontmatter --key` prints one item per line. A null
+element must use YAML's `null` spelling rather than Foundation's `<null>` debug
+description.

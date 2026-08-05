@@ -1,0 +1,1 @@
+frontmatter --set 'values=[a, null]' --file input.md

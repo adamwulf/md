@@ -171,6 +171,14 @@ final class FrontmatterCommandTests: XCTestCase {
         XCTAssertEqual(output, "author: Jane\ntitle: Hello\n")
     }
 
+    func testReadModePreservesANullValue() async throws {
+        let output = try await runFrontmatter(
+            [],
+            on: "---\npublished: null\n---\nBody\n"
+        )
+        XCTAssertEqual(output, "published: null\n")
+    }
+
     func testReadModeConvertsToTheRequestedFormat() async throws {
         let output = try await runFrontmatter(
             ["--format", "json"],
@@ -221,6 +229,14 @@ final class FrontmatterCommandTests: XCTestCase {
         XCTAssertEqual(output, "Jane\n")
     }
 
+    func testKeyIgnoresTheFormatFlagForAMapping() async throws {
+        let output = try await runFrontmatter(
+            ["--key", "author", "--format", "json"],
+            on: "---\nauthor:\n  name: Jane\n---\nBody\n"
+        )
+        XCTAssertEqual(output, "name: Jane\n")
+    }
+
     func testKeyPrintsABooleanValue() async throws {
         let output = try await runFrontmatter(
             ["--key", "draft"],
@@ -243,6 +259,49 @@ final class FrontmatterCommandTests: XCTestCase {
             on: "---\ntags:\n  - swift\n  - markdown\n---\nBody\n"
         )
         XCTAssertEqual(output, "swift\nmarkdown\n")
+    }
+
+    func testKeyPrintsANullValueAsYAMLNull() async throws {
+        let output = try await runFrontmatter(
+            ["--key", "published"],
+            on: "---\npublished: null\n---\nBody\n"
+        )
+        XCTAssertEqual(output, "null\n")
+    }
+
+    func testKeyPrintsANullInsideAnArrayAsYAMLNull() async throws {
+        let output = try await runFrontmatter(
+            ["--key", "values"],
+            on: "---\nvalues: [first, null]\n---\nBody\n"
+        )
+        XCTAssertEqual(output, "first\nnull\n")
+    }
+
+    func testKeyKeepsTheShapeOfANestedArray() async throws {
+        let output = try await runFrontmatter(
+            ["--key", "values"],
+            on: "---\nvalues: [[a, b], c]\n---\nBody\n"
+        )
+        XCTAssertEqual(output, "[a, b]\nc\n")
+    }
+
+    func testKeyPrintsANullInsideANestedArrayAsYAMLNull() async throws {
+        let output = try await runFrontmatter(
+            ["--key", "values"],
+            on: "---\nvalues: [[first, null], c]\n---\nBody\n"
+        )
+        XCTAssertEqual(output, "[first, null]\nc\n")
+    }
+
+    func testKeyPrintsATOMLArrayOfTablesOneItemPerLine() async throws {
+        let output = try await runFrontmatter(
+            ["--key", "values"],
+            on: "+++\nvalues = [{ name = \"Jane\", nested = { count = 1 } }, \"tail\"]\n+++\n"
+        )
+        XCTAssertEqual(
+            output,
+            "{ name = 'Jane', nested = { count = 1 } }\ntail\n"
+        )
     }
 
     func testKeyPrintsNothingWhenTheKeyIsAbsent() async throws {
@@ -296,6 +355,28 @@ final class FrontmatterCommandTests: XCTestCase {
             on: "---\ntitle: Hello\n---\nBody\n"
         )
         XCTAssertEqual(output, "---\ncount: 42\ntitle: Hello\n---\nBody\n")
+    }
+
+    func testSetParsesANullValueIntoItsNaturalType() async throws {
+        let output = try await runFrontmatter(
+            ["--set", "published=null"],
+            on: "---\ntitle: Hello\n---\nBody\n"
+        )
+        XCTAssertEqual(
+            output,
+            "---\npublished: null\ntitle: Hello\n---\nBody\n"
+        )
+    }
+
+    func testSetParsesANullInsideAnArrayIntoItsNaturalType() async throws {
+        let output = try await runFrontmatter(
+            ["--set", "values=[a, null]"],
+            on: "---\ntitle: Hello\n---\nBody\n"
+        )
+        XCTAssertEqual(
+            output,
+            "---\ntitle: Hello\nvalues:\n- a\n- null\n---\nBody\n"
+        )
     }
 
     func testSetAcceptsAnEmptyValue() async throws {

@@ -215,9 +215,19 @@ final class ListCommandTests: XCTestCase {
     func testPlainKeyOnNestedDict() throws {
         try write("---\nauthor:\n  name: Jane\n  email: j@e.com\n---\n", to: "a.md")
         let out = try runList(["--key", "author"])
-        XCTAssertTrue(out.contains("\"name\":\"Jane\""))
-        XCTAssertTrue(out.contains("\"email\":\"j@e.com\""))
-        XCTAssertFalse(out.contains("\"name\": \"Jane\""))
+        XCTAssertTrue(
+            out.hasSuffix("\t{email: j@e.com, name: Jane}\n"),
+            "got: \(out.debugDescription)"
+        )
+    }
+
+    func testPlainKeyOnNestedDictUsesTheRequestedTOMLFormat() throws {
+        try write("---\nauthor:\n  name: Jane\n  count: 1\n---\n", to: "a.md")
+        let out = try runList(["--format", "toml", "--key", "author"])
+        XCTAssertTrue(
+            out.hasSuffix("\t{ count = 1, name = 'Jane' }\n"),
+            "got: \(out.debugDescription)"
+        )
     }
 
     func testPlainKeyKeepsANonFiniteNumberAsAPlainScalar() throws {
@@ -226,6 +236,107 @@ final class ListCommandTests: XCTestCase {
         let out = try runList(["--key", "ratio"])
 
         XCTAssertTrue(out.hasSuffix("\tnan\n"), "got: \(out.debugDescription)")
+    }
+
+    func testPlainKeyPrintsANullValueAsYAMLNull() throws {
+        try write("---\npublished: null\n---\n", to: "a.md")
+
+        let out = try runList(["--key", "published"])
+
+        XCTAssertTrue(out.hasSuffix("\tnull\n"), "got: \(out.debugDescription)")
+    }
+
+    func testPlainKeyPrintsANullInsideAnArrayAsYAMLNull() throws {
+        try write("---\nvalues: [first, null]\n---\n", to: "a.md")
+
+        let out = try runList(["--key", "values"])
+
+        XCTAssertTrue(out.hasSuffix("\tfirst,null\n"), "got: \(out.debugDescription)")
+    }
+
+    func testPlainKeyPrintsANullInsideANestedArrayAsYAMLNull() throws {
+        try write("---\nvalues: [[first, null], c]\n---\n", to: "a.md")
+
+        let out = try runList(["--key", "values"])
+
+        XCTAssertTrue(
+            out.hasSuffix("\t[first, null],c\n"),
+            "got: \(out.debugDescription)"
+        )
+    }
+
+    func testPlainKeyPrintsATOMLArrayOfTablesOnOneLine() throws {
+        try write(
+            "+++\nvalues = [{ name = \"Jane\", nested = { count = 1 } }, \"tail\"]\n+++\n",
+            to: "a.md"
+        )
+
+        let out = try runList(["--format", "toml", "--key", "values"])
+
+        XCTAssertTrue(
+            out.hasSuffix("\t{ name = 'Jane', nested = { count = 1 } },tail\n"),
+            "got: \(out.debugDescription)"
+        )
+    }
+
+    func testRunRejectsANestedNullInATOMLKeyProjection() async throws {
+        try write("---\nvalues: [{x: null}, bad]\n---\n", to: "a-bad.md")
+        try write("---\nvalues: [good]\n---\n", to: "b-good.md")
+        let command = try ListCommand.parse([
+            "--format", "toml", "--key", "values", tempRoot.path,
+        ])
+        let paths = command.collectEntries().map(\.path)
+        let badPath = try XCTUnwrap(paths.first { $0.hasSuffix("/a-bad.md") })
+        let goodPath = try XCTUnwrap(paths.first { $0.hasSuffix("/b-good.md") })
+
+        let captured = try await StandardStream.capturingCommandRun {
+            try await command.run()
+        }
+
+        XCTAssertFalse(captured.standardOutput.contains(badPath))
+        XCTAssertTrue(captured.standardOutput.contains(goodPath))
+        XCTAssertFalse(captured.standardOutput.contains("<null>"))
+        XCTAssertEqual(
+            captured.standardError,
+            "md list: \(badPath): TOML cannot represent the null value " +
+                "at key path values[0].x\n"
+        )
+        guard let exitCode = captured.error as? ExitCode else {
+            return XCTFail(
+                "Expected ExitCode.failure, got \(String(describing: captured.error))"
+            )
+        }
+        XCTAssertEqual(exitCode.rawValue, ExitCode.failure.rawValue)
+    }
+
+    func testRunReportsANullThatTOMLCannotRepresent() async throws {
+        try write("---\npublished: null\n---\n", to: "a-bad.md")
+        try write("---\ntitle: Good\n---\n", to: "b-good.md")
+        let command = try ListCommand.parse([
+            "--format", "toml", tempRoot.path,
+        ])
+        let paths = command.collectEntries().map(\.path)
+        let badPath = try XCTUnwrap(paths.first { $0.hasSuffix("/a-bad.md") })
+        let goodPath = try XCTUnwrap(paths.first { $0.hasSuffix("/b-good.md") })
+
+        let captured = try await StandardStream.capturingCommandRun {
+            try await command.run()
+        }
+
+        XCTAssertFalse(captured.standardOutput.contains(badPath))
+        XCTAssertTrue(captured.standardOutput.contains(goodPath))
+        XCTAssertTrue(captured.standardOutput.contains("Good"))
+        XCTAssertEqual(
+            captured.standardError,
+            "md list: \(badPath): TOML cannot represent the null value " +
+                "at key path published\n"
+        )
+        guard let exitCode = captured.error as? ExitCode else {
+            return XCTFail(
+                "Expected ExitCode.failure, got \(String(describing: captured.error))"
+            )
+        }
+        XCTAssertEqual(exitCode.rawValue, ExitCode.failure.rawValue)
     }
 
     func testPlainKeyDoesNotTurnNestedNonFiniteNumbersIntoNull() throws {
@@ -237,7 +348,7 @@ final class ListCommandTests: XCTestCase {
         let mapping = try runList(["--key", "measurements"])
         let array = try runList(["--key", "measurements.values"])
 
-        XCTAssertTrue(mapping.contains("\"nan\""), "got: \(mapping.debugDescription)")
+        XCTAssertTrue(mapping.contains("nan"), "got: \(mapping.debugDescription)")
         XCTAssertFalse(mapping.contains("null"), "got: \(mapping.debugDescription)")
         XCTAssertTrue(array.hasSuffix("\tnan,1.0\n"), "got: \(array.debugDescription)")
         XCTAssertFalse(array.contains("null"), "got: \(array.debugDescription)")
@@ -319,6 +430,41 @@ final class ListCommandTests: XCTestCase {
                 XCTFail(
                     "Expected ExitCode.failure for \(output), got " +
                         "\(String(describing: captured.error))"
+                )
+                continue
+            }
+            XCTAssertEqual(exitCode.rawValue, ExitCode.failure.rawValue, output)
+        }
+    }
+
+    func testJSONAndNDJSONEnvelopesStillValidateRequestedTOML() async throws {
+        try write("---\npublished: null\n---\n", to: "a-bad.md")
+        try write("---\ntitle: Good\n---\n", to: "b-good.md")
+
+        for output in ["json", "ndjson"] {
+            let command = try ListCommand.parse([
+                "--format", "toml", "--output", output, tempRoot.path,
+            ])
+            let paths = command.collectEntries().map(\.path)
+            let badPath = try XCTUnwrap(paths.first { $0.hasSuffix("/a-bad.md") })
+
+            let captured = try await StandardStream.capturingCommandRun {
+                try await command.run()
+            }
+
+            XCTAssertFalse(captured.standardOutput.contains("a-bad.md"), output)
+            XCTAssertTrue(captured.standardOutput.contains("b-good.md"), output)
+            XCTAssertTrue(captured.standardOutput.contains("Good"), output)
+            XCTAssertEqual(
+                captured.standardError,
+                "md list: \(badPath): TOML cannot represent the null value " +
+                    "at key path published\n",
+                output
+            )
+            guard let exitCode = captured.error as? ExitCode else {
+                XCTFail(
+                    "[\(output)] Expected ExitCode.failure, got " +
+                        String(describing: captured.error)
                 )
                 continue
             }

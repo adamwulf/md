@@ -1,0 +1,2 @@
+TOML validation applies to plain key projection too. A nested null is reported
+and never recovered by printing a Swift debug description containing `<null>`.

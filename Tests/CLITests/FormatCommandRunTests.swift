@@ -70,6 +70,26 @@ final class FormatCommandRunTests: XCTestCase {
         XCTAssertTrue(output.hasSuffix("+++\n# Heading\n"), "got: \(output)")
     }
 
+    func testFormatRefusesToConvertANullValueToTOML() async throws {
+        let path = try scratch.write(
+            "---\npublished: null\n---\nBody\n",
+            to: "document.md"
+        )
+        let command = try FormatCommand.parse([
+            "--frontmatter", "toml", "--file", path,
+        ])
+
+        do {
+            try await command.run()
+            XCTFail("Expected TOML conversion to reject null")
+        } catch {
+            XCTAssertEqual(
+                error.localizedDescription,
+                "TOML cannot represent the null value at key path published"
+            )
+        }
+    }
+
     func testFormatStripsEmptyFrontmatter() async throws {
         let output = try await runFormat(on: "---\n---\n#    Heading\n")
         XCTAssertEqual(output, "# Heading\n")
@@ -208,16 +228,14 @@ final class FormatCommandRunTests: XCTestCase {
         XCTAssertEqual(output, "an escaped \\*asterisk\\*\n")
     }
 
+    /// The continuation is indented under the item's content. A second format
+    /// pass produces the same single-item document, so the old failure marker
+    /// described an incorrect expectation rather than a formatter defect.
     func testFormatKeepsAListItemContinuationInsideItsItem() async throws {
-        XCTExpectFailure("""
-            A list item that wraps onto a second source line is rendered as \
-            "- item one\\ncontinued\\n", where the continuation line no longer \
-            starts inside the item. Re-parsing that output yields a list plus a \
-            separate paragraph, so formatting twice changes the document \
-            structure.
-            """)
         let output = try await runFormat(on: "- item one\n  continued\n")
-        XCTAssertEqual(output, "- item one continued\n")
+        XCTAssertEqual(output, "- item one\n  continued\n")
+        let secondPass = try await runFormat(on: output)
+        XCTAssertEqual(secondPass, output)
     }
 
     func testFormatDropsHtmlBlocksEntirely() async throws {

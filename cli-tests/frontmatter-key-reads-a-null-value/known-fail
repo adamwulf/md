@@ -1,9 +1,0 @@
-A null value prints as <null>, the description of Foundation's NSNull.
-
-Yams reads `published:` as NSNull. FrontmatterCommand.formatValue falls
-through to "\(value)" for anything that is not an array, and the
-description of NSNull is the literal text <null>. So the command hands
-back a word that is in no YAML document and that no reader of the file
-would recognise.
-
-It should print `null`, the word YAML itself uses.

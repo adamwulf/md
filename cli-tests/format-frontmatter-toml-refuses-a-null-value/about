@@ -1,0 +1,2 @@
+TOML has no null value. `format --frontmatter toml` must fail clearly instead
+of writing `<null>` as text or silently leaving the requested conversion undone.

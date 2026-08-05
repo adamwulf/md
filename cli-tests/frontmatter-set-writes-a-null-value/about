@@ -1,0 +1,3 @@
+`frontmatter --set key=null` stores a real null value. Treating the argument as
+ordinary text would emit a quoted string and make the command unable to create
+the same type it reads.

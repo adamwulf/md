@@ -121,14 +121,17 @@ struct FrontmatterCommand: AsyncParsableCommand {
             return
         }
 
-        if let outputFormat = format {
+        // Key projection reports a value in the source fence's syntax. The
+        // format flag applies only when serializing a complete frontmatter
+        // document or data block.
+        if let outputFormat = format, key == nil {
             frontmatter.format = outputFormat
         }
 
         if let keyPath = key {
             // Get mode
             if let value = frontmatter.get(keyPath) {
-                print(formatValue(value))
+                print(try formatValue(value, format: frontmatter.format))
             }
         } else if `set` != nil {
             // Set mode
@@ -177,9 +180,35 @@ struct FrontmatterCommand: AsyncParsableCommand {
         }
     }
 
-    private func formatValue(_ value: Any) -> String {
+    private func formatValue(
+        _ value: Any,
+        format: FrontmatterFormat
+    ) throws -> String {
         if let array = value as? [Any] {
-            return array.map { "\($0)" }.joined(separator: "\n")
+            return try array.map { element in
+                if element is NSNull { return "null" }
+                if element is [Any] || element is [String: Any] {
+                    return try Frontmatter.serializeInlineCollection(
+                        element,
+                        format: format
+                    )
+                }
+                return "\(element)"
+            }.joined(separator: "\n")
+        }
+        if value is NSNull {
+            return "null"
+        }
+        if let dict = value as? [String: Any] {
+            let projected = Frontmatter(
+                format: format,
+                data: dict,
+                rawContent: "",
+                body: "",
+                originalContent: ""
+            )
+            return try projected.serializeData()
+                .trimmingCharacters(in: .newlines)
         }
         return "\(value)"
     }

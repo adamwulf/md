@@ -1,0 +1,2 @@
+`frontmatter --key` projects a value from the source fence. The `--format` flag
+does not change that value's spelling, including when the value is a mapping.

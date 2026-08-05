@@ -98,7 +98,7 @@ struct ListCommand: AsyncParsableCommand {
     func render(_ entries: [Entry]) throws -> String {
         switch output {
         case .plain:
-            return renderPlain(entries)
+            return try renderPlain(entries)
         case .json:
             return try renderJSON(entries) + "\n"
         case .ndjson:
@@ -149,14 +149,15 @@ struct ListCommand: AsyncParsableCommand {
         }
     }
 
-    /// JSONSerialization aborts the process when it receives a non-finite
-    /// number. Validate every file independently so a bad file is reported and
-    /// skipped without preventing valid neighbors from being rendered.
+    /// Validate every requested representation independently so a bad file is
+    /// reported and skipped without preventing valid neighbors from being
+    /// rendered. This also keeps Foundation from seeing non-finite JSON values.
     private func prepareEntriesForRendering(
         _ entries: [Entry]
     ) -> (entries: [Entry], hadErrors: Bool) {
-        let plainScalarOutput = output == .plain && key != nil
-        guard !plainScalarOutput, format == .json || output != .plain else {
+        let needsJSON = output != .plain || format == .json
+        let needsTOML = format == .toml
+        guard needsJSON || needsTOML else {
             return (entries, false)
         }
 
@@ -168,7 +169,13 @@ struct ListCommand: AsyncParsableCommand {
                 continue
             }
             do {
-                try projectedFrontmatter(from: frontmatter).validateForJSON()
+                let projected = projectedFrontmatter(from: frontmatter)
+                if needsTOML {
+                    try projected.validateForTOML()
+                }
+                if needsJSON {
+                    try projected.validateForJSON()
+                }
                 validEntries.append(entry)
             } catch {
                 writeStderr("md list: \(entry.path): \(error.localizedDescription)")
@@ -239,12 +246,13 @@ struct ListCommand: AsyncParsableCommand {
 
     // MARK: - Emitters
 
-    private func renderPlain(_ entries: [Entry]) -> String {
+    private func renderPlain(_ entries: [Entry]) throws -> String {
         var out = ""
         if let key = key {
             for entry in entries {
                 guard let fm = entry.frontmatter, let value = fm.get(key) else { continue }
-                out += "\(entry.path)\t\(formatScalarValue(value))\n"
+                let formatted = try formatScalarValue(value, format: fm.format)
+                out += "\(entry.path)\t\(formatted)\n"
             }
             return out
         }
@@ -343,20 +351,35 @@ struct ListCommand: AsyncParsableCommand {
 
     // MARK: - Scalar formatting
 
-    private func formatScalarValue(_ value: Any) -> String {
+    private func formatScalarValue(
+        _ value: Any,
+        format: FrontmatterFormat
+    ) throws -> String {
         // Normalize dates / nested structures into JSON-friendly shape first so
         // dates become ISO-8601 instead of Swift's Date debug description. This
         // is plain output, though, so non-finite values remain readable tokens
         // instead of JSON's defensive null representation.
         let normalized = normalizeForPlainScalar(value)
         if let array = normalized as? [Any] {
-            return array.map { "\($0)" }.joined(separator: ",")
+            return try array.map { element in
+                if element is NSNull { return "null" }
+                if element is [Any] || element is [String: Any] {
+                    return try Frontmatter.serializeInlineCollection(
+                        element,
+                        format: format
+                    )
+                }
+                return "\(element)"
+            }.joined(separator: ",")
         }
         if let dict = normalized as? [String: Any] {
-            let data = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys])
-            if let data = data, let str = String(data: data, encoding: .utf8) {
-                return str
-            }
+            return try Frontmatter.serializeInlineCollection(
+                dict,
+                format: format
+            )
+        }
+        if normalized is NSNull {
+            return "null"
         }
         return "\(normalized)"
     }

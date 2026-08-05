@@ -289,6 +289,10 @@ final class FrontmatterConversionTests: XCTestCase {
 
     // MARK: - normalizeForYAML
 
+    func testNormalizeForYAMLPreservesNull() {
+        XCTAssertTrue(Frontmatter.normalizeForYAML(NSNull()) is NSNull)
+    }
+
     func testNormalizeForYAMLPreservesScalarTypes() {
         XCTAssertEqual(Frontmatter.normalizeForYAML(true) as? Bool, true)
         XCTAssertEqual(Frontmatter.normalizeForYAML(7) as? Int, 7)
@@ -357,8 +361,8 @@ final class FrontmatterConversionTests: XCTestCase {
         XCTAssertEqual(dict["dt"] as? String, "2026-04-18T12:34:56Z")
     }
 
-    func testSwiftValuesConvertBackIntoATOMLTable() {
-        let table = Frontmatter.dictToTOMLTable([
+    func testSwiftValuesConvertBackIntoATOMLTable() throws {
+        let table = try Frontmatter.dictToTOMLTable([
             "s": "x",
             "i": 3,
             "d": 1.5,
@@ -374,11 +378,47 @@ final class FrontmatterConversionTests: XCTestCase {
         XCTAssertEqual(table["list"]?.array?.count, 2)
     }
 
-    func testAValueTOMLCannotHoldIsStoredAsItsDescription() {
-        let table = Frontmatter.dictToTOMLTable([
+    func testAValueTOMLCannotHoldIsStoredAsItsDescription() throws {
+        let table = try Frontmatter.dictToTOMLTable([
             "url": URL(fileURLWithPath: "/tmp/x")
         ])
         XCTAssertEqual(table["url"]?.string, "file:///tmp/x")
+    }
+
+    func testTOMLSerializationRefusesANullValue() {
+        let frontmatter = Frontmatter(
+            format: .toml,
+            data: ["published": NSNull()],
+            rawContent: "",
+            body: "",
+            originalContent: ""
+        )
+
+        XCTAssertThrowsError(try frontmatter.serializeData()) { error in
+            XCTAssertEqual(
+                error.localizedDescription,
+                "TOML cannot represent the null value at key path published"
+            )
+        }
+    }
+
+    func testTOMLSerializationReportsTheFirstNullKeyInSortedOrder() {
+        let keys = Array("abcdefghijklmnopqrstuvwxyz").map(String.init)
+        let data = Dictionary(uniqueKeysWithValues: keys.map { ($0, NSNull()) })
+        let frontmatter = Frontmatter(
+            format: .toml,
+            data: data,
+            rawContent: "",
+            body: "",
+            originalContent: ""
+        )
+
+        XCTAssertThrowsError(try frontmatter.serializeData()) { error in
+            XCTAssertEqual(
+                error.localizedDescription,
+                "TOML cannot represent the null value at key path a"
+            )
+        }
     }
 
     // MARK: - parseValue
@@ -416,6 +456,12 @@ final class FrontmatterConversionTests: XCTestCase {
 
     func testParseValueOfASingleElementListIsAOneElementList() {
         XCTAssertEqual(Frontmatter.parseValue("[only]") as? [String], ["only"])
+    }
+
+    func testParseValueRecognizesNullInsideAList() throws {
+        let values = try XCTUnwrap(Frontmatter.parseValue("[a, null]") as? [Any])
+        XCTAssertEqual(values[0] as? String, "a")
+        XCTAssertTrue(values[1] is NSNull)
     }
 
     func testParseValueOfAnUnclosedBracketIsAString() {
