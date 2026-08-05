@@ -114,6 +114,20 @@ final class MarkdownEscapeTests: XCTestCase {
         XCTAssertEqual(paragraphText("count < 10"), "count < 10")
     }
 
+    /// A number cannot begin the scheme of an autolink, and it cannot begin the name
+    /// of an HTML tag. Thus `<` before a number stays plain.
+    func testAngleBracketStaysPlainBeforeANumber() {
+        XCTAssertEqual(paragraphText("I <3 this"), "I <3 this")
+        XCTAssertEqual(paragraphText("count <42 items"), "count <42 items")
+    }
+
+    /// The local part of an email address can begin with a number, thus a `<` before a
+    /// number keeps its backslash when an `@` follows it in the same word.
+    func testAngleBracketKeepsABackslashBeforeAnEmailAddress() {
+        XCTAssertEqual(paragraphText("mail \\<1adam@example.com\\> now"), "mail \\<1adam@example.com> now")
+        XCTAssertEqual(paragraphText("mail \\<adam@example.com\\> now"), "mail \\<adam@example.com> now")
+    }
+
     /// An underscore between two letters or numbers does nothing in markdown, thus a
     /// name such as `snake_case_name` must stay as it is.
     func testUnderscoreInsideAWordStaysPlain() {
@@ -167,14 +181,25 @@ final class MarkdownEscapeTests: XCTestCase {
     // MARK: - Character entities
 
     /// `&amp;amp;` is the text `&amp;`. Written with no backslash it reads back as `&`,
-    /// thus the `&` keeps its backslash when a name can follow it.
+    /// thus that `&` keeps its backslash. An entity has three shapes: a name, a
+    /// decimal number, and a hexadecimal number. Each one ends with a `;`.
     func testParagraphKeepsEntityAmpersand() {
         XCTAssertEqual(paragraphText("&amp;amp; literal"), "\\&amp; literal")
+        XCTAssertEqual(paragraphText("&amp;#35; literal"), "\\&#35; literal")
+        XCTAssertEqual(paragraphText("&amp;#x263A; literal"), "\\&#x263A; literal")
     }
 
     /// An `&` with a space after it starts no entity, thus it stays plain.
     func testPlainAmpersandStaysPlain() {
         XCTAssertEqual(paragraphText("100% & more"), "100% & more")
+    }
+
+    /// An entity needs a `;` at its end. `AT&T` has none, thus the `&` stays plain and
+    /// the text reads as the writer wrote it.
+    func testAmpersandStaysPlainWithNoSemicolon() {
+        XCTAssertEqual(paragraphText("AT&T and R&D"), "AT&T and R&D")
+        XCTAssertEqual(paragraphText("&nbsp with no semicolon"), "&nbsp with no semicolon")
+        XCTAssertEqual(paragraphText("Tom & Jerry"), "Tom & Jerry")
     }
 
     // MARK: - Live markup must not get a second escape

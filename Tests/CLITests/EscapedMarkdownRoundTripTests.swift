@@ -135,6 +135,8 @@ final class EscapedMarkdownRoundTripTests: XCTestCase {
             "a - b",
             "2 + 2 = 4",
             "5 \\* 3 = 15",
+            "AT&T and R&D",
+            "I <3 this",
         ]
         for source in sources {
             XCTAssertEqual(runFormat(source + "\n"), source + "\n", "the file changed for \(source.debugDescription)")

@@ -47,6 +47,10 @@ enum EscapeCases {
         "5 \\* 3 = 15",
         "a - b",
         "2 + 2 = 4",
+        "AT&T and R&D",
+        "I <3 this",
+        "&amp;#35; literal",
+        "mail \\<1adam@example.com\\> now",
     ]
 
     /// The text of every block, joined. Enough to show any change of the text, of the
