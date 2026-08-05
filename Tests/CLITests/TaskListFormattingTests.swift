@@ -47,10 +47,10 @@ final class TaskListFormattingTests: XCTestCase {
 
     func testTheCheckboxIsNotPartOfTheItemText() {
         let blocks = parser.parse("- [ ] Ship the release\n")
-        guard case .list(let items, _, _, _, _) = blocks[0] else {
-            return XCTFail("expected a list block")
+        guard let first = blocks.first, case .list(let items, _, _, _, _) = first else {
+            return XCTFail("expected a list block, got \(blocks.count) blocks")
         }
-        XCTAssertEqual(items[0].text, "Ship the release")
+        XCTAssertEqual(items.map(\.text), ["Ship the release"])
     }
 
     func testAPlainItemNextToATaskItemKeepsNoBox() {
@@ -123,8 +123,8 @@ final class TaskListFormattingTests: XCTestCase {
         let output = BlockFormatter.format(parser.parse(source))
         let blocks = parser.parse(output)
         XCTAssertEqual(blocks.count, 1, "the wrap split the item:\n\(output)")
-        guard case .list(let items, _, _, _, _) = blocks[0] else {
-            return XCTFail("expected a list block")
+        guard let first = blocks.first, case .list(let items, _, _, _, _) = first else {
+            return XCTFail("expected a list block, got \(blocks.count) blocks:\n\(output)")
         }
         XCTAssertEqual(items.count, 1, "the wrap became two items:\n\(output)")
     }

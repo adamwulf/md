@@ -210,9 +210,8 @@ final class TaskListParsingTests: XCTestCase {
 
         """
         let items = items(source)
-        XCTAssertEqual(items.count, 1)
-        XCTAssertEqual(items[0].text, "Ship the release\n\nWait for the sign off first.")
-        XCTAssertEqual(items[0].task, .unchecked)
+        XCTAssertEqual(items.map(\.text), ["Ship the release\n\nWait for the sign off first."])
+        XCTAssertEqual(items.map(\.task), [.unchecked])
     }
 
     func testASoftWrapKeepsOneItemAndOneParagraph() {
@@ -222,7 +221,6 @@ final class TaskListParsingTests: XCTestCase {
 
         """
         let items = items(source)
-        XCTAssertEqual(items.count, 1)
-        XCTAssertFalse(items[0].text.contains("\n\n"), "a soft wrap became two paragraphs")
+        XCTAssertEqual(items.map { $0.text.contains("\n\n") }, [false], "a soft wrap became two paragraphs")
     }
 }
