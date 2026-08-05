@@ -70,6 +70,22 @@ final class FormatCommandRunTests: XCTestCase {
         XCTAssertTrue(output.hasSuffix("+++\n# Heading\n"), "got: \(output)")
     }
 
+    func testFormatRefusesToConvertANullValueToTOML() async throws {
+        let path = try scratch.write(
+            "---\npublished: null\n---\nBody\n",
+            to: "document.md"
+        )
+        let command = try FormatCommand.parse([
+            "--frontmatter", "toml", "--file", path,
+        ])
+
+        await XCTAssertThrowsErrorMessage(
+            "TOML cannot represent the null value at key path published"
+        ) {
+            try await command.run()
+        }
+    }
+
     func testFormatStripsEmptyFrontmatter() async throws {
         let output = try await runFormat(on: "---\n---\n#    Heading\n")
         XCTAssertEqual(output, "# Heading\n")

@@ -244,6 +244,31 @@ final class ListCommandTests: XCTestCase {
         XCTAssertTrue(out.hasSuffix("\tfirst,null\n"), "got: \(out.debugDescription)")
     }
 
+    func testRunReportsANullThatTOMLCannotRepresent() async throws {
+        try write("---\npublished: null\n---\n", to: "a.md")
+        let command = try ListCommand.parse([
+            "--format", "toml", tempRoot.path,
+        ])
+
+        let captured = try await StandardStream.capturingCommandRun {
+            try await command.run()
+        }
+
+        XCTAssertEqual(captured.standardOutput, "")
+        XCTAssertTrue(
+            captured.standardError.hasSuffix(
+                "TOML cannot represent the null value at key path published\n"
+            ),
+            "got: \(captured.standardError.debugDescription)"
+        )
+        guard let exitCode = captured.error as? ExitCode else {
+            return XCTFail(
+                "Expected ExitCode.failure, got \(String(describing: captured.error))"
+            )
+        }
+        XCTAssertEqual(exitCode.rawValue, ExitCode.failure.rawValue)
+    }
+
     func testPlainKeyDoesNotTurnNestedNonFiniteNumbersIntoNull() throws {
         try write(
             "---\nmeasurements:\n  values: [.nan, 1.0]\n---\n",

@@ -1,0 +1,2 @@
+`list --format toml` must skip a file whose null value TOML cannot represent,
+report the conversion failure, and exit nonzero rather than printing `<null>`.
