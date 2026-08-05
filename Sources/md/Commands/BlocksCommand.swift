@@ -99,7 +99,7 @@ struct BlocksCommand: AsyncParsableCommand {
             return "code(\(lang)) L\(lineRange.lowerBound)-\(lineRange.upperBound)"
         case .list(let items, let ordered, _, _, let lineRange):
             let type = ordered ? "ordered" : "unordered"
-            return "\(type) list(\(items.count) items) L\(lineRange.lowerBound)-\(lineRange.upperBound)"
+            return "\(type) list(\(items.authoredCount) items) L\(lineRange.lowerBound)-\(lineRange.upperBound)"
         case .blockquote(_, _, _, let lineRange):
             return "blockquote L\(lineRange.lowerBound)-\(lineRange.upperBound)"
         case .thematicBreak(_, _, let lineRange):

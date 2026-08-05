@@ -1,0 +1,18 @@
+FORMATTING TWICE GIVES WHAT FORMATTING ONCE GAVE.
+
+`then-args` runs `format` again over the first run's output, so `expected.md`
+is the SECOND pass. It is byte for byte what a single pass produces, which is
+the claim: the output is a fixed point.
+
+This is the case that would have caught the defect at its worst. While the
+continuation was written as a bullet, a run turned a paragraph into an item,
+and that item was then a real item to the next run. The damage was not a
+formatting choice made afresh each time; it accumulated in the file. A one
+pass case can only say that a shape looks wrong. This one says that running
+the tool again does not make it worse, which is the property anyone piping
+`md format` over a directory is relying on.
+
+Idempotence is also the cheapest test of whether the writer and the reader
+agree. They agree only if what the writer emits is read back as the same
+model, and here that means the reader must see `  Tail paragraph...` as the
+first item's continuation and not as a third bullet.

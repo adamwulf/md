@@ -1,0 +1,31 @@
+AN ITEM SPLIT BY A NESTED LIST IS ONE ITEM.
+
+Three items here: the parent task, the nested note, and the sibling task. The
+parent's continuation paragraph is not a fourth. It used to be counted as one.
+
+WHY THE COUNT AND NOT THE BYTES. `format` can only show what the writer does.
+This case reads the block model, which is what the writer is given.
+
+Be exact about the harm, because it is easy to overstate. `replace`, `remove`
+and `insert-after` take BLOCK indices, and a list is one block however many
+items it holds, so a miscount here did NOT shift those indices. What it did do
+is report a number that is wrong: `md blocks` told the reader a list had four
+items when the author wrote three, and that report is the tool's answer to
+"what is in this document".
+
+The count also stands in for the writer's view of the same array. While the
+continuation counted as an item, `format` gave it a bullet, and the extra item
+then became REAL in the rewritten file. That is where the lasting damage was;
+see `format-keeps-a-tail-paragraph-inside-its-item`.
+
+The nested note IS an item and IS counted. Nesting is flattened into one
+array, so an item at any depth counts once. Only a continuation does not
+count, and `Array.authoredCount` is where that rule lives — use it rather than
+`count` whenever the question is how many items the author wrote.
+
+THE LINE RANGE MATTERS AS MUCH AS THE COUNT. L3-9 reaches the last line of the
+sibling task, so the continuation is inside the block rather than after it.
+That was already right and must stay right.
+
+The model's half of the defect whose writer's half is
+`format-keeps-a-tail-paragraph-inside-its-item`. One fix cleared both.

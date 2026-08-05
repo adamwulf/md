@@ -144,6 +144,88 @@ final class MarkdownParserTests: XCTestCase {
         }
     }
 
+    // MARK: - Items split by a nested list
+
+    /// The flat array cannot hold "text, a nested list, then more text", so the
+    /// tail is carried as its own entry. It is a CONTINUATION of the item, not
+    /// an item, and only the entry that opens the item carries the marker.
+    func testTailAfterANestedListContinuesTheItem() {
+        let markdown = "- Parent\n\n    - Nested\n\n    Tail paragraph\n"
+        let blocks = parser.parse(markdown)
+        // Count first, and guard rather than subscript: an empty result would
+        // TRAP on blocks[0] and take the whole run down with it, where a guard
+        // reports one failed test and lets the rest speak.
+        guard blocks.count == 1, case .list(let items, _, _, _, _) = blocks[0] else {
+            return XCTFail("Expected one list block, got \(blocks.count)")
+        }
+        XCTAssertEqual(items.count, 3)
+        XCTAssertEqual(items[0].text, "Parent")
+        XCTAssertFalse(items[0].continuation)
+        XCTAssertEqual(items[1].text, "Nested")
+        XCTAssertEqual(items[1].indentLevel, 1)
+        XCTAssertFalse(items[1].continuation)
+        XCTAssertEqual(items[2].text, "Tail paragraph")
+        XCTAssertTrue(items[2].continuation)
+        // The tail belongs to the parent, so it stands at the parent's level.
+        // Writing it one deeper would nest it under the sublist.
+        XCTAssertEqual(items[2].indentLevel, 0)
+    }
+
+    /// `count` answers how many entries the array holds. `authoredCount`
+    /// answers the question anyone reporting a list actually has.
+    func testAuthoredCountSkipsAContinuation() {
+        let markdown = "- Parent\n\n    - Nested\n\n    Tail paragraph\n"
+        let blocks = parser.parse(markdown)
+        guard blocks.count == 1, case .list(let items, _, _, _, _) = blocks[0] else {
+            return XCTFail("Expected one list block, got \(blocks.count)")
+        }
+        XCTAssertEqual(items.count, 3)
+        XCTAssertEqual(items.authoredCount, 2)
+    }
+
+    /// The author wrote ONE box. Two nested lists split the item into three
+    /// pieces, and the box must land on the first and never appear again: a
+    /// checkbox on a piece that had none claims a task nobody wrote.
+    func testACheckboxIsSpentOnceHoweverOftenTheItemIsSplit() {
+        let markdown = """
+        - [x] First
+
+            - A
+
+            Middle
+
+            - B
+
+            Tail
+        """
+        let blocks = parser.parse(markdown)
+        guard blocks.count == 1, case .list(let items, _, _, _, _) = blocks[0] else {
+            return XCTFail("Expected one list block, got \(blocks.count)")
+        }
+        let boxed = items.filter { $0.task != nil }
+        XCTAssertEqual(boxed.count, 1)
+        XCTAssertEqual(boxed.first?.text, "First")
+        XCTAssertEqual(boxed.first?.task, .checked)
+        // Both tails continue the item, and neither carries a box.
+        let continuations = items.filter { $0.continuation }
+        XCTAssertEqual(continuations.map(\.text), ["Middle", "Tail"])
+        XCTAssertTrue(continuations.allSatisfy { $0.task == nil })
+    }
+
+    /// An item with no nested list is not split at all, so nothing in it is a
+    /// continuation. Two paragraphs live in one item's text.
+    func testAnUnsplitItemHasNoContinuation() {
+        let markdown = "- Parent\n\n  Second paragraph\n\n- Sibling\n"
+        let blocks = parser.parse(markdown)
+        guard blocks.count == 1, case .list(let items, _, _, _, _) = blocks[0] else {
+            return XCTFail("Expected one list block, got \(blocks.count)")
+        }
+        XCTAssertEqual(items.count, 2)
+        XCTAssertEqual(items.authoredCount, 2)
+        XCTAssertEqual(items[0].text, "Parent\n\nSecond paragraph")
+        XCTAssertTrue(items.allSatisfy { !$0.continuation })
+    }
+
     // MARK: - Blockquotes
 
     func testParseBlockquote() {

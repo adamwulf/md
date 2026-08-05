@@ -1,9 +1,11 @@
-# Plan
+- [x] First paragraph
 
-- [x] Parent task
+    - A
 
-    - Nested note
+    Middle paragraph
 
-    Tail paragraph of the parent.
+    - B
+
+    Tail paragraph
 
 - [ ] Sibling task
