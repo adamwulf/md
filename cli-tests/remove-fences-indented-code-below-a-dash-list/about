@@ -1,0 +1,5 @@
+The same absorption as
+remove-fences-indented-code-rather-than-let-a-list-absorb-it, with a
+paragraph between the two blocks rather than a blockquote, and with dash
+bullets. The removed block does not decide the outcome: the list below
+the edit and the indented code block do.
