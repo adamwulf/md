@@ -28,7 +28,15 @@ item needs the same exception and has no flag to ask for it.
 
 The fix has to distinguish "this item produced no piece here" from "this item
 is empty". The item node is in hand at the point of the guard, so its child
-count answers that question directly.
+count looks like the answer: an item the author wrote empty has no children.
+
+IT IS NOT QUITE THE ANSWER, AND THE TRAP IS WRITTEN DOWN IN
+`format-keeps-a-link-reference-definition-in-a-list-item`. cmark eats a link
+reference definition and leaves no node behind, so `- [ref]: /url` ALSO has no
+children. Emit on child count alone and that input gains a bare `-` where its
+URL used to be, which invents a bullet nobody wrote — the very defect this
+branch just fixed. Read that case before touching this one; the source line is
+what tells the two apart.
 
 NOT the same defect as the continuation one, and not caused by its fix. This
 guard predates `ListItem.continuation`; the flag only decides whether a piece

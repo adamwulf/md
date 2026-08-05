@@ -1,0 +1,28 @@
+TRIMMING A TRAILING BLANK LINE IS CORRECT, AND IT SETTLES IN ONE PASS.
+
+`then-args` runs `format` again over the first run's output, so `expected.md`
+is the SECOND pass. One pass reaches the answer and the next changes nothing.
+
+WHY THIS CASE EXISTS. It records a conclusion, and the conclusion is that
+there is NO defect here. While chasing an empty list item that `format`
+deletes, the run looked damning:
+
+    "# Title\n\n- \n"  ->  "# Title\n\n"  ->  "# Title\n"
+
+Three different documents, so `format` appeared not to settle. The reading was
+wrong. The blank line in the middle answer is not a formatting mistake that a
+later pass repairs; it is the hole left by the DELETED ITEM, and deleting the
+item is the whole of the defect. See `format-keeps-an-empty-list-item`.
+
+This case isolates the normalization from the deletion by removing the list.
+Trimming the trailing blank line is right, and it is a fixed point, so it can
+be ruled out the next time a run of `format` seems unstable. Blaming the
+normalization would have sent the fix into `BlockFormatter`, which is nowhere
+near the guard in `MarkdownParser.collectListItems` that actually drops the
+item.
+
+A NOTE ON WHAT COUNTS AS SETTLED. The bar is that a SECOND pass changes
+nothing, not that the first pass changes nothing. The first pass is the
+normalization and it is expected to move things. What must never happen is a
+document that keeps moving, which is what
+`format-formats-a-split-item-the-same-way-twice` guards for lists.

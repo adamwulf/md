@@ -1,0 +1,43 @@
+A LIST ITEM HOLDING ONLY A LINK REFERENCE DEFINITION LOSES BOTH.
+
+WHAT md DOES TODAY. The whole list goes, and the URL with it:
+
+    "# Title\n\n"
+
+`md blocks` says `unordered list(0 items)` on the input, so the item is gone
+before the writer ever sees it.
+
+WHAT IT SHOULD DO. Write the item and its definition back. The URL appears
+nowhere else in the file, so once `format` writes the file it is gone for
+good.
+
+THE NEIGHBOUR THAT ALREADY OWNS HALF OF THIS.
+`format-keeps-an-unused-link-reference-definition` tracks the same loss at the
+top level of a document, and states the cause: cmark-gfm consumes a link
+reference definition while parsing and stores it in the document's reference
+map rather than leaving a node in the tree, so `MarkdownParser.parse` never
+sees one. Keeping it needs the definitions read out of the SOURCE before the
+tree is walked, because the parser will not hand them back.
+
+WHY THIS CASE IS NOT A DUPLICATE. Inside a list item the loss takes a second
+thing with it. The item has no children left once cmark has eaten the
+definition, so the item produces nothing, the LIST empties, and a block that
+the author wrote disappears whole. At the top level only the definition is
+lost and the surrounding document survives.
+
+READ THIS BEFORE FIXING `format-keeps-an-empty-list-item`. THE TWO INTERACT.
+That defect is an item with no children being dropped, and the obvious fix is
+to emit an item when the item node has no children, since that is how an item
+the author wrote empty looks. An item whose only content was a link reference
+definition looks EXACTLY the same to that test, because cmark removed the node.
+So the obvious fix turns this input into:
+
+    # Title
+
+    -
+
+which is worse than today: the URL is still gone AND a bare bullet is invented
+in its place, which is the same class of defect as the one this branch just
+fixed. Whichever lands second has to tell the two apart, and the source text
+is the only place that can: the line under the item says `[ref]: /url`, and an
+item the author wrote empty has nothing after its marker.
