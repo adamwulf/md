@@ -120,14 +120,12 @@ enum MarkdownEscaper {
         case "<":
             // A `<` can open an autolink, an email address, or an HTML tag. Before a
             // space or an operator it opens nothing, thus `a < b` stays as it is.
-            guard let next else { return false }
-            return next.isASCIIAlphanumeric || next == "/" || next == "!" || next == "?"
+            return opensAngleMarkup(at: index, in: characters)
 
         case "&":
-            // `&name;` and `&#35;` are character entities, and a reader changes each
-            // one into the character it names.
-            guard let next else { return false }
-            return next.isASCIIAlphanumeric || next == "#"
+            // `&amp;`, `&#35;` and `&#x263A;` are character entities, and a reader
+            // changes each one into the character it names.
+            return beginsEntity(at: index, in: characters)
 
         case "|":
             // Only a table gives a `|` a meaning.
@@ -136,6 +134,69 @@ enum MarkdownEscaper {
         default:
             return false
         }
+    }
+
+    // MARK: - Lookahead rules
+
+    /// True when the `<` at `index` can open an autolink, an HTML tag, or an email
+    /// address.
+    ///
+    /// The scheme of an autolink and the name of an HTML tag both begin with a letter,
+    /// thus a number after the `<` is safe. The local part of an email address can
+    /// begin with a number, thus a number is safe only when no `@` follows it in the
+    /// same word.
+    private static func opensAngleMarkup(at index: Int, in characters: [Character]) -> Bool {
+        guard let next = index + 1 < characters.count ? characters[index + 1] : nil else { return false }
+
+        if next.isASCIILetter || next == "/" || next == "!" || next == "?" {
+            return true
+        }
+        guard next.isASCIIDigit else { return false }
+
+        // An email address holds no space, and a `>` ends it.
+        var scan = index + 1
+        while scan < characters.count {
+            let character = characters[scan]
+            if character == "@" { return true }
+            if character.isWhitespace || character == ">" || character == "<" { return false }
+            scan += 1
+        }
+        return false
+    }
+
+    /// True when the `&` at `index` begins a character entity: a name, a decimal
+    /// number, or a hexadecimal number, and then a `;`.
+    ///
+    /// A shape with no `;` is not an entity, thus `AT&T` and `&nbsp` stay as they are.
+    /// This looks at the shape only, thus `&notaname;` gets a backslash that it does
+    /// not need. That is safe, and it holds no list of every entity name.
+    private static func beginsEntity(at index: Int, in characters: [Character]) -> Bool {
+        var scan = index + 1
+        guard scan < characters.count else { return false }
+
+        let body: (Character) -> Bool
+        if characters[scan] == "#" {
+            scan += 1
+            if scan < characters.count, characters[scan] == "x" || characters[scan] == "X" {
+                scan += 1
+                body = { $0.isASCIIHexDigit }
+            } else {
+                body = { $0.isASCIIDigit }
+            }
+        } else {
+            body = { $0.isASCIIAlphanumeric }
+        }
+
+        // The longest name of an entity is 31 characters, thus this stops early on
+        // text that holds no entity at all.
+        let limit = min(characters.count, scan + 32)
+        let start = scan
+        while scan < limit, body(characters[scan]) {
+            scan += 1
+        }
+
+        guard scan > start, scan < characters.count else { return false }
+        return characters[scan] == ";"
     }
 
     // MARK: - Rules for a position
@@ -196,5 +257,7 @@ enum MarkdownEscaper {
 
 private extension Character {
     var isASCIIDigit: Bool { isASCII && isNumber }
+    var isASCIILetter: Bool { isASCII && isLetter }
     var isASCIIAlphanumeric: Bool { isASCII && (isLetter || isNumber) }
+    var isASCIIHexDigit: Bool { isASCII && isHexDigit }
 }
