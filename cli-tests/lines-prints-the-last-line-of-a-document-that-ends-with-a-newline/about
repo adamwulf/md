@@ -1,0 +1,2 @@
+The last real line is still line 3 when the document ends with a
+newline, and it prints with one terminator, not two.

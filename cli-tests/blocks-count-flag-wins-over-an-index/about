@@ -1,0 +1,2 @@
+--count is a mode, not a modifier: when it is present the command
+prints the number of blocks and the index arguments are not used.

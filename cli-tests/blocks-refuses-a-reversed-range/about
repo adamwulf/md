@@ -1,0 +1,6 @@
+Both 5 and 2 are blocks of this document, but the range runs
+backwards, so the command refuses instead of printing nothing.
+
+The range check runs inside `run()`, after the document is read, so the
+usage banner ArgumentParser attaches names the root command rather than
+the subcommand. The line worth guarding is the Error: line.

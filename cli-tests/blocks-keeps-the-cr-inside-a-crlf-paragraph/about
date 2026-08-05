@@ -1,0 +1,2 @@
+A CR between two lines of one block is inside the block, so the raw
+content keeps it. Only the CR that ends the block is left behind.

@@ -1,0 +1,2 @@
+CRLF endings must not shift the line numbers in the summary: a CRLF
+is one line ending, not two.

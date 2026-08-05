@@ -1,0 +1,4 @@
+Frontmatter is not a block. The document holds a heading and a
+paragraph, so the count is 2. Without the frontmatter step the
+opening `---` would read as a thematic break and the keys below it
+as a setext heading.

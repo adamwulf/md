@@ -1,0 +1,2 @@
+Lines are split on the newline only, so the CR of a CRLF ending
+stays with the line and the printed bytes match the file.

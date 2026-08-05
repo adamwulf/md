@@ -1,0 +1,4 @@
+The listing with no index: one line per block, a 1-based index in
+square brackets, the block type, and the source lines it covers.
+The table summary counts rows, and the delimiter row of a GFM table
+is not a row: a header plus one body row is two rows.

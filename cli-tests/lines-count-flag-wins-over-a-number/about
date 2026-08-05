@@ -1,0 +1,2 @@
+--count is a mode, not a modifier: when it is present the command
+prints the number of lines and the number arguments are not used.

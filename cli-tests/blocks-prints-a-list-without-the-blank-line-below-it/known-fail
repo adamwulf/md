@@ -1,0 +1,18 @@
+A list that is followed by a blank line is given that blank line.
+
+md reports the list of this document as L3-5 and slices it as
+"- a\n- b\n\n". The list holds lines 3 and 4. Line 5 is blank and
+belongs to no block: the paragraph below it starts on line 6, and md
+says so.
+
+The blank line ends the list, and cmark hands back an end_line that has
+already moved on to it, so the whole range is one line too long. Every
+blank line under the list is taken: two blank lines give L3-6. No other
+block type does this. A heading, a paragraph, a code block, a
+blockquote, a table and a thematic break all end on their last line of
+content, and a list at the end of a document ends correctly too, which
+is why the defect needs a blank line under the list to show up.
+
+Both symptoms:
+  blocks-does-not-give-a-list-the-blank-line-below-it (the summary)
+  blocks-prints-a-list-without-the-blank-line-below-it (the content)

@@ -1,0 +1,3 @@
+The width of the number column comes from the count of lines, not
+from the bytes of the text, so multi-byte characters must not move
+the text over.

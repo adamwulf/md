@@ -1,0 +1,3 @@
+Block content is sliced with byte offsets. A slice that counted
+characters instead would cut this paragraph short, because é, ï and
+the em dash are more than one byte each.

@@ -1,0 +1,10 @@
+md exits 0 and prints one empty line for `lines 4` on a document of
+three lines.
+
+The phantom element after the final newline makes 4 a legal line
+number, so the bounds check lets it through and the command answers
+with an empty line instead of refusing. A caller that walks lines
+1...count therefore reads one line too many, and `lines 1 4` writes
+a blank line the document does not hold.
+
+Same cause as lines-counts-a-document-that-ends-with-a-newline.

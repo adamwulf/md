@@ -1,0 +1,2 @@
+A tab inside a line is one byte of block content. A block that ran
+past its last byte would show the paragraph below it here.

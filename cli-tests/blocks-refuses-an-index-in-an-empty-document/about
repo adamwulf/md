@@ -1,0 +1,4 @@
+There is no block 1 in an empty document, so the command must refuse
+and print nothing on stdout. Only the exit code is pinned here: the
+message reads "in range 1...0", which is a range no index can be in,
+and is not worth freezing.

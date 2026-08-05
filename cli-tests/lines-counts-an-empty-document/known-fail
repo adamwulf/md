@@ -1,0 +1,7 @@
+md prints 1 for an empty file.
+
+components(separatedBy: "\n") on "" returns one empty element, and
+LinesCommand counts it. An empty file holds no lines, so the count
+is 0. blocks --count answers 0 on the same file.
+
+Same cause as lines-counts-a-document-that-ends-with-a-newline.

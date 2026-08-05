@@ -1,0 +1,5 @@
+Block indices are 1-based, so 0 is not a block.
+
+The range check runs inside `run()`, after the document is read, so the
+usage banner ArgumentParser attaches names the root command rather than
+the subcommand. The line worth guarding is the Error: line.

@@ -1,0 +1,4 @@
+There is no fixture in this case, so the path cannot be read. The
+command must print nothing on stdout and exit non-zero. Only the
+exit code is pinned: the message comes from Foundation and is
+localized, so its bytes depend on the machine.
