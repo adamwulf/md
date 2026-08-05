@@ -1,0 +1,60 @@
+A CONTINUATION PARAGRAPH IS TORN OUT OF ITS ITEM BY A NESTED LIST.
+
+WHAT md DOES TODAY. The tail paragraph comes back as a top-level bullet of
+its own:
+
+    - [x] Parent task
+
+        - Nested note
+
+    - Tail paragraph of the parent.      <-- invented bullet
+
+    - [ ] Sibling task
+
+WHAT IT SHOULD DO. The tail was authored as a continuation paragraph inside
+the first item, so it stays there, indented under the item content:
+
+      Tail paragraph of the parent.
+
+WHY THIS IS A MEANING DEFECT AND NOT A FORMATTING ONE. The author wrote TWO
+top-level items. The document now says there are THREE, and the third one is
+prose that was never a list item at all. On a task list that reads as a task
+nobody wrote. Every edit by index then lands one item out, because `replace`,
+`remove` and `insert-after` all count what the block model reports; see
+`blocks-counts-an-item-split-by-a-nested-list-once`.
+
+md ALREADY AGREES WITH THIS EXPECTATION when no nested list is involved.
+`blocks-counts-a-task-item-continuation-inside-its-item` passes today and
+asserts exactly the same principle: "A continuation paragraph belongs to the
+item above it, so a task list of two items with a continuation is TWO items
+and not three." The nested list is the only thing that changes the answer, and
+it has no business changing it.
+
+IT DAMAGES A CORRECT DOCUMENT. Feed `expected.md` here back to `md format`
+and the tail is torn out again. So this is not merely a shape md declines to
+produce; it is a shape md destroys. A document that was right before the run
+is wrong after it.
+
+CAUSE. `MarkdownParser.collectListItems`. `MarkdownBlock.list` holds ONE FLAT
+array of items, so an item cannot hold "text, then a nested list, then more
+text". The code copes by flushing the gathered text as a separate `ListItem`
+each time it meets a nested list, and the piece after the list becomes a
+sibling item indistinguishable from one the author wrote.
+
+The flat model is the real constraint. Note that the multi-paragraph case
+already works: two paragraphs with no nested list between them are joined into
+one `ListItem.text` with a blank line, and `BlockFormatter` writes the second
+at the continuation indent. Only the ordering forced by a nested list defeats
+that, because the nested items must be written BETWEEN the two paragraphs.
+
+A FIX THAT FITS THE MODEL. Mark the pieces flushed after the first as
+continuations of the item above rather than items in their own right: a
+`continuation` flag on `ListItem`, set for every piece after the first flush
+of one item. `BlockFormatter` writes a continuation at the parent's
+continuation indent with no marker and no checkbox, and whatever counts items
+skips it. That leaves the flat array intact and needs no change to the arity
+of `MarkdownBlock.list`.
+
+DO NOT let this case's fix put a checkbox back on the tail. See
+`format-does-not-invent-a-checkbox-on-a-split-item`, which guards that and
+whose expected bytes change when this defect is fixed.

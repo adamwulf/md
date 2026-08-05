@@ -1,0 +1,28 @@
+A CHECKBOX NEVER LANDS ON A PARAGRAPH THAT HAD NONE.
+
+The block model is flat, so an item holding a nested list is split into the
+piece before the list and the piece after it. The checkbox belongs to the
+piece that holds the item's FIRST paragraph and to no other. Hand it to every
+piece and the tail paragraph comes back as `- [x] Tail paragraph of the
+parent.`: the document then asserts that a task is DONE which nobody ever
+wrote as a task, let alone ticked.
+
+That is worse than dropping a line. A reader who loses a line can see that
+something is missing. A reader handed an invented finished task has no way to
+know it is false.
+
+The guard is the whole reason this case exists, and it holds today. Nothing
+else in cli-tests pins it, so a later change to how items are split could put
+the box back on the tail with the suite still green.
+
+WHAT THE EXPECTED BYTES DO AND DO NOT CLAIM.
+
+They pin the NARROW claim: the tail keeps its text and gains no checkbox.
+
+They do NOT endorse the rest of the shape. The tail is written as a top-level
+bullet of its own, and it was authored as a continuation paragraph INSIDE the
+first item. That is a separate open defect, tracked by
+`format-keeps-a-tail-paragraph-inside-its-item` and
+`blocks-counts-an-item-split-by-a-nested-list-once`. When that defect is
+fixed, the expected bytes here change, and the claim this case guards must
+still hold: no checkbox on a paragraph that had none.
