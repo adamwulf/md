@@ -415,6 +415,9 @@ final class MarkdownParserTests: XCTestCase {
         }
     }
 
+    /// A list item can hold more than one paragraph, and the two must not run together
+    /// as one word. A blockquote has the same shape and still loses its paragraph
+    /// break: see `testParseBlockquoteWithTwoParagraphsKeepsThemApart`.
     func testParseListItemWithTwoParagraphsKeepsThemApart() {
         let blocks = parser.parse("- para one\n\n  para two")
         XCTAssertEqual(blocks.count, 1)
@@ -423,12 +426,7 @@ final class MarkdownParserTests: XCTestCase {
             return
         }
         XCTAssertEqual(items.count, 1)
-        XCTExpectFailure("Two paragraphs of a list item are joined with no separator") {
-            XCTAssertTrue(
-                items[0].text.contains("\n"),
-                "The two paragraphs ran together: \(items[0].text.debugDescription)"
-            )
-        }
+        XCTAssertEqual(items[0].text, "para one\n\npara two")
     }
 
     // MARK: - Blockquotes

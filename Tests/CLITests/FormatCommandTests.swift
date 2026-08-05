@@ -250,32 +250,20 @@ final class FormatCommandTests: XCTestCase {
         }
     }
 
-    /// KNOWN FAILURE, kept as documentation for a later fix.
+    /// A soft break keeps its newline, thus the second line of a paragraph starts at
+    /// column 0 of the written file. A marker that the author escaped there would
+    /// become live markdown, and one paragraph would divide into two blocks.
     ///
-    /// The lost escape came before the soft-break change, but this failure did not.
-    /// `MarkdownParser.getNodeText` gives the text of a node without its backslash
-    /// escapes, thus `\#` in the source becomes `#` in the block text. While the two
-    /// lines ran together, that `#` stayed in the middle of a line and did nothing.
-    /// Now that a soft break keeps its newline, the second line starts at column 0 of
-    /// the written file, thus the marker becomes live markdown and one paragraph
-    /// divides into two blocks. Reverting the soft-break hunk makes all four cases
-    /// pass again.
-    ///
-    /// The fix is to put the escapes back in `getNodeText`, or to escape such a line
-    /// in `BlockFormatter`. Both are more than the soft-break change does. This is the
-    /// same class as `BlockFormatterTests.testFormatParagraphWithInertMarkerOnContinuationLine`.
-    /// Remove the `XCTExpectFailure` when the fix is in.
+    /// The escape work in `MarkdownEscaper` answers this: the backslash goes back on.
     func testFormatKeepsEscapedMarkdownOnContinuationLines() {
         let parser = MarkdownParser()
         for source in ["foo\n\\# bar\n", "foo\n\\- bar\n", "foo\n\\> bar\n", "foo\n\\`\\`\\`js\n"] {
             let once = runFormat(source)
-            XCTExpectFailure("Backslash escapes are dropped by MarkdownParser.getNodeText") {
-                XCTAssertEqual(
-                    parser.parse(once).count,
-                    parser.parse(source).count,
-                    "md format changed the number of blocks for \(source.debugDescription): \(once.debugDescription)"
-                )
-            }
+            XCTAssertEqual(
+                parser.parse(once).count,
+                parser.parse(source).count,
+                "md format changed the number of blocks for \(source.debugDescription): \(once.debugDescription)"
+            )
         }
     }
 }

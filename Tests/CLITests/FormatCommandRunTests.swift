@@ -137,13 +137,6 @@ final class FormatCommandRunTests: XCTestCase {
     // MARK: - What a format round trip loses
 
     func testFormatKeepsTheBreakInsideAWrappedParagraph() async throws {
-        XCTExpectFailure("""
-            MarkdownParser drops the soft line break between the two source \
-            lines, so md format writes them back as "line oneline two" and the \
-            two words are welded together. Formatting any wrapped prose loses a \
-            word boundary. Same root cause as the parser-level test of the same \
-            name in MarkdownParserTextExtractionTests.
-            """)
         let output = try await runFormat(on: "line one\nline two\n")
         XCTAssertEqual(output, "line one\nline two\n")
     }

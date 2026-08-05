@@ -49,27 +49,19 @@ final class BlockFormatterTests: XCTestCase {
         XCTAssertEqual(secondPass, firstPass)
     }
 
-    /// KNOWN FAILURE, kept as documentation for a later fix.
-    ///
     /// An indent of four or more spaces makes a markdown marker inert, thus the marker
     /// stays part of the paragraph text. The formatter writes each line of that text
-    /// without the indent, thus the marker becomes live markdown and the one paragraph
-    /// divides into more than one block, or becomes a heading.
+    /// without the indent, thus the marker would become live markdown and the one
+    /// paragraph would divide into more than one block, or become a heading.
     ///
-    /// The lost indent came before the soft-break change, but this failure did not:
-    /// while the two lines ran together, the marker stayed in the middle of a line and
-    /// did nothing.
-    ///
-    /// A full fix needs escape logic, or an indent, in the formatter, which is larger
-    /// than the soft break fix. Remove the `XCTExpectFailure` when the fix is in.
+    /// The escape work in `MarkdownEscaper` answers this: a marker that begins a line
+    /// of block text gets its backslash back.
     func testFormatParagraphWithInertMarkerOnContinuationLine() {
         for source in ["line1\n    ---", "line1\n    - x", "line1\n    1) x"] {
             XCTAssertEqual(parser.parse(source).count, 1, "Expected one paragraph: \(source.debugDescription)")
             let firstPass = BlockFormatter.format(parser.parse(source))
             let secondPass = BlockFormatter.format(parser.parse(firstPass))
-            XCTExpectFailure("An inert marker becomes live markdown after format") {
-                XCTAssertEqual(secondPass, firstPass, "source: \(source.debugDescription)")
-            }
+            XCTAssertEqual(secondPass, firstPass, "source: \(source.debugDescription)")
         }
     }
 
