@@ -4,5 +4,5 @@ never be pinned byte for byte. Cases that list at least one file therefore pipe
 the output through `md lines`, which selects the lines that hold no path.
 
 --missing skip drops plain.md entirely, leaving one block: a header line, one
-frontmatter line, and the final newline, which `md lines --count` reports as 3.
-Keeping plain.md would make it 6.
+frontmatter line, which `md lines --count` reports as 2. Keeping plain.md would
+make it 5 after the blank separator between blocks.

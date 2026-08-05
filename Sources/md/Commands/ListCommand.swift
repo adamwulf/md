@@ -344,18 +344,11 @@ struct ListCommand: AsyncParsableCommand {
     // MARK: - Scalar formatting
 
     private func formatScalarValue(_ value: Any) -> String {
-        // A plain scalar is not JSON. Keep non-finite numbers readable instead
-        // of passing them through JSON normalization, which represents them as
-        // null solely to protect Foundation's serializer.
-        if let number = value as? Double, !number.isFinite {
-            return "\(number)"
-        }
-        if let number = value as? Float, !number.isFinite {
-            return "\(number)"
-        }
         // Normalize dates / nested structures into JSON-friendly shape first so
-        // dates become ISO-8601 instead of Swift's Date debug description.
-        let normalized = Frontmatter.normalizeForJSON(value)
+        // dates become ISO-8601 instead of Swift's Date debug description. This
+        // is plain output, though, so non-finite values remain readable tokens
+        // instead of JSON's defensive null representation.
+        let normalized = normalizeForPlainScalar(value)
         if let array = normalized as? [Any] {
             return array.map { "\($0)" }.joined(separator: ",")
         }
@@ -366,6 +359,22 @@ struct ListCommand: AsyncParsableCommand {
             }
         }
         return "\(normalized)"
+    }
+
+    private func normalizeForPlainScalar(_ value: Any) -> Any {
+        if let dict = value as? [String: Any] {
+            return dict.mapValues { normalizeForPlainScalar($0) }
+        }
+        if let array = value as? [Any] {
+            return array.map { normalizeForPlainScalar($0) }
+        }
+        if let number = value as? Double, !number.isFinite {
+            return "\(number)"
+        }
+        if let number = value as? Float, !number.isFinite {
+            return "\(number)"
+        }
+        return Frontmatter.normalizeForJSON(value)
     }
 
     // MARK: - Stderr

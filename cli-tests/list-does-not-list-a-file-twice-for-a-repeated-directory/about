@@ -4,5 +4,6 @@ never be pinned byte for byte. Cases that list at least one file therefore pipe
 the output through `md lines`, which selects the lines that hold no path.
 
 `list` takes one or more directories, and naming the same one twice must not
-list its files twice. Two files are five lines plus the final newline, which
-`md lines --count` reports as 6. Listing each file twice would make it 12.
+list its files twice. Two files produce five lines, which `md lines --count`
+reports as 5. Listing each file twice would make it 11 because the two copies
+share the blank separator between them.

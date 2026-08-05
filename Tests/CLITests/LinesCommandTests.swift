@@ -81,6 +81,11 @@ final class LinesCommandTests: XCTestCase {
         XCTAssertEqual(output, "2\n")
     }
 
+    func testFinalCRLFTerminatesWithoutAddingAnotherLine() async throws {
+        let output = try await runLines(["--count"], on: "one\r\ntwo\r\n")
+        XCTAssertEqual(output, "2\n")
+    }
+
     func testCountKeepsABlankLineBeforeTheFinalNewline() async throws {
         let output = try await runLines(["--count"], on: "one\n\n")
         XCTAssertEqual(output, "2\n")
@@ -132,6 +137,11 @@ final class LinesCommandTests: XCTestCase {
         XCTAssertEqual(output, "1  alpha\r\n2  beta\r\n")
     }
 
+    func testListingKeepsABlankLastLineBeforeItsTerminator() async throws {
+        let output = try await runLines([], on: "alpha\n\n")
+        XCTAssertEqual(output, "1  alpha\n2  \n")
+    }
+
     /// Lines are raw source, so frontmatter delimiters are listed like any
     /// other line — unlike `md blocks`, which skips them.
     func testListingIncludesFrontmatterLines() async throws {
@@ -167,6 +177,11 @@ final class LinesCommandTests: XCTestCase {
         XCTAssertEqual(output, "three\n")
     }
 
+    func testBlankLastLineIsAccepted() async throws {
+        let output = try await runLines(["2"], on: "one\n\n")
+        XCTAssertEqual(output, "\n")
+    }
+
     // MARK: - Slice mode rejects out-of-range line numbers
 
     func testStartBelowOneIsRejected() async {
@@ -198,6 +213,14 @@ final class LinesCommandTests: XCTestCase {
             "Line numbers must be in range 1...3, got 4...4"
         ) {
             _ = try await self.runLines(["4"], on: "one\ntwo\nthree\n")
+        }
+    }
+
+    func testAnyLineInAnEmptyDocumentIsRejected() async {
+        await XCTAssertThrowsErrorMessage(
+            "Line numbers must be in range 1...0, got 1...1"
+        ) {
+            _ = try await self.runLines(["1"], on: "")
         }
     }
 

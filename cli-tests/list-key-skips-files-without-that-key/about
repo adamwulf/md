@@ -5,7 +5,7 @@ the output through `md lines`, which selects the lines that hold no path.
 
 --key prints one `path<TAB>value` line per file that HOLDS the key. Of the three
 files here only alpha.md has a `title`, so one line is printed and `md lines
---count` reports 2: the one line plus the final newline.
+--count` reports 1: the one emitted record.
 
 The value half of that line cannot be pinned on its own, because the path in
 front of it is absolute and lives in a randomly named scratch directory.
