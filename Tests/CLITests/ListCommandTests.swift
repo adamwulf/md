@@ -250,7 +250,7 @@ final class ListCommandTests: XCTestCase {
         let out = try runList(["--key", "values"])
 
         XCTAssertTrue(
-            out.hasSuffix("\t[first,null],c\n"),
+            out.hasSuffix("\t[first, null],c\n"),
             "got: \(out.debugDescription)"
         )
     }
