@@ -1,0 +1,2 @@
+--lines gives the line each heading starts on. The EOF number is the
+twelfth line, the empty one the final newline creates.

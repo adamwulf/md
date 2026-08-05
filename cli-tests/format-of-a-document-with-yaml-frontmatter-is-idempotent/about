@@ -1,0 +1,5 @@
+then-args runs format over the output of the first format. A normalizer
+has to reach its fixed point in one pass, so the second run must not move
+a single byte.
+The frontmatter the first pass writes has to parse back as
+frontmatter, not as a thematic break with a setext heading under it.

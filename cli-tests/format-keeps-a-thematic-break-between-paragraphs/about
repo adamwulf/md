@@ -1,0 +1,3 @@
+The break is a block of its own here, not frontmatter and not a
+setext underline, because a blank line separates it from the
+paragraph above.

@@ -1,0 +1,2 @@
+One trailing space is not a hard break, so nothing is lost by
+removing it. Two would be, and that is a different case.

@@ -1,0 +1,4 @@
+An indented code block becomes a fence. That is a legitimate
+normalization: a fence says the same thing more clearly. What the
+case guards is that every code line survives, in order, with the
+four space indent removed exactly once.

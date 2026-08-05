@@ -1,0 +1,15 @@
+format deletes the HTML block. The three lines of the div are simply gone
+from the output, and the two paragraphs around it close up as though the
+author had never written it.
+
+What it should do: emit the raw HTML block unchanged, the way every markdown
+renderer does.
+
+Cause: MarkdownBlock in Sources/MarkdownKit/MarkdownParser.swift has seven
+cases, and none of them is html. parseNode falls into its `default` branch for
+CMARK_NODE_HTML_BLOCK, finds the type string is not "table", and returns nil.
+FormatCommand then rebuilds the document out of the blocks it got back, so a
+block the parser never returned cannot be written out again. The same silent
+drop applies to every node kind the enum has no case for. Fixing it needs a
+block case that carries the literal text, plus a BlockFormatter arm that
+writes that text out verbatim.

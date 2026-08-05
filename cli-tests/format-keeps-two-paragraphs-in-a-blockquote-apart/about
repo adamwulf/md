@@ -1,0 +1,3 @@
+Two paragraphs inside one blockquote are two paragraphs. The blank
+quoted line between them is what keeps them apart, so it has to
+survive: without it the two sentences run together.

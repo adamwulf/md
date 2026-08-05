@@ -1,0 +1,3 @@
+Frontmatter is not markdown, so no heading comes out of it, but its
+lines are still lines of the file. The heading is on line five and
+the numbers have to say five, not two.

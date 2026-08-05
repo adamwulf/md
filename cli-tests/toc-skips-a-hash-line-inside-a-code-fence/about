@@ -1,0 +1,2 @@
+A hash at the start of a line inside a fence is a shell comment, not
+a heading. Only the real heading is listed.

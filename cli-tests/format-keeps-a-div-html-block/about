@@ -1,0 +1,2 @@
+A raw HTML block is part of the document. Markdown allows it, every
+renderer emits it, and a formatter has no licence to delete it.

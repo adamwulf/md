@@ -1,0 +1,3 @@
+With no terminator on the last line the file has three lines, and
+EOF is at the end of the third. Compare toc-numbers-headings-by-line,
+where the final newline makes an empty last line.

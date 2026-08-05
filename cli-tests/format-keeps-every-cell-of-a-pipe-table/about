@@ -1,0 +1,3 @@
+Header cells are three characters wide, so the delimiter row needs
+exactly three hyphens per column and the table comes back byte for
+byte. What the case really guards is that no row and no cell is lost.

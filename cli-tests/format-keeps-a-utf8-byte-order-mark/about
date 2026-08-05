@@ -1,0 +1,3 @@
+The mark is three bytes at the very start of the file and
+belongs to the file, not to the first heading. It comes back
+once: not dropped, and not doubled by treating it as text.

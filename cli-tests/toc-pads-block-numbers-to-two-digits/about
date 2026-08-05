@@ -1,0 +1,3 @@
+Ten blocks make the number column two wide, so every single digit
+block number is padded on the left and the numbers line up under the
+ten on the EOF line.

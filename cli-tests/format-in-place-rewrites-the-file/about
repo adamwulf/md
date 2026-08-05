@@ -1,0 +1,5 @@
+Every other command that rewrites a document takes -i/--in-place and
+writes nothing to stdout when it is given. format is the command a
+user reaches for to tidy a file they already have, so it needs the
+same flag; without it the only way to format in place is a shell
+redirect, and a redirect truncates the file before md reads it.

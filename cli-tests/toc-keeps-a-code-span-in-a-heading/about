@@ -1,0 +1,2 @@
+Inline markup in a heading is shown as the author wrote it, so the
+line can be matched back to the heading in the file.

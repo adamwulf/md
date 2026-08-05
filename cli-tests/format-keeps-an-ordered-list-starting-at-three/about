@@ -1,0 +1,2 @@
+The start value of an ordered list is content, not decoration: this
+list renders as 3. and 4. and must keep doing so after a format.

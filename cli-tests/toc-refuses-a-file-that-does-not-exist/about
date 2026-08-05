@@ -1,0 +1,4 @@
+A path that is not there is a failure, not an empty table of
+contents: stdout stays empty and the exit code is non zero. The
+message itself is Foundation's wording for a missing file, so it is
+not pinned here.

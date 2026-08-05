@@ -1,0 +1,4 @@
+The value keeps its type through the conversion: the string comes out as
+a TOML string under TOML delimiters. It is written as a literal string in
+single quotes, which is the TOML form that needs no escaping, rather than
+a basic string in double quotes. Both say the same thing.

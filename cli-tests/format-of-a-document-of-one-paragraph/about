@@ -1,0 +1,2 @@
+The boundary case of a single block: no separator is written before
+the first block or after the last one.

@@ -1,0 +1,2 @@
+Trailing spaces after a heading mean nothing to any renderer, so a
+normalizer removes them.

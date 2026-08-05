@@ -1,0 +1,6 @@
+then-args runs format over the output of the first format. A normalizer
+has to reach its fixed point in one pass, so the second run must not move
+a single byte.
+Every block kind that survives a round trip is here at once, so a
+block that moves the boundary of the block after it shows up as a
+difference on the second pass.

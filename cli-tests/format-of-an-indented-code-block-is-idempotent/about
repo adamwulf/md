@@ -1,0 +1,6 @@
+then-args runs format over the output of the first format. A normalizer
+has to reach its fixed point in one pass, so the second run must not move
+a single byte.
+The first pass turns the indented block into a fence. The second pass
+sees a fence and must leave it alone. If it instead re-indented or
+re-fenced the body, the file would grow on every run.
