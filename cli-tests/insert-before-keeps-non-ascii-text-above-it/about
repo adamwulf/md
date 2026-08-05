@@ -1,0 +1,4 @@
+The heading and the paragraph above the insert hold characters that
+run to two and three bytes each. insert-before finds the line to
+split at by counting bytes, so a slip there would cut a character
+in half or land on the wrong line.

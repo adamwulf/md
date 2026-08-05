@@ -1,0 +1,3 @@
+Error: Block index must be in range 1...5, got 0
+Usage: md insert-before [--in-place] <block-index> <content> [--file <file>] [--stdin]
+  See 'md insert-before --help' for more information.

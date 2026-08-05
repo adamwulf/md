@@ -1,0 +1,1 @@
+insert-before 2 "Middle paragraph." --file input.md

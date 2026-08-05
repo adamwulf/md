@@ -1,0 +1,3 @@
+Error: Must specify either --file or --stdin
+Usage: md remove [--in-place] <start> [<end>] [--file <file>] [--stdin]
+  See 'md remove --help' for more information.

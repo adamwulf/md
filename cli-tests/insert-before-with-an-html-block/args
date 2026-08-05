@@ -1,0 +1,3 @@
+insert-before 2 '<div class="note">
+  <p>Careful.</p>
+</div>' --file input.md

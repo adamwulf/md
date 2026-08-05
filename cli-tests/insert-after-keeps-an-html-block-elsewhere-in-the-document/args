@@ -1,0 +1,1 @@
+insert-after 1 "Inserted." --file input.md

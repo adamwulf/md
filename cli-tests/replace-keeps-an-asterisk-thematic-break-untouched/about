@@ -1,0 +1,3 @@
+Three asterisks and three hyphens both make a thematic break, but
+they are not the same bytes. The break is not the block being
+replaced, so it must come through as written.

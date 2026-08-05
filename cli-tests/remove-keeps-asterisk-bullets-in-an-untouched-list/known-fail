@@ -1,0 +1,8 @@
+md rewrites the two bullets as hyphens, so a command asked to remove
+the paragraph at the bottom also edits the list in the middle.
+
+RemoveCommand rebuilds the whole document with BlockFormatter, which
+prints every unordered item with a hyphen and has no memory of the
+marker the source used. A block the user did not name must come
+through byte for byte. Splicing the removal out of the source, as
+insert-before already does for its insert, would fix this.

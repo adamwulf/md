@@ -1,0 +1,5 @@
+md raises this after it has read the document, from run() rather than
+from validate(), so ArgumentParser no longer knows which subcommand the
+user typed and prints the usage of `md` itself. That is a defect of its
+own, held by remove-names-the-subcommand-in-the-usage-of-a-refusal.
+This case pins the exit code: a refusal must print nothing and exit 64.

@@ -1,0 +1,2 @@
+insert-before --file input.md 2 -- "- one
+- two"

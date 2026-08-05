@@ -1,0 +1,1 @@
+insert-after 1 "## New Section" --file input.md

@@ -1,0 +1,1 @@
+insert-before 5 "New paragraph." --file input.md -i

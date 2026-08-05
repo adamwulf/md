@@ -1,0 +1,2 @@
+A thematic break needs the blank line above it. Without one the
+heading above would swallow it, or it would read as a setext rule.

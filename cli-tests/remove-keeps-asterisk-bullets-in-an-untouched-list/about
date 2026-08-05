@@ -1,0 +1,3 @@
+The list is not the block being removed. An asterisk and a hyphen
+mean the same thing to a reader of the rendered page, but they are
+not the same bytes, and the user wrote one of them on purpose.

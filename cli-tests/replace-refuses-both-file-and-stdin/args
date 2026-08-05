@@ -1,0 +1,1 @@
+replace 1 "New paragraph." --file input.md --stdin

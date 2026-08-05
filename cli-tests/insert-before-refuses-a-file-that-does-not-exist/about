@@ -1,0 +1,4 @@
+A missing file is not a usage mistake, so it exits 1 rather than
+64. Its message comes from Foundation and reads differently on
+different systems, so only the exit code and the empty stdout
+are pinned.

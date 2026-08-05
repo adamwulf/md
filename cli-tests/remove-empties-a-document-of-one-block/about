@@ -1,0 +1,2 @@
+Removing the only block leaves an empty document. Nothing at all is
+printed, not even a newline.
