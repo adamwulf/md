@@ -7,6 +7,7 @@
 
 import XCTest
 @testable import md
+@testable import MarkdownKit
 
 final class FormatCommandTests: XCTestCase {
 
@@ -200,6 +201,76 @@ final class FormatCommandTests: XCTestCase {
             let out = runFormat(input, frontmatter: fm)
             XCTAssertTrue(out.contains("# Hi"), "body not normalized for input=\(input) fm=\(String(describing: fm))")
             XCTAssertFalse(out.contains("#   Hi"), "body still has triple space for input=\(input) fm=\(String(describing: fm))")
+        }
+    }
+
+    // MARK: - Soft line breaks
+
+    func testFormatKeepsSoftLineBreaksInParagraph() {
+        let out = runFormat("line1\nline2\nline3\n")
+        XCTAssertEqual(out, "line1\nline2\nline3\n")
+    }
+
+    func testFormatOfMultilineParagraphKeepsTheBlockCount() {
+        // Every command that writes a file (`md format`, `md replace -i`,
+        // `md insert-after -i`) sends each block through BlockFormatter. If the
+        // number of blocks moves, block indices move with it and a later
+        // `md replace N` hits the wrong block.
+        let source = "line1\nline2\nline3\n\npara2\n"
+        let parser = MarkdownParser()
+        XCTAssertEqual(parser.parse(runFormat(source)).count, parser.parse(source).count)
+    }
+
+    /// REGRESSION for the soft-break change, currently FAILING.
+    ///
+    /// A setext heading written on two lines now holds a newline in its text, but
+    /// BlockFormatter writes a heading as one ATX line. Thus `md format` turns one
+    /// heading into a heading plus a paragraph, the block count moves from 2 to 3,
+    /// and a second `md format` gives a different result again.
+    ///
+    /// The fix belongs in `MarkdownParser`: heading text must stay on one line. See
+    /// `MarkdownParserTests.testParseSetextHeadingKeepsTextOnOneLine`.
+    func testFormatKeepsMultilineSetextHeadingAsOneBlock() {
+        let source = "First part\nSecond part\n===\n\nnext para\n"
+        let parser = MarkdownParser()
+
+        let once = runFormat(source)
+        XCTAssertEqual(
+            parser.parse(once).count,
+            parser.parse(source).count,
+            "md format changed the number of blocks: \(once.debugDescription)"
+        )
+        XCTAssertEqual(once, runFormat(once), "md format is not idempotent")
+
+        let formattedBlocks = parser.parse(once)
+        if let first = formattedBlocks.first, case .heading(_, let text, _, _, _) = first {
+            XCTAssertEqual(text, "First part Second part")
+        } else {
+            XCTFail("Expected the first block to stay a heading, got: \(once.debugDescription)")
+        }
+    }
+
+    /// KNOWN FAILURE that came before the soft-break change.
+    ///
+    /// `MarkdownParser.getNodeText` gives the text of a node without its backslash
+    /// escapes, thus `\#` in the source becomes `#` in the block text. On one line
+    /// this already turns a paragraph into a heading. With soft breaks kept, the
+    /// same loss now also cuts one paragraph into two blocks, because the second
+    /// line starts at column 0 of the written file.
+    ///
+    /// The fix is to put the escapes back in `getNodeText`, which is more than the
+    /// soft-break change does. Remove the `XCTExpectFailure` when the fix is in.
+    func testFormatKeepsEscapedMarkdownOnContinuationLines() {
+        XCTExpectFailure("Backslash escapes are dropped by MarkdownParser.getNodeText")
+
+        let parser = MarkdownParser()
+        for source in ["foo\n\\# bar\n", "foo\n\\- bar\n", "foo\n\\> bar\n", "foo\n\\`\\`\\`js\n"] {
+            let once = runFormat(source)
+            XCTAssertEqual(
+                parser.parse(once).count,
+                parser.parse(source).count,
+                "md format changed the number of blocks for \(source.debugDescription): \(once.debugDescription)"
+            )
         }
     }
 }

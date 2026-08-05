@@ -193,6 +193,70 @@ final class MarkdownParserTests: XCTestCase {
         }
     }
 
+    /// REGRESSION for the soft-break change.
+    ///
+    /// A setext heading (a line of text with `===` or `---` below it) can be written
+    /// on more than one line. Its text now holds the soft break, but a heading block
+    /// is written back as one ATX line (`# text`), thus a newline in the text splits
+    /// one heading into a heading plus a paragraph. See
+    /// `FormatCommandTests.testFormatKeepsMultilineSetextHeadingAsOneBlock`.
+    ///
+    /// A heading is one line, thus the soft break must become a space.
+    func testParseSetextHeadingKeepsTextOnOneLine() {
+        for markdown in ["First part\nSecond part\n===", "First part\nSecond part\n---"] {
+            let blocks = parser.parse(markdown)
+            XCTAssertEqual(blocks.count, 1)
+            if case .heading(_, let text, _, _, _) = blocks[0] {
+                XCTAssertFalse(text.contains("\n"), "Heading text has a newline: \(text.debugDescription)")
+                XCTAssertEqual(text, "First part Second part")
+            } else {
+                XCTFail("Expected heading block")
+            }
+        }
+    }
+
+    func testParseParagraphKeepsSoftLineBreaksWithCRLFLineEndings() {
+        // cmark makes all line endings the same, thus CRLF and CR give "\n" in the
+        // block text. No "\r" is left behind.
+        for markdown in ["line1\r\nline2\r\nline3", "line1\rline2\rline3"] {
+            let blocks = parser.parse(markdown)
+            XCTAssertEqual(blocks.count, 1)
+            if case .paragraph(let text, _, _, _) = blocks[0] {
+                XCTAssertEqual(text, "line1\nline2\nline3")
+            } else {
+                XCTFail("Expected paragraph block")
+            }
+        }
+    }
+
+    func testParseParagraphKeepsSoftLineBreaksWithUnicode() {
+        let markdown = "héllo wörld\nsecond ünicode line\n🎉 emoji line"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.count, 1)
+        if case .paragraph(let text, _, _, _) = blocks[0] {
+            XCTAssertEqual(text, "héllo wörld\nsecond ünicode line\n🎉 emoji line")
+        } else {
+            XCTFail("Expected paragraph block")
+        }
+    }
+
+    func testParseNestedListItemsKeepSoftLineBreaks() {
+        let markdown = "- a\n  a2\n    - b\n      b2\n        - c\n          c2"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.count, 1)
+        if case .list(let items, _, _, _, _) = blocks[0] {
+            XCTAssertEqual(items.count, 3)
+            XCTAssertEqual(items[0].text, "a\na2")
+            XCTAssertEqual(items[0].indentLevel, 0)
+            XCTAssertEqual(items[1].text, "b\nb2")
+            XCTAssertEqual(items[1].indentLevel, 1)
+            XCTAssertEqual(items[2].text, "c\nc2")
+            XCTAssertEqual(items[2].indentLevel, 2)
+        } else {
+            XCTFail("Expected list block")
+        }
+    }
+
     // MARK: - Code Blocks
 
     func testParseCodeBlock() {
