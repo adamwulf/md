@@ -23,12 +23,13 @@ enum BlockFormatter {
 
         case .codeBlock(let language, let code, _, _, _):
             let lang = language ?? ""
-            output += "```\(lang)\n"
+            let fence = fence(enclosing: code)
+            output += "\(fence)\(lang)\n"
             output += code
             if !code.hasSuffix("\n") {
                 output += "\n"
             }
-            output += "```\n"
+            output += "\(fence)\n"
 
         case .list(let items, _, _, _, _):
             // The items are one flat array across every level of nesting, so
@@ -122,6 +123,30 @@ enum BlockFormatter {
         }
 
         return output
+    }
+
+    /// The fence that encloses code without being closed by it.
+    ///
+    /// A fenced code block ends at the first line holding a run of backticks
+    /// at least as long as the opening fence, so a three backtick fence around
+    /// code that itself holds three backticks closes early. The block then
+    /// reads back as an empty code block, a paragraph, and a second empty code
+    /// block: one block becomes three, and the code becomes prose.
+    ///
+    /// Counting every run, and not only the runs that begin a line, costs one
+    /// backtick in a rare case and cannot be wrong.
+    private static func fence(enclosing code: String) -> String {
+        var longestRun = 0
+        var currentRun = 0
+        for character in code {
+            if character == "`" {
+                currentRun += 1
+                longestRun = max(longestRun, currentRun)
+            } else {
+                currentRun = 0
+            }
+        }
+        return String(repeating: "`", count: max(3, longestRun + 1))
     }
 
     /// The checkbox that opens a task list item, followed by the space that

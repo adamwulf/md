@@ -1,0 +1,10 @@
+Removing the blockquote brings the indented code block next to the list.
+Blank lines do not end a list, and 4 spaces is enough to continue the last
+item, so a plain splice would make the code a paragraph of that item. No
+document can hold a top level indented code block directly below a list.
+
+The code block is therefore written with a fence, which is the canonical
+spelling of md and ends the list at column 0. The code itself is unchanged,
+and the document still holds one list and one code block. Only the block
+that would otherwise be lost is re-spelled: the list above it keeps its
+asterisk bullets.

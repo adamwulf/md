@@ -530,30 +530,129 @@ final class MarkdownSourceEditorTests: XCTestCase {
         }
     }
 
-    func testRemovalRefusesToAbsorbIndentedCodeIntoAPrecedingList() {
+    /// Blank lines cannot hold an indented code block apart from the list
+    /// above it, thus the plain splice would make the code a paragraph of the
+    /// last item. A fence at column 0 ends the list, so the editor re-spells
+    /// the code block it would otherwise lose. The code itself is unchanged.
+    func testRemovalFencesIndentedCodeRatherThanLetAListAbsorbIt() {
         let source = "* alpha\n* bravo\n\n> quoted\n\n    indented code\n"
         let blocks = parser.parseDocument(source)
 
-        let result = MarkdownSourceEditor.replacing(
-            blocks: 1...1,
-            in: blocks,
-            with: "",
-            within: source
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "",
+                within: source
+            ),
+            "* alpha\n* bravo\n\n```\nindented code\n```\n"
         )
-        XCTAssertNil(result)
     }
 
+    /// Two lists may join when an edit makes them adjacent, but that allowance
+    /// belongs to the leading boundary alone. It must never excuse the code
+    /// block at the trailing boundary, which is re-spelled to stay a block of
+    /// its own. A result of a single list would mean the merge was spent twice.
     func testReplacementCannotSpendALeadingMergeAtTheTrailingBoundary() {
         let source = "* alpha\n\n> quoted\n\n    indented code\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "* c",
+                within: source
+            ),
+            "* alpha\n\n* c\n\n```\nindented code\n```\n"
+        )
+    }
+
+    /// Re-spelling reaches a code block and nothing else, thus an edit that
+    /// would absorb any other kind of block is still refused. Losing the
+    /// paragraph below into the list above would be silent, so no result at
+    /// all is the safe answer.
+    func testRemovalStillRefusesToAbsorbAnIndentedParagraph() {
+        let source = "* alpha\n\n> quoted\n\n  indented paragraph\n"
         let blocks = parser.parseDocument(source)
 
         XCTAssertNil(
             MarkdownSourceEditor.replacing(
                 blocks: 1...1,
                 in: blocks,
-                with: "* c",
+                with: "",
                 within: source
             )
+        )
+    }
+
+    /// An indented fence is absorbed exactly as indented code is, because
+    /// two columns is enough to continue the item. Writing it at column 0
+    /// ends the list.
+    func testRemovalMovesAnIndentedFenceOutToColumnZero() {
+        let source = "* alpha\n\n> quoted\n\n  ```\n  code\n  ```\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "",
+                within: source
+            ),
+            "* alpha\n\n```\ncode\n```\n"
+        )
+    }
+
+    /// A tab indents the code as far as four spaces do, and it is absorbed
+    /// the same way.
+    func testRemovalFencesTabIndentedCode() {
+        let source = "* alpha\n\n> quoted\n\n\tcode\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "",
+                within: source
+            ),
+            "* alpha\n\n```\ncode\n```\n"
+        )
+    }
+
+    /// The formatter always closes a fence with a line ending. A document
+    /// that ended without one must not gain one here.
+    func testRemovalFencingKeepsAMissingFinalNewline() {
+        let source = "* alpha\n\n> quoted\n\n    code"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "",
+                within: source
+            ),
+            "* alpha\n\n```\ncode\n```"
+        )
+    }
+
+    /// A code block already at column 0 ends the list by itself, thus the
+    /// plain splice is enough and its bytes are kept as the author wrote
+    /// them. A four backtick fence stays four backticks long.
+    func testRemovalLeavesAColumnZeroFenceAlone() {
+        let source = "* alpha\n\n> quoted\n\n````\ncode\n````\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "",
+                within: source
+            ),
+            "* alpha\n\n````\ncode\n````\n"
         )
     }
 

@@ -163,13 +163,14 @@ Where the package stands today, on `Sources/` only:
 
 | Measured by | Lines | Functions | Regions |
 | --- | --- | --- | --- |
-| `swift test` | 98.24% | 93.45% | 95.79% |
-| `cli-tests` | 88.73% | 83.84% | 82.97% |
-| Both together | 98.24% | 93.45% | 95.79% |
+| `swift test` | 97.01% | 94.97% | 93.64% |
+| `cli-tests` | 89.94% | 85.80% | 84.07% |
+| Both together | 97.14% | 94.97% | 93.98% |
 
-Read the last row carefully. **The CLI suite adds no line coverage at all.**
-Every line it reaches, a Swift test already reaches, because the Swift tests
-call each command's `run()` in process rather than only testing helper types.
+Read the last row carefully. **The CLI suite adds almost no line coverage.**
+It reaches 4 lines of 3180 that `swift test` does not, and not one function,
+because the Swift tests call each command's `run()` in process rather than
+only testing helper types.
 
 That is worth stating plainly, because it is easy to draw the wrong
 conclusion from it. It does not mean the CLI suite is redundant. It means
@@ -187,6 +188,10 @@ is everything a coverage number cannot see:
 
 A line can be covered and still be wrong. The CLI suite is what says whether
 it is right.
+
+The 4 lines it holds alone are in `MarkdownSourceEditor` and `FormatCommand`.
+Skipping the CLI suite would leave them undefended, but that is not the reason
+to run it.
 
 So do not use these numbers to decide the CLI suite has enough cases. Use
 `--swift-only` against `--cli-only` for what it does tell you: which lines

@@ -109,7 +109,8 @@ enum MarkdownSourceEditor {
             ),
             lineEnding: lineEnding,
             canAddLeadingSeparator: previousBlock != nil,
-            canAddTrailingSeparator: hasFollowingSource
+            canAddTrailingSeparator: hasFollowingSource,
+            trailingBlock: suffixBlocks.first
         )
     }
 
@@ -214,7 +215,8 @@ enum MarkdownSourceEditor {
             ),
             lineEnding: lineEnding,
             canAddLeadingSeparator: true,
-            canAddTrailingSeparator: hasFollowingSource
+            canAddTrailingSeparator: hasFollowingSource,
+            trailingBlock: suffixBlocks.first
         )
     }
 
@@ -364,8 +366,9 @@ enum MarkdownSourceEditor {
     }
 
     /// Applies an edit only if the resulting block kinds match an acceptable
-    /// sequence. Try an extra separator on either side before refusing an edit
-    /// whose new boundaries would merge otherwise unrelated blocks.
+    /// sequence. Try an extra separator on either side, then a fence around
+    /// the code block below, before refusing an edit whose new boundaries
+    /// would merge otherwise unrelated blocks.
     private static func replacingSubrangeWithoutChangingBlockKinds(
         _ range: Range<String.Index>,
         with inserted: String,
@@ -373,7 +376,8 @@ enum MarkdownSourceEditor {
         acceptableBlockKindSequences: [[MarkdownBlockKind]],
         lineEnding: String,
         canAddLeadingSeparator: Bool,
-        canAddTrailingSeparator: Bool
+        canAddTrailingSeparator: Bool,
+        trailingBlock: MarkdownBlock?
     ) -> String? {
         var candidates = [inserted]
         if canAddTrailingSeparator {
@@ -395,7 +399,97 @@ enum MarkdownSourceEditor {
                 return result
             }
         }
+
+        // Every candidate above keeps all source outside the edit byte for
+        // byte, and one of them is correct for almost every edit. Re-spelling
+        // a block the user did not name is a last resort, thus it is tried
+        // only after all of them fail.
+        guard let fenced = fencedTrailingCodeBlock(
+            trailingBlock,
+            startingAt: range.upperBound,
+            in: source,
+            lineEnding: lineEnding
+        ) else {
+            return nil
+        }
+        for candidate in candidates {
+            let result = String(source[..<range.lowerBound])
+                + candidate
+                + fenced.text
+                + String(source[fenced.end...])
+            let resultKinds = parser.parseDocument(result).map(\.kind)
+            if acceptableBlockKindSequences.contains(resultKinds) {
+                return result
+            }
+        }
         return nil
+    }
+
+    /// The canonical fenced spelling of an indented code block that follows
+    /// the edit, together with the source index where that block ends.
+    ///
+    /// Blank lines do not end a list, and a line indented as far as the item
+    /// content continues that item. An indented code block below a list is
+    /// therefore always absorbed, and no arrangement of blank lines can hold
+    /// the two apart. A fence at column 0 is indented less than the item
+    /// content, so it ends the list and the code block stands on its own.
+    ///
+    /// This is the spelling `md format` already writes for every code block,
+    /// so it is not a new one, and the code inside the block is unchanged.
+    /// Only the block that the edit would otherwise destroy is re-spelled.
+    ///
+    /// Returns nil for a block that already begins at column 0, because that
+    /// one ends the list by itself and re-spelling it would change no
+    /// boundary.
+    private static func fencedTrailingCodeBlock(
+        _ block: MarkdownBlock?,
+        startingAt start: String.Index,
+        in source: String,
+        lineEnding: String
+    ) -> (text: String, end: String.Index)? {
+        guard let block, case .codeBlock = block else {
+            return nil
+        }
+        guard beginsIndented(from: start, in: source) else {
+            return nil
+        }
+        let end = lineStartIndex(block.lineRange.upperBound + 1, in: source)
+            ?? source.endIndex
+        guard end > start else {
+            return nil
+        }
+
+        var text = normalizeLineEndings(
+            in: BlockFormatter.format(block),
+            to: lineEnding
+        )
+        // The formatter always closes with a line ending. A document that had
+        // none at its end must not gain one here.
+        if end == source.endIndex,
+           source.last?.isMarkdownLineEnding != true {
+            text = text.trimmingTrailingLineEndings()
+        }
+        return (text, end)
+    }
+
+    /// Whether the block below the edit opens with indentation.
+    ///
+    /// A list item's content always begins at column 1 or further right, so
+    /// only an indented line can continue it. A block that opens at column 0
+    /// therefore ends the list on its own, whether it is a fence or anything
+    /// else, and re-spelling it would spend the user's bytes for nothing.
+    ///
+    /// Indentation covers both spellings that can be absorbed: an indented
+    /// code block, which opens with four columns, and a fenced one indented
+    /// by one to three.
+    private static func beginsIndented(
+        from start: String.Index,
+        in source: String
+    ) -> Bool {
+        guard start < source.endIndex else {
+            return false
+        }
+        return source[start].isCommonMarkBlankWhitespace
     }
 
     /// Lists and other blocks of the same kind can intentionally join when an

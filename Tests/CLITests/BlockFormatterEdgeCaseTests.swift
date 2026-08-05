@@ -130,6 +130,55 @@ final class BlockFormatterEdgeCaseTests: XCTestCase {
         XCTAssertEqual(BlockFormatter.format(block), "```\nplain\n```\n")
     }
 
+    /// A fence must be longer than the longest run of backticks it encloses.
+    /// A three backtick fence around content that itself holds a three
+    /// backtick line closes at that line, which splits one code block into an
+    /// empty block, a paragraph, and a second empty block.
+    func testFormatCodeBlockLengthensTheFenceAroundAnEnclosedFence() {
+        let block = MarkdownBlock.codeBlock(
+            language: nil,
+            code: "```\nstill code\n```\n",
+            charRange: noRange,
+            byteRange: noRange,
+            lineRange: firstLine
+        )
+        XCTAssertEqual(
+            BlockFormatter.format(block),
+            "````\n```\nstill code\n```\n````\n"
+        )
+    }
+
+    /// The fence grows past the longest run, not to a fixed four.
+    func testFormatCodeBlockLengthensTheFencePastTheLongestRun() {
+        let block = MarkdownBlock.codeBlock(
+            language: nil,
+            code: "`````\n",
+            charRange: noRange,
+            byteRange: noRange,
+            lineRange: firstLine
+        )
+        XCTAssertEqual(
+            BlockFormatter.format(block),
+            "``````\n`````\n``````\n"
+        )
+    }
+
+    /// A run shorter than the fence needs no growth, thus the common case
+    /// keeps the three backticks it has today.
+    func testFormatCodeBlockKeepsThreeBackticksAroundAShorterRun() {
+        let block = MarkdownBlock.codeBlock(
+            language: nil,
+            code: "a ``code span`` here\n",
+            charRange: noRange,
+            byteRange: noRange,
+            lineRange: firstLine
+        )
+        XCTAssertEqual(
+            BlockFormatter.format(block),
+            "```\na ``code span`` here\n```\n"
+        )
+    }
+
     func testFormatEmptyCodeBlockKeepsTheFencesOnSeparateLines() {
         let block = MarkdownBlock.codeBlock(
             language: "",
