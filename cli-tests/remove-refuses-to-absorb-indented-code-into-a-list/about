@@ -1,0 +1,2 @@
+Removing a block between a list and an indented code block should not let the
+list absorb that otherwise untouched code block.

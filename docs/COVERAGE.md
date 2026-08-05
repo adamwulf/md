@@ -53,7 +53,7 @@ and the instrumented subprocess hits that limit writing its own profile.
 --skip-build`, that silently measures whatever test bundle is on disk. It
 reported 88.73% where the truth was 98.24%. `--build-tests` fixes it.
 
-## Defects: 24 found, 11 fixed, 12 open, 1 withdrawn
+## Defects: 25 found, 11 fixed, 13 open, 1 withdrawn
 
 Each open defect is pinned by tests holding the CORRECT expectation, marked as
 known failures, so it turns green by itself when it is fixed. **The `known-fail`
@@ -77,6 +77,7 @@ Numbers are stable. A fixed defect keeps its number, because commit messages and
 | 22 | `format` has no `-i`. **Do not add it yet** — see below | 1 CLI |
 | 23 | `list --key` breaks its one line per file shape on a multi-line value | 1 CLI |
 | 24 | `list --output json` pretty-prints an empty array over three lines | 1 CLI |
+| 25 | Removing an intervening block lets a list absorb indented code; the safe editor refuses | 1 CLI |
 
 Fixed: **1** non-finite JSON number abort, **2** soft line break dropped, **3**
 hard line break dropped, **5** backslash escapes resolved away, **9** non-ASCII
@@ -109,7 +110,7 @@ Ordered by tests turned green for code changed:
 
 1. **24**, **14**, **23** — one command each, and small.
 2. **13**, **21** — small, but each touches its callers.
-3. **11**, **6** — localized parser range and container-separator fixes.
+3. **11**, **6**, **25** — localized parser range and container-separator fixes.
 4. **4**, **7**, **17**, **20** need the parsed document model to grow: cases
    for raw HTML and link reference definitions, plus memory of the line ending
    and ordered-list start number. These touch every `switch` over the enum.

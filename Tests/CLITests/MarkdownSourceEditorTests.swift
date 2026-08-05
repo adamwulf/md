@@ -367,6 +367,21 @@ final class MarkdownSourceEditorTests: XCTestCase {
         )
     }
 
+    func testReplacingUsesTheDocumentsLoneCarriageReturns() {
+        let source = "# One\r\rOld.\r\r# Three\r"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "New.\n",
+                within: source
+            ),
+            "# One\r\rNew.\r\r# Three\r"
+        )
+    }
+
     func testInsertingAfterTheFinalBlockKeepsAMissingFinalLineEnding() throws {
         let source = "# Only"
         let block = try XCTUnwrap(parser.parseDocument(source).first)
@@ -388,6 +403,36 @@ final class MarkdownSourceEditorTests: XCTestCase {
                 after: first,
                 in: source
             ),
+            "Alpha.\n\nInserted.\n\nBravo.\n"
+        )
+    }
+
+    func testInsertingAfterUsesCarriageReturnLineFeeds() throws {
+        let source = "Alpha.\r\n\r\nBravo.\r\n"
+        let block = try XCTUnwrap(parser.parseDocument(source).first)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.inserting("Inserted.\n", after: block, in: source),
+            "Alpha.\r\n\r\nInserted.\r\n\r\nBravo.\r\n"
+        )
+    }
+
+    func testInsertingAfterUsesLoneCarriageReturns() throws {
+        let source = "Alpha.\r\rBravo.\r"
+        let block = try XCTUnwrap(parser.parseDocument(source).first)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.inserting("Inserted.\n", after: block, in: source),
+            "Alpha.\r\rInserted.\r\rBravo.\r"
+        )
+    }
+
+    func testInsertingAfterCollapsesCommonMarkWhitespaceOnlyBlankLines() throws {
+        let source = "Alpha.\n \t \n\t\nBravo.\n"
+        let block = try XCTUnwrap(parser.parseDocument(source).first)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.inserting("Inserted.\n", after: block, in: source),
             "Alpha.\n\nInserted.\n\nBravo.\n"
         )
     }
@@ -415,5 +460,53 @@ final class MarkdownSourceEditorTests: XCTestCase {
             ),
             "# New\n\n[ref]: /url\n\nTail.\n"
         )
+    }
+
+    func testUnicodeWhitespaceAndSeparatorsRemainRealBlocks() throws {
+        let characters = [
+            "\u{00A0}", "\u{2003}", "\u{3000}",
+            "\u{000B}", "\u{000C}", "\u{0085}", "\u{2028}", "\u{2029}",
+        ]
+
+        for character in characters {
+            let source = "Alpha.\n\n\(character)\n\nBravo.\n"
+            let blocks = parser.parseDocument(source)
+            XCTAssertEqual(blocks.count, 3, character.debugDescription)
+
+            XCTAssertEqual(
+                MarkdownSourceEditor.replacing(
+                    blocks: 0...0,
+                    in: blocks,
+                    with: "",
+                    within: source
+                ),
+                "\(character)\n\nBravo.\n",
+                character.debugDescription
+            )
+
+            let first = try XCTUnwrap(blocks.first)
+            XCTAssertEqual(
+                MarkdownSourceEditor.inserting(
+                    "Inserted.\n",
+                    after: first,
+                    in: source
+                ),
+                "Alpha.\n\nInserted.\n\n\(character)\n\nBravo.\n",
+                character.debugDescription
+            )
+        }
+    }
+
+    func testRemovalRefusesToAbsorbIndentedCodeIntoAPrecedingList() {
+        let source = "* alpha\n* bravo\n\n> quoted\n\n    indented code\n"
+        let blocks = parser.parseDocument(source)
+
+        let result = MarkdownSourceEditor.replacing(
+            blocks: 1...1,
+            in: blocks,
+            with: "",
+            within: source
+        )
+        XCTAssertNil(result)
     }
 }

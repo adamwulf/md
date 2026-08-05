@@ -87,14 +87,26 @@ enum MarkdownSourceEditor {
             inserted += normalizedReplacement
             if hasFollowingSource {
                 inserted += lineEnding + lineEnding
-            } else if source.last?.isNewline == true {
+            } else if source.last?.isMarkdownLineEnding == true {
                 inserted += lineEnding
             }
         }
 
-        var result = source
-        result.replaceSubrange(replacementStart..<replacementEnd, with: inserted)
-        return result
+        let replacementBlockCount = MarkdownParser().parse(
+            normalizedReplacement
+        ).count
+        let expectedBlockCount = blocks.count
+            - blockRange.count
+            + replacementBlockCount
+        return replacingSubrangeWithoutLosingBlocks(
+            replacementStart..<replacementEnd,
+            with: inserted,
+            in: source,
+            expectedBlockCount: expectedBlockCount,
+            lineEnding: lineEnding,
+            canAddLeadingSeparator: previousBlock != nil,
+            canAddTrailingSeparator: hasFollowingSource
+        )
     }
 
     /// Inserts text at the beginning of the source line containing `block`.
@@ -160,8 +172,7 @@ enum MarkdownSourceEditor {
 
         let hasFollowingSource = insertionEnd < source.endIndex
         let hadFinalLineEnding = !hasFollowingSource
-            && source.last?.isNewline == true
-        var result = source
+            && source.last?.isMarkdownLineEnding == true
         let inserted: String
         if hasFollowingSource {
             inserted = lineEnding
@@ -175,8 +186,18 @@ enum MarkdownSourceEditor {
                 + normalizedInsertion
                 + (hadFinalLineEnding ? lineEnding : "")
         }
-        result.replaceSubrange(insertionStart..<insertionEnd, with: inserted)
-        return result
+        let parser = MarkdownParser()
+        let expectedBlockCount = parser.parseDocument(source).count
+            + parser.parse(normalizedInsertion).count
+        return replacingSubrangeWithoutLosingBlocks(
+            insertionStart..<insertionEnd,
+            with: inserted,
+            in: source,
+            expectedBlockCount: expectedBlockCount,
+            lineEnding: lineEnding,
+            canAddLeadingSeparator: true,
+            canAddTrailingSeparator: hasFollowingSource
+        )
     }
 
     private static func lineEnding(
@@ -189,7 +210,7 @@ enum MarkdownSourceEditor {
 
         let previousIndex = source.index(before: index)
         let character = source[previousIndex]
-        return character.isNewline ? String(character) : nil
+        return character.isMarkdownLineEnding ? String(character) : nil
     }
 
     private static func firstLineEnding(in source: String) -> String? {
@@ -259,20 +280,22 @@ enum MarkdownSourceEditor {
 
         while boundary > source.startIndex {
             let endingIndex = source.index(before: boundary)
-            guard source[endingIndex].isNewline else {
+            guard source[endingIndex].isMarkdownLineEnding else {
                 break
             }
 
             var lineStart = endingIndex
             while lineStart > source.startIndex {
                 let previous = source.index(before: lineStart)
-                if source[previous].isNewline {
+                if source[previous].isMarkdownLineEnding {
                     break
                 }
                 lineStart = previous
             }
 
-            guard source[lineStart..<endingIndex].allSatisfy(\.isWhitespace) else {
+            guard source[lineStart..<endingIndex].allSatisfy(
+                \.isCommonMarkBlankWhitespace
+            ) else {
                 break
             }
             boundary = lineStart
@@ -293,11 +316,11 @@ enum MarkdownSourceEditor {
             var cursor = lineStart
             while cursor < source.endIndex {
                 let character = source[cursor]
-                if character.isNewline {
+                if character.isMarkdownLineEnding {
                     cursor = source.index(after: cursor)
                     break
                 }
-                guard character.isWhitespace else {
+                guard character.isCommonMarkBlankWhitespace else {
                     return lineStart
                 }
                 cursor = source.index(after: cursor)
@@ -316,6 +339,40 @@ enum MarkdownSourceEditor {
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
             .replacingOccurrences(of: "\n", with: lineEnding)
+    }
+
+    /// Applies an edit only if the document keeps the expected number of
+    /// parsed blocks. Try an extra separator on either side before refusing
+    /// an edit whose new boundaries would merge otherwise unrelated blocks.
+    private static func replacingSubrangeWithoutLosingBlocks(
+        _ range: Range<String.Index>,
+        with inserted: String,
+        in source: String,
+        expectedBlockCount: Int,
+        lineEnding: String,
+        canAddLeadingSeparator: Bool,
+        canAddTrailingSeparator: Bool
+    ) -> String? {
+        var candidates = [inserted]
+        if canAddTrailingSeparator {
+            candidates.append(inserted + lineEnding)
+        }
+        if canAddLeadingSeparator {
+            candidates.append(lineEnding + inserted)
+        }
+        if canAddLeadingSeparator && canAddTrailingSeparator {
+            candidates.append(lineEnding + inserted + lineEnding)
+        }
+
+        let parser = MarkdownParser()
+        for candidate in candidates {
+            var result = source
+            result.replaceSubrange(range, with: candidate)
+            if parser.parseDocument(result).count >= expectedBlockCount {
+                return result
+            }
+        }
+        return nil
     }
 
     /// Finds a 1-based line start without relying on parser character offsets.
@@ -364,9 +421,19 @@ enum MarkdownSourceEditor {
 private extension String {
     func trimmingTrailingLineEndings() -> String {
         var result = self
-        while result.last?.isNewline == true {
+        while result.last?.isMarkdownLineEnding == true {
             result.removeLast()
         }
         return result
+    }
+}
+
+private extension Character {
+    var isMarkdownLineEnding: Bool {
+        self == "\n" || self == "\r" || self == "\r\n"
+    }
+
+    var isCommonMarkBlankWhitespace: Bool {
+        self == " " || self == "\t"
     }
 }
