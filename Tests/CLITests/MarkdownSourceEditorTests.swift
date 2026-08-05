@@ -543,6 +543,20 @@ final class MarkdownSourceEditorTests: XCTestCase {
         XCTAssertNil(result)
     }
 
+    func testReplacementCannotSpendALeadingMergeAtTheTrailingBoundary() {
+        let source = "* alpha\n\n> quoted\n\n    indented code\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertNil(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "* c",
+                within: source
+            )
+        )
+    }
+
     func testRemovalAllowsTwoListsToBecomeAdjacent() {
         let source = "* a\n\nMiddle.\n\n* b\n"
         let blocks = parser.parseDocument(source)

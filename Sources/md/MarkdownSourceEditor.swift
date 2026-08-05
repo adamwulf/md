@@ -93,21 +93,19 @@ enum MarkdownSourceEditor {
         }
 
         let replacementBlocks = MarkdownParser().parse(normalizedReplacement)
-        let expectedBlockCount = blocks.count
-            - blockRange.count
-            + replacementBlocks.count
-        let followingBlock = blockRange.upperBound + 1 < blocks.endIndex
-            ? blocks[blockRange.upperBound + 1]
-            : nil
-        return replacingSubrangeWithoutLosingBlocks(
+        let prefixBlocks = Array(blocks[..<blockRange.lowerBound])
+        let suffixStart = blockRange.upperBound + 1
+        let suffixBlocks = suffixStart < blocks.endIndex
+            ? Array(blocks[suffixStart...])
+            : []
+        return replacingSubrangeWithoutChangingBlockKinds(
             replacementStart..<replacementEnd,
             with: inserted,
             in: source,
-            expectedBlockCount: expectedBlockCount,
-            allowedBlockMerges: allowedBoundaryMerges(
-                previous: previousBlock,
+            acceptableBlockKindSequences: acceptableBlockKindSequences(
+                prefix: prefixBlocks,
                 inserted: replacementBlocks,
-                following: followingBlock
+                suffix: suffixBlocks
             ),
             lineEnding: lineEnding,
             canAddLeadingSeparator: previousBlock != nil,
@@ -195,25 +193,24 @@ enum MarkdownSourceEditor {
         let parser = MarkdownParser()
         let documentBlocks = parser.parseDocument(source)
         let insertionBlocks = parser.parse(normalizedInsertion)
-        let selectedIndex = documentBlocks.firstIndex {
+        guard let selectedIndex = documentBlocks.firstIndex(where: {
             $0.byteRange == block.byteRange
+        }) else {
+            return nil
         }
-        let followingBlock = selectedIndex.flatMap { index in
-            let nextIndex = index + 1
-            return nextIndex < documentBlocks.endIndex
-                ? documentBlocks[nextIndex]
-                : nil
-        }
-        let expectedBlockCount = documentBlocks.count + insertionBlocks.count
-        return replacingSubrangeWithoutLosingBlocks(
+        let prefixBlocks = Array(documentBlocks[...selectedIndex])
+        let suffixStart = selectedIndex + 1
+        let suffixBlocks = suffixStart < documentBlocks.endIndex
+            ? Array(documentBlocks[suffixStart...])
+            : []
+        return replacingSubrangeWithoutChangingBlockKinds(
             insertionStart..<insertionEnd,
             with: inserted,
             in: source,
-            expectedBlockCount: expectedBlockCount,
-            allowedBlockMerges: allowedBoundaryMerges(
-                previous: block,
+            acceptableBlockKindSequences: acceptableBlockKindSequences(
+                prefix: prefixBlocks,
                 inserted: insertionBlocks,
-                following: followingBlock
+                suffix: suffixBlocks
             ),
             lineEnding: lineEnding,
             canAddLeadingSeparator: true,
@@ -369,12 +366,11 @@ enum MarkdownSourceEditor {
     /// Applies an edit only if the document keeps the expected number of
     /// parsed blocks. Try an extra separator on either side before refusing
     /// an edit whose new boundaries would merge otherwise unrelated blocks.
-    private static func replacingSubrangeWithoutLosingBlocks(
+    private static func replacingSubrangeWithoutChangingBlockKinds(
         _ range: Range<String.Index>,
         with inserted: String,
         in source: String,
-        expectedBlockCount: Int,
-        allowedBlockMerges: Int,
+        acceptableBlockKindSequences: [[MarkdownBlockKind]],
         lineEnding: String,
         canAddLeadingSeparator: Bool,
         canAddTrailingSeparator: Bool
@@ -394,39 +390,57 @@ enum MarkdownSourceEditor {
         for candidate in candidates {
             var result = source
             result.replaceSubrange(range, with: candidate)
-            let resultBlockCount = parser.parseDocument(result).count
-            let minimumBlockCount = expectedBlockCount - allowedBlockMerges
-            if resultBlockCount >= minimumBlockCount,
-               resultBlockCount <= expectedBlockCount {
+            let resultKinds = parser.parseDocument(result).map(\.kind)
+            if acceptableBlockKindSequences.contains(resultKinds) {
                 return result
             }
         }
         return nil
     }
 
-    /// Deleting a separator can intentionally join two blocks of the same
-    /// kind (for example, two lists). Those joins are valid; absorption across
-    /// different block kinds is not.
-    private static func allowedBoundaryMerges(
-        previous: MarkdownBlock?,
+    /// Lists and other blocks of the same kind can intentionally join when an
+    /// edit makes them adjacent. Enumerate those valid joins at each boundary
+    /// independently so one legal join cannot conceal an illegal absorption
+    /// at the other boundary.
+    private static func acceptableBlockKindSequences(
+        prefix: [MarkdownBlock],
         inserted: [MarkdownBlock],
-        following: MarkdownBlock?
-    ) -> Int {
-        if inserted.isEmpty {
-            guard let previous, let following else {
-                return 0
+        suffix: [MarkdownBlock]
+    ) -> [[MarkdownBlockKind]] {
+        let prefixKinds = prefix.map(\.kind)
+        let insertedKinds = inserted.map(\.kind)
+        let suffixKinds = suffix.map(\.kind)
+        var results = [prefixKinds + insertedKinds + suffixKinds]
+
+        if insertedKinds.isEmpty {
+            if prefixKinds.last == suffixKinds.first,
+               !prefixKinds.isEmpty,
+               !suffixKinds.isEmpty {
+                results.append(prefixKinds + suffixKinds.dropFirst())
             }
-            return previous.kind == following.kind ? 1 : 0
+            return results
         }
 
-        var result = 0
-        if let previous, previous.kind == inserted.first?.kind {
-            result += 1
+        let canMergeLeading = prefixKinds.last == insertedKinds.first
+            && !prefixKinds.isEmpty
+        let canMergeTrailing = insertedKinds.last == suffixKinds.first
+            && !suffixKinds.isEmpty
+        for mergeLeading in [false, true] where !mergeLeading || canMergeLeading {
+            for mergeTrailing in [false, true]
+            where !mergeTrailing || canMergeTrailing {
+                guard mergeLeading || mergeTrailing else {
+                    continue
+                }
+                let middle = mergeLeading
+                    ? Array(insertedKinds.dropFirst())
+                    : insertedKinds
+                let tail = mergeTrailing
+                    ? Array(suffixKinds.dropFirst())
+                    : suffixKinds
+                results.append(prefixKinds + middle + tail)
+            }
         }
-        if let following, following.kind == inserted.last?.kind {
-            result += 1
-        }
-        return result
+        return results
     }
 
     /// Finds a 1-based line start without relying on parser character offsets.
