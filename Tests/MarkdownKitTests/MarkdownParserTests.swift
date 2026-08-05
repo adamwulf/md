@@ -66,6 +66,99 @@ final class MarkdownParserTests: XCTestCase {
         }
     }
 
+    func testParseParagraphKeepsSoftLineBreaks() {
+        let markdown = "First line\nSecond line\nThird line"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.count, 1)
+        if case .paragraph(let text, _, _, _) = blocks[0] {
+            XCTAssertEqual(text, "First line\nSecond line\nThird line")
+        } else {
+            XCTFail("Expected paragraph block")
+        }
+    }
+
+    func testParseParagraphKeepsSoftLineBreaksWithInlineStyles() {
+        let markdown = "First **bold** line\nSecond `code` line"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.count, 1)
+        if case .paragraph(let text, _, _, _) = blocks[0] {
+            XCTAssertEqual(text, "First **bold** line\nSecond `code` line")
+        } else {
+            XCTFail("Expected paragraph block")
+        }
+    }
+
+    func testParseParagraphSoftLineBreakDropsTrailingSpace() {
+        // One trailing space is not a hard break, thus the space goes away with the newline.
+        let blocks = parser.parse("First line \nSecond line")
+        XCTAssertEqual(blocks.count, 1)
+        if case .paragraph(let text, _, _, _) = blocks[0] {
+            XCTAssertEqual(text, "First line\nSecond line")
+        } else {
+            XCTFail("Expected paragraph block")
+        }
+    }
+
+    func testParseParagraphSoftLineBreakDropsLeadingIndent() {
+        let blocks = parser.parse("First line\n    Second line")
+        XCTAssertEqual(blocks.count, 1)
+        if case .paragraph(let text, _, _, _) = blocks[0] {
+            XCTAssertEqual(text, "First line\nSecond line")
+        } else {
+            XCTFail("Expected paragraph block")
+        }
+    }
+
+    func testParseMultilineParagraphsSeparatedByBlankLines() {
+        // More than one blank line still divides two paragraphs, and the blank lines
+        // are not part of either paragraph.
+        let blocks = parser.parse("line1\nline2\nline3\n\n\npara2")
+        XCTAssertEqual(blocks.count, 2)
+        if case .paragraph(let text, _, _, _) = blocks[0] {
+            XCTAssertEqual(text, "line1\nline2\nline3")
+        } else {
+            XCTFail("Expected paragraph block")
+        }
+        if case .paragraph(let text, _, _, _) = blocks[1] {
+            XCTAssertEqual(text, "para2")
+        } else {
+            XCTFail("Expected paragraph block")
+        }
+    }
+
+    func testParseBlockquoteKeepsSoftLineBreaks() {
+        let blocks = parser.parse("> First line\n> Second line")
+        XCTAssertEqual(blocks.count, 1)
+        if case .blockquote(let text, _, _, _) = blocks[0] {
+            XCTAssertEqual(text, "First line\nSecond line")
+        } else {
+            XCTFail("Expected blockquote block")
+        }
+    }
+
+    /// KNOWN FAILURE, kept as documentation for a later fix.
+    ///
+    /// A hard line break (two or more spaces at the end of a line, or a backslash at
+    /// the end of a line) becomes a CMARK_NODE_LINEBREAK, which `getNodeText` still
+    /// throws away. Thus the two lines become one word.
+    ///
+    /// The fix must keep the two lines apart. How to write the hard break in the block
+    /// text is for that fix to decide, thus this test only asks for a line break.
+    /// Remove the `XCTExpectFailure` when the fix is in.
+    func testParseParagraphKeepsHardLineBreaks() {
+        XCTExpectFailure("Hard line breaks are dropped by MarkdownParser.getNodeText")
+
+        for markdown in ["First line  \nSecond line", "First line\\\nSecond line"] {
+            let blocks = parser.parse(markdown)
+            XCTAssertEqual(blocks.count, 1)
+            if case .paragraph(let text, _, _, _) = blocks[0] {
+                XCTAssertTrue(text.contains("\n"), "Hard break was dropped: \(text.debugDescription)")
+            } else {
+                XCTFail("Expected paragraph block")
+            }
+        }
+    }
+
     // MARK: - Code Blocks
 
     func testParseCodeBlock() {

@@ -478,6 +478,12 @@ public struct MarkdownParser {
             )
         }
 
+        // A soft break is a single newline inside a block. Keep it, so a paragraph
+        // written on more than one line keeps its line structure.
+        if type == CMARK_NODE_SOFTBREAK {
+            return "\n"
+        }
+
         // Every other kind of node comes back through the CommonMark writer, thus it
         // is markdown source already, with the backslashes that it needs.
         let rendered = cmark_render_commonmark(node, 0, 0)

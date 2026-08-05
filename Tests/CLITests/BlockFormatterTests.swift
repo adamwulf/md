@@ -25,6 +25,33 @@ final class BlockFormatterTests: XCTestCase {
         XCTAssertEqual(output, "Hello world.\n")
     }
 
+    func testFormatMultilineParagraph() {
+        let blocks = parser.parse("line1\nline2\nline3")
+        let output = BlockFormatter.format(blocks)
+        XCTAssertEqual(output, "line1\nline2\nline3\n")
+    }
+
+    func testFormatMultilineParagraphNormalizesBlankLinesBetweenParagraphs() {
+        // The last line of a paragraph does not get a blank line of its own. One blank
+        // line between two paragraphs is enough, thus "\n\n\n" becomes "\n\n".
+        let blocks = parser.parse("line1\nline2\nline3\n\n\npara2")
+        let output = BlockFormatter.format(blocks)
+        XCTAssertEqual(output, "line1\nline2\nline3\n\npara2\n")
+    }
+
+    func testFormatMultilineParagraphIsIdempotent() {
+        let source = "line1\nline2\nline3\n\n\npara2"
+        let firstPass = BlockFormatter.format(parser.parse(source))
+        let secondPass = BlockFormatter.format(parser.parse(firstPass))
+        XCTAssertEqual(secondPass, firstPass)
+    }
+
+    func testFormatMultilineBlockquote() {
+        let blocks = parser.parse("> line1\n> line2")
+        let output = BlockFormatter.format(blocks)
+        XCTAssertEqual(output, "> line1\n> line2\n")
+    }
+
     func testFormatCodeBlock() {
         let blocks = parser.parse("```swift\nlet x = 1\n```")
         let output = BlockFormatter.format(blocks)
