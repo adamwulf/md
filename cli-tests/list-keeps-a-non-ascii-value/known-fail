@@ -1,0 +1,25 @@
+md prints `title: "Caf\xE9"` where the file, and stdout, hold UTF-8.
+
+The source spells the value `Café`, with U+00E9 LATIN SMALL LETTER E WITH ACUTE,
+in UTF-8. md answers with the ASCII escape `\xE9`, and has to add double quotes
+around the value to carry it.
+
+It round-trips, so nothing is strictly lost, but three things are wrong with it:
+
+  1. `md list` exists to print a readable folder index. Any index of documents
+     not written in English comes out full of `\xE9` and `☕`, which is not
+     an index a person can read.
+  2. The tool disagrees with itself about the same value. Sibling case
+     list-format-json-keeps-a-non-ascii-value passes, so `--format json` prints
+     `Café`, and `--key title` prints `Café` as well, because ListCommand's
+     formatScalarValue interpolates the string directly. Only the YAML spelling
+     escapes it.
+  3. Copying a line of this output back into a document's frontmatter changes
+     the bytes of that document for no reason a user asked for.
+
+The cause is Frontmatter.serializeYAML, which calls `Yams.dump(object:
+sortKeys:)`. Yams defaults `allowUnicode` to false, so libyaml escapes every
+character outside ASCII. Passing `allowUnicode: true` emits the UTF-8 unchanged.
+
+The same call serializes `md frontmatter --file doc.md`, so the fix reaches
+further than `list`, and this case is only where it happens to be caught.

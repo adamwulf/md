@@ -1,0 +1,3 @@
+`author` exists but `author.email` does not, so no file has a value to print and
+stdout is empty. Nothing here holds a path, so this case needs no `md lines`
+step: it pins the raw bytes, and an invented blank line would fail it.

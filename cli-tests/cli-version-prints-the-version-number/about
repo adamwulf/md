@@ -1,0 +1,7 @@
+--version is the one piece of help-shaped output worth pinning byte for byte. It
+is not prose, it is a fact a script reads, and the whole point of it is that it
+does not drift: a build that answers something other than the version in
+CommandConfiguration is broken.
+
+expected-stderr is empty on purpose. Version goes to stdout, so that
+`md --version` can be captured, and nothing at all goes to stderr.

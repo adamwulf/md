@@ -1,0 +1,11 @@
+An unknown flag is refused before anything is read or printed, even though the
+rest of the command line is perfectly good and stdin is holding a valid
+document. Guessing at what the user meant, or ignoring the flag and counting the
+blocks anyway, would both be worse than a usage error.
+
+stderr is not pinned. ArgumentParser answers a refusal with md's own sentence
+followed by the whole usage line for the command, and that usage line names
+every option the command has. Pinning it would turn "someone added a flag" into
+a failure of this case, which guards the exit status instead. md's own stderr,
+with no usage line around it, is pinned in the two
+list-fails-when-... cases.

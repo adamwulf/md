@@ -1,0 +1,4 @@
+stdin.md is zero bytes, so the document is empty. An empty document holds no
+blocks, and the count is 0. This is a boundary the read loop in InputReader has
+to get right: fread returns 0 on the first call and the loop has to end rather
+than spin.

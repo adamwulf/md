@@ -1,0 +1,11 @@
+Two sources of input contradict each other, and md must not silently pick one.
+The fixture and stdin deliberately hold DIFFERENT documents, so a build that
+quietly preferred either of them would still be wrong here, and the refusal is
+what keeps the answer honest.
+
+stderr is not pinned. ArgumentParser answers a refusal with md's own sentence
+followed by the whole usage line for the command, and that usage line names
+every option the command has. Pinning it would turn "someone added a flag" into
+a failure of this case, which guards the exit status instead. md's own stderr,
+with no usage line around it, is pinned in the two
+list-fails-when-... cases.

@@ -1,0 +1,16 @@
+Only the FIRST line of `md --help` is pinned, and deliberately so. The rest of
+the help is prose that ArgumentParser re-wraps to the terminal width, and it
+changes whenever a flag or a subcommand is added, so pinning it would make this
+case fail for reasons that have nothing to do with help being broken.
+
+The first line is worth defending. It carries two facts that must not change
+quietly:
+
+  1. `md --help` writes to STDOUT, not stderr. If it went to stderr the pipe
+     into `md lines` would see nothing and this case would fail.
+  2. It opens with the tool's overview, so a person who types `md --help` is
+     told what md is before anything else.
+
+`md` with no arguments at all prints this same help, but the harness cannot
+stage that case: run.py rejects an empty `args` file, so there is no way to run
+md with an empty argument list.

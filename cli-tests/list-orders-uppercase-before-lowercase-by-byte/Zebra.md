@@ -1,0 +1,5 @@
+---
+title: Zebra
+---
+
+A note.

@@ -1,0 +1,13 @@
+`md list` prints an ABSOLUTE path in every record, and the harness runs each
+case in a scratch directory whose name is random, so a line holding a path can
+never be pinned byte for byte. Cases that list at least one file therefore pipe
+the output through `md lines`, which selects the lines that hold no path.
+
+The JSON spelling of the same value. JSON may escape a non-ASCII character as
+\uXXXX, but it does not have to, and emitting the UTF-8 bytes is what keeps the
+output readable and byte-identical to the source.
+
+    1  == <scratch>/cafe.md ==
+    2  {
+    3    "title" : "Café"
+    4  }

@@ -1,0 +1,5 @@
+---
+title: [unclosed
+---
+
+A note.

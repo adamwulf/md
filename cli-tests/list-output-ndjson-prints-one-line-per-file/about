@@ -1,0 +1,11 @@
+`md list` prints an ABSOLUTE path in every record, and the harness runs each
+case in a scratch directory whose name is random, so a line holding a path can
+never be pinned byte for byte. Cases that list at least one file therefore pipe
+the output through `md lines`, which selects the lines that hold no path.
+
+ndjson is exactly one JSON object per line and nothing else: no opening bracket,
+no commas, no pretty printing. Three files are three lines, which with the final
+newline `md lines --count` reports as 4.
+
+The lines themselves cannot be pinned: sorted keys put `path` last inside each
+object, so the absolute path is part of every line.

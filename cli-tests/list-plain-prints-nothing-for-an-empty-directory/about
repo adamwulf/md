@@ -1,0 +1,5 @@
+This case directory holds only control files, and run.py copies none of those,
+so the scratch directory the command runs in is genuinely empty.
+
+An empty directory is not an error: nothing matched, so nothing is printed. Not
+a blank line, not a header, no bytes at all.

@@ -1,0 +1,11 @@
+A word that is not a subcommand must be refused. It must not be read as a file
+name, and it must not fall through to the root command's help with a 0 exit
+status, because a script that types the wrong subcommand would then look like it
+succeeded. 64 is the usage exit status.
+
+stderr is not pinned. ArgumentParser answers a refusal with md's own sentence
+followed by the whole usage line for the command, and that usage line names
+every option the command has. Pinning it would turn "someone added a flag" into
+a failure of this case, which guards the exit status instead. md's own stderr,
+with no usage line around it, is pinned in the two
+list-fails-when-... cases.

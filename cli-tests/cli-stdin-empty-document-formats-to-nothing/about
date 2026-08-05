@@ -1,0 +1,3 @@
+Formatting an empty document gives an empty document. Not a newline, not a blank
+line: zero bytes in, zero bytes out. A tool that invents a newline here would
+grow a file by one byte every time it was run over it.

@@ -1,0 +1,17 @@
+md warns on stderr and then exits 0.
+
+An exit status of 0 means "I listed that directory for you". Here md listed
+nothing, because the directory the user named does not exist, and a script that
+tests the exit status - or that pipes `--output json` into a JSON parser and
+gets `[]` - cannot tell a typo from an empty directory.
+
+Every other input path in this tool already fails loudly: `md blocks --file
+no-such-file.md` exits non-zero. `list` is the outlier. ls and grep both exit
+non-zero for a path that does not exist while still processing the paths that
+do, which is the behaviour wanted here: keep walking the other directories, then
+exit non-zero because one of them could not be walked.
+
+The stderr line itself is correct and is pinned above. The cause is in
+ListCommand.walkDirectory, which calls writeStderr and returns [] without
+recording that anything went wrong; run() has no way to see it and returns
+normally.

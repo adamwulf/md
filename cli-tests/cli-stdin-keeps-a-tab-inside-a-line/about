@@ -1,0 +1,2 @@
+A tab is a byte the input path has no business rewriting into spaces. It arrives
+through stdin and comes back out unchanged.

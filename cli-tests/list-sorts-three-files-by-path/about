@@ -1,0 +1,17 @@
+`md list` prints an ABSOLUTE path in every record, and the harness runs each
+case in a scratch directory whose name is random, so a line holding a path can
+never be pinned byte for byte. Cases that list at least one file therefore pipe
+the output through `md lines`, which selects the lines that hold no path.
+
+Three files sorted by path put gamma.md last:
+
+    1  == <scratch>/alpha.md ==
+    2  title: Alpha
+    3
+    4  == <scratch>/beta.md ==
+    5  title: Beta
+    6
+    7  == <scratch>/gamma.md ==
+    8  title: Gamma
+
+Line 8 is Gamma only when the entries came out in path order.
