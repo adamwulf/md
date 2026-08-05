@@ -207,6 +207,13 @@ final class MarkdownEscapeTests: XCTestCase {
         XCTAssertEqual(headingText("## grade \\##"), "grade \\##")
     }
 
+    /// Here the same `#` is both the first character of the line and the run of `#` at
+    /// the end of the line. Two rules point at it, and it must still get one backslash
+    /// and not two.
+    func testHeadingOfOneHashGetsOneBackslash() {
+        XCTAssertEqual(headingText("# \\#"), "\\#")
+    }
+
     func testHeadingKeepsEscapedMarkers() {
         XCTAssertEqual(headingText("# a \\*star\\* here"), "a \\*star\\* here")
         XCTAssertEqual(headingText("# C:\\\\path"), "C:\\\\path")
@@ -250,6 +257,57 @@ final class MarkdownEscapeTests: XCTestCase {
             return
         }
         XCTAssertEqual(text, "\\# not a heading")
+    }
+
+    // MARK: - Text that holds no marker
+
+    /// Text with no marker in it must come back character for character, whatever
+    /// letters it uses.
+    func testTextWithNoMarkerIsNotTouched() {
+        XCTAssertEqual(paragraphText("héllo wörld 🎉 and more"), "héllo wörld 🎉 and more")
+        XCTAssertEqual(paragraphText("a plain sentence."), "a plain sentence.")
+    }
+
+    // MARK: - The escaper on its own
+
+    /// `MarkdownEscaper` takes the text of one node. These call it directly, thus they
+    /// hold its contract with no help from cmark.
+    func testEscaperEscapesNothingInAnEmptyText() {
+        XCTAssertEqual(MarkdownEscaper.escape("", context: .paragraph, startsLine: true), "")
+    }
+
+    func testEscaperUsesTheStartOfTheLineOnlyWhenAskedTo() {
+        XCTAssertEqual(MarkdownEscaper.escape("# a", context: .paragraph, startsLine: true), "\\# a")
+        XCTAssertEqual(MarkdownEscaper.escape("# a", context: .paragraph, startsLine: false), "# a")
+    }
+
+    /// A line of a paragraph can begin with spaces. The marker after them is still the
+    /// first thing on the line.
+    func testEscaperLooksPastSpacesAtTheStartOfALine() {
+        XCTAssertEqual(MarkdownEscaper.escape("  - a", context: .paragraph, startsLine: true), "  \\- a")
+    }
+
+    /// No line begins inside a cell, thus a `#` there is text. A `|` there is not.
+    func testEscaperTreatsATableCellAsOneCell() {
+        XCTAssertEqual(MarkdownEscaper.escape("# a", context: .tableCell, startsLine: true), "# a")
+        XCTAssertEqual(MarkdownEscaper.escape("a | b", context: .tableCell), "a \\| b")
+        XCTAssertEqual(MarkdownEscaper.escape("a | b", context: .paragraph), "a | b")
+    }
+
+    /// The closing sequence of a heading is a run of `#` at the end of the line, and
+    /// spaces can follow it.
+    func testEscaperEscapesTheClosingHashOfAHeadingOnly() {
+        XCTAssertEqual(MarkdownEscaper.escape("a #", context: .heading, endsBlock: true), "a \\#")
+        XCTAssertEqual(MarkdownEscaper.escape("a ##  ", context: .heading, endsBlock: true), "a \\##  ")
+        XCTAssertEqual(MarkdownEscaper.escape("a # b", context: .heading, endsBlock: true), "a # b")
+        XCTAssertEqual(MarkdownEscaper.escape("a #", context: .heading, endsBlock: false), "a #")
+        XCTAssertEqual(MarkdownEscaper.escape("a #", context: .paragraph, endsBlock: true), "a #")
+    }
+
+    /// A `!` at the end of a run of text makes an image when a link node follows it.
+    func testEscaperEscapesABangBeforeALinkNode() {
+        XCTAssertEqual(MarkdownEscaper.escape("wow!", context: .paragraph, isFollowedByLink: true), "wow\\!")
+        XCTAssertEqual(MarkdownEscaper.escape("wow!", context: .paragraph, isFollowedByLink: false), "wow!")
     }
 
     // MARK: - A second read must give the same text
