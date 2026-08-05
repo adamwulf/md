@@ -244,22 +244,38 @@ final class ListCommandTests: XCTestCase {
         XCTAssertTrue(out.hasSuffix("\tfirst,null\n"), "got: \(out.debugDescription)")
     }
 
+    func testPlainKeyPrintsANullInsideANestedArrayAsYAMLNull() throws {
+        try write("---\nvalues: [[first, null], c]\n---\n", to: "a.md")
+
+        let out = try runList(["--key", "values"])
+
+        XCTAssertTrue(
+            out.hasSuffix("\t[first,null],c\n"),
+            "got: \(out.debugDescription)"
+        )
+    }
+
     func testRunReportsANullThatTOMLCannotRepresent() async throws {
-        try write("---\npublished: null\n---\n", to: "a.md")
+        try write("---\npublished: null\n---\n", to: "a-bad.md")
+        try write("---\ntitle: Good\n---\n", to: "b-good.md")
         let command = try ListCommand.parse([
             "--format", "toml", tempRoot.path,
         ])
+        let paths = command.collectEntries().map(\.path)
+        let badPath = try XCTUnwrap(paths.first { $0.hasSuffix("/a-bad.md") })
+        let goodPath = try XCTUnwrap(paths.first { $0.hasSuffix("/b-good.md") })
 
         let captured = try await StandardStream.capturingCommandRun {
             try await command.run()
         }
 
-        XCTAssertEqual(captured.standardOutput, "")
-        XCTAssertTrue(
-            captured.standardError.hasSuffix(
-                "TOML cannot represent the null value at key path published\n"
-            ),
-            "got: \(captured.standardError.debugDescription)"
+        XCTAssertFalse(captured.standardOutput.contains(badPath))
+        XCTAssertTrue(captured.standardOutput.contains(goodPath))
+        XCTAssertTrue(captured.standardOutput.contains("Good"))
+        XCTAssertEqual(
+            captured.standardError,
+            "md list: \(badPath): TOML cannot represent the null value " +
+                "at key path published\n"
         )
         guard let exitCode = captured.error as? ExitCode else {
             return XCTFail(

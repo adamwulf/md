@@ -402,6 +402,25 @@ final class FrontmatterConversionTests: XCTestCase {
         }
     }
 
+    func testTOMLSerializationReportsTheFirstNullKeyInSortedOrder() {
+        let keys = Array("abcdefghijklmnopqrstuvwxyz").map(String.init)
+        let data = Dictionary(uniqueKeysWithValues: keys.map { ($0, NSNull()) })
+        let frontmatter = Frontmatter(
+            format: .toml,
+            data: data,
+            rawContent: "",
+            body: "",
+            originalContent: ""
+        )
+
+        XCTAssertThrowsError(try frontmatter.serializeData()) { error in
+            XCTAssertEqual(
+                error.localizedDescription,
+                "TOML cannot represent the null value at key path a"
+            )
+        }
+    }
+
     // MARK: - parseValue
 
     func testParseValueRecognizesBooleansCaseInsensitively() {
@@ -437,6 +456,12 @@ final class FrontmatterConversionTests: XCTestCase {
 
     func testParseValueOfASingleElementListIsAOneElementList() {
         XCTAssertEqual(Frontmatter.parseValue("[only]") as? [String], ["only"])
+    }
+
+    func testParseValueRecognizesNullInsideAList() throws {
+        let values = try XCTUnwrap(Frontmatter.parseValue("[a, null]") as? [Any])
+        XCTAssertEqual(values[0] as? String, "a")
+        XCTAssertTrue(values[1] is NSNull)
     }
 
     func testParseValueOfAnUnclosedBracketIsAString() {

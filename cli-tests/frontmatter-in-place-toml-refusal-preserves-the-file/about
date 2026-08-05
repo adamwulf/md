@@ -1,0 +1,2 @@
+When TOML cannot represent a null value, `frontmatter -i` refuses the change
+before writing and leaves the source file byte-for-byte unchanged.

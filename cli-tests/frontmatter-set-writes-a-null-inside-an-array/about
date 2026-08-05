@@ -1,0 +1,2 @@
+`frontmatter --set values=[a,null]` preserves null as a value inside the array,
+instead of changing it into the quoted text `null`.

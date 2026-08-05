@@ -274,7 +274,15 @@ final class FrontmatterCommandTests: XCTestCase {
             ["--key", "values"],
             on: "---\nvalues: [[a, b], c]\n---\nBody\n"
         )
-        XCTAssertEqual(output, "[\"a\", \"b\"]\nc\n")
+        XCTAssertEqual(output, "[a, b]\nc\n")
+    }
+
+    func testKeyPrintsANullInsideANestedArrayAsYAMLNull() async throws {
+        let output = try await runFrontmatter(
+            ["--key", "values"],
+            on: "---\nvalues: [[first, null], c]\n---\nBody\n"
+        )
+        XCTAssertEqual(output, "[first, null]\nc\n")
     }
 
     func testKeyPrintsNothingWhenTheKeyIsAbsent() async throws {
@@ -338,6 +346,17 @@ final class FrontmatterCommandTests: XCTestCase {
         XCTAssertEqual(
             output,
             "---\npublished: null\ntitle: Hello\n---\nBody\n"
+        )
+    }
+
+    func testSetParsesANullInsideAnArrayIntoItsNaturalType() async throws {
+        let output = try await runFrontmatter(
+            ["--set", "values=[a, null]"],
+            on: "---\ntitle: Hello\n---\nBody\n"
+        )
+        XCTAssertEqual(
+            output,
+            "---\ntitle: Hello\nvalues:\n- a\n- null\n---\nBody\n"
         )
     }
 

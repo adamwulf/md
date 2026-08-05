@@ -1,0 +1,2 @@
+A null nested inside an array is emitted as a YAML null, never Foundation's
+`<null>` debug description.
