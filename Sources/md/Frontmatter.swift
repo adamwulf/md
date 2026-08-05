@@ -15,6 +15,20 @@ enum FrontmatterFormat: String, Equatable, CaseIterable {
     case json
 }
 
+enum FrontmatterSerializationError: LocalizedError {
+    case nonFiniteJSONNumber(keyPath: String)
+    case invalidJSONObject
+
+    var errorDescription: String? {
+        switch self {
+        case .nonFiniteJSONNumber(let keyPath):
+            return "JSON cannot represent the non-finite number at key '\(keyPath)'"
+        case .invalidJSONObject:
+            return "Frontmatter contains a value that JSON cannot represent"
+        }
+    }
+}
+
 struct Frontmatter {
     private struct SourceLine {
         let contentRange: Range<String.Index>
@@ -226,7 +240,11 @@ struct Frontmatter {
 
     private func serializeJSON() throws -> String {
         guard !data.isEmpty else { return "" }
+        try validateForJSON()
         let normalized = Frontmatter.normalizeForJSON(data)
+        guard JSONSerialization.isValidJSONObject(normalized) else {
+            throw FrontmatterSerializationError.invalidJSONObject
+        }
         let jsonData = try JSONSerialization.data(withJSONObject: normalized, options: [.prettyPrinted, .sortedKeys])
         guard let jsonString = String(data: jsonData, encoding: .utf8) else {
             return ""
@@ -287,7 +305,10 @@ struct Frontmatter {
             return i
         }
         if let d = value as? Double {
-            return d
+            return d.isFinite ? d : NSNull()
+        }
+        if let f = value as? Float {
+            return f.isFinite ? Double(f) : NSNull()
         }
         if let s = value as? String {
             return s
@@ -296,6 +317,53 @@ struct Frontmatter {
             return NSNull()
         }
         return "\(value)"
+    }
+
+    /// Reject values JSON cannot spell before Foundation sees them. Foundation's
+    /// serializer raises an Objective-C exception for non-finite numbers instead
+    /// of throwing a Swift error, so checking after the call is too late.
+    func validateForJSON() throws {
+        if let keyPath = Frontmatter.firstNonFiniteJSONNumber(in: data) {
+            throw FrontmatterSerializationError.nonFiniteJSONNumber(keyPath: keyPath)
+        }
+    }
+
+    private static func firstNonFiniteJSONNumber(
+        in value: Any,
+        keyPath: String = ""
+    ) -> String? {
+        if let dict = value as? [String: Any] {
+            for key in dict.keys.sorted() {
+                guard let child = dict[key] else { continue }
+                let childPath = keyPath.isEmpty ? key : "\(keyPath).\(key)"
+                if let invalidPath = firstNonFiniteJSONNumber(
+                    in: child,
+                    keyPath: childPath
+                ) {
+                    return invalidPath
+                }
+            }
+            return nil
+        }
+        if let array = value as? [Any] {
+            for (index, element) in array.enumerated() {
+                let childPath = "\(keyPath)[\(index)]"
+                if let invalidPath = firstNonFiniteJSONNumber(
+                    in: element,
+                    keyPath: childPath
+                ) {
+                    return invalidPath
+                }
+            }
+            return nil
+        }
+        if let number = value as? Double, !number.isFinite {
+            return keyPath
+        }
+        if let number = value as? Float, !number.isFinite {
+            return keyPath
+        }
+        return nil
     }
 
     /// Normalize Foundation types (NSString, NSNumber) to Swift native types for Yams compatibility.

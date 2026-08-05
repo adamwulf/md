@@ -33,10 +33,9 @@ cannot be nil given the only caller, the `guard let node = node` branches in
 `MarkdownParser`, the out of bounds fallback in `calculateRanges`, and the
 `sigaction` and `chflags` POSIX failure paths in `InputReader`.
 
-Two misses are different. The "serialization failed, fall through" branch in
-`FormatCommand.format` and the `catch` in `ListCommand.renderPlain` are **dead
-code today**: the only realistic failure is defect 1, and it aborts the process
-before either can run. Fix defect 1 and both become reachable.
+JSON serialization is guarded before Foundation sees the value. This matters
+because `JSONSerialization` raises rather than throws for a non-finite number;
+checking first keeps those failure paths in Swift and prevents a process abort.
 
 ## Two traps in measuring this
 
@@ -53,7 +52,7 @@ and the instrumented subprocess hits that limit writing its own profile.
 --skip-build`, that silently measures whatever test bundle is on disk. It
 reported 88.73% where the truth was 98.24%. `--build-tests` fixes it.
 
-## Defects: 24 found, 4 fixed, 20 open
+## Defects: 24 found, 5 fixed, 19 open
 
 Each open defect is pinned by tests holding the CORRECT expectation, marked as
 known failures, so it turns green by itself when it is fixed. **The `known-fail`
@@ -65,7 +64,6 @@ Numbers are stable. A fixed defect keeps its number, because commit messages and
 
 | # | Defect | Pinned by |
 | --- | --- | --- |
-| 1 | `.nan`/`.inf` in frontmatter aborts with SIGABRT. `JSONSerialization` raises rather than throws | 2 CLI, 2 Swift |
 | 4 | An HTML block is deleted. No `MarkdownBlock` case | 5 CLI, 1 Swift |
 | 6 | Two paragraphs in a blockquote flatten into one run | 1 CLI, 3 Swift |
 | 7 | An unused link reference definition is deleted | 3 CLI |
@@ -86,8 +84,9 @@ Numbers are stable. A fixed defect keeps its number, because commit messages and
 | 23 | `list --key` breaks its one line per file shape on a multi-line value | 1 CLI |
 | 24 | `list --output json` pretty-prints an empty array over three lines | 1 CLI |
 
-Fixed: **2** soft line break dropped, **3** hard line break dropped, **5**
-backslash escapes resolved away, **9** non-ASCII YAML values escaped.
+Fixed: **1** non-finite JSON number abort, **2** soft line break dropped, **3**
+hard line break dropped, **5** backslash escapes resolved away, **9** non-ASCII
+YAML values escaped.
 
 ## Two things to know before you fix
 
@@ -109,16 +108,14 @@ and this goes with it.
 
 Ordered by tests turned green for code changed:
 
-1. **1** — guard with `JSONSerialization.isValidJSONObject`. Removes the only
-   crash, and makes the two dead branches live.
-2. **10** — five cases, all inside `LinesCommand.run()`.
-3. **24**, **14**, **15**, **16**, **23** — one command each, and small.
-4. **13**, **21** — small, but each touches its callers.
-5. **12**, **18**, **19**, **20** together. `insert-before` already does the
+1. **10** — five cases, all inside `LinesCommand.run()`.
+2. **24**, **14**, **15**, **16**, **23** — one command each, and small.
+3. **13**, **21** — small, but each touches its callers.
+4. **12**, **18**, **19**, **20** together. `insert-before` already does the
    right thing: `parseDocument` plus a splice through `MarkdownSourceEditor`.
    The other three reformat the whole document. That one difference causes all
    four defects.
-6. **4**, **7**, **17**, **19**, **20** need `MarkdownBlock` to grow: cases for
+5. **4**, **7**, **17**, **19**, **20** need `MarkdownBlock` to grow: cases for
    raw HTML and for a link reference definition, and memory of the line ending,
    the bullet character, the break spelling and the list start number. These
    touch every `switch` over the enum.

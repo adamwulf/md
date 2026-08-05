@@ -87,9 +87,12 @@ struct ListCommand: AsyncParsableCommand {
     // MARK: - Run
 
     func run() async throws {
-        let entries = collectEntries()
-        let text = try render(entries)
+        let prepared = prepareEntriesForRendering(collectEntries())
+        let text = try render(prepared.entries)
         print(text, terminator: "")
+        if prepared.hadErrors {
+            throw ExitCode.failure
+        }
     }
 
     func render(_ entries: [Entry]) throws -> String {
@@ -144,6 +147,34 @@ struct ListCommand: AsyncParsableCommand {
         case .only:
             return entries.filter { $0.frontmatter == nil }
         }
+    }
+
+    /// JSONSerialization aborts the process when it receives a non-finite
+    /// number. Validate every file independently so a bad file is reported and
+    /// skipped without preventing valid neighbors from being rendered.
+    private func prepareEntriesForRendering(
+        _ entries: [Entry]
+    ) -> (entries: [Entry], hadErrors: Bool) {
+        guard format == .json || output != .plain else {
+            return (entries, false)
+        }
+
+        var validEntries: [Entry] = []
+        var hadErrors = false
+        for entry in entries {
+            guard let frontmatter = entry.frontmatter else {
+                validEntries.append(entry)
+                continue
+            }
+            do {
+                try frontmatter.validateForJSON()
+                validEntries.append(entry)
+            } catch {
+                writeStderr("md list: \(entry.path): \(error.localizedDescription)")
+                hadErrors = true
+            }
+        }
+        return (validEntries, hadErrors)
     }
 
     private func loadEntry(path: String) -> Entry {
