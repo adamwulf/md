@@ -370,6 +370,12 @@ public struct MarkdownParser {
             // to emit spends it. Every later piece is text that ran on after a
             // nested list, so it continues the item rather than starting one.
             var markerIsSpent = false
+            // An item with no children at all is one the author wrote empty.
+            // It holds nothing to gather, so the only flush it ever gets would
+            // otherwise fall through the guard below and take the bullet with
+            // it. That is different from a flush mid-item that has nothing to
+            // say, which really should emit nothing.
+            let itemIsEmpty = cmark_node_first_child(itemNode) == nil
 
             /// Emit everything gathered since the last nested list as one item.
             func flushGatheredText() {
@@ -382,12 +388,17 @@ public struct MarkdownParser {
                 // the first content position has passed it has had its turn.
                 paragraphs = []
                 pendingTask = nil
-                // An empty piece is dropped, but a checkbox is state and is
-                // content in its own right, so an item that is nothing but a
-                // box still has to survive. Dropping it loses the box, and it
-                // orphans any nested list at an indent that reads back as a
-                // code block.
-                guard !text.isEmpty || task != nil else { return }
+                // An empty piece is dropped, with two exceptions.
+                //
+                // A checkbox is state and is content in its own right, so an
+                // item that is nothing but a box still has to survive.
+                // Dropping it loses the box, and it orphans any nested list at
+                // an indent that reads back as a code block.
+                //
+                // An item the author wrote empty is still an item. Dropping it
+                // takes a bullet out of the list, and `format` writes the file,
+                // so the line is gone for good after one run.
+                guard !text.isEmpty || task != nil || itemIsEmpty else { return }
                 items.append(ListItem(
                     text: text,
                     indentLevel: indentLevel,

@@ -184,13 +184,19 @@ final class MarkdownParserTextExtractionTests: XCTestCase {
         XCTAssertEqual(items.map(\.text), ["first", "second"])
     }
 
-    func testEmptyListItemsAreDropped() {
+    /// This test used to be `testEmptyListItemsAreDropped` and asserted
+    /// `["second"]`. Dropping the item was a defect, not a decision: the
+    /// author wrote two bullets, `format` writes the file, and one run left
+    /// one bullet behind with nothing to say the other had ever been there.
+    /// The expectation is corrected rather than deleted so the old behaviour
+    /// cannot quietly come back.
+    func testAnEmptyListItemIsKept() {
         let blocks = parser.parse("-\n- second\n")
         XCTAssertEqual(blocks.count, 1)
         guard case .list(let items, _, _, _, _) = blocks[0] else {
             return XCTFail("Expected a list, got \(blocks[0])")
         }
-        XCTAssertEqual(items.map(\.text), ["second"])
+        XCTAssertEqual(items.map(\.text), ["", "second"])
     }
 
     func testAParentItemIsEmittedBeforeItsNestedChildren() {

@@ -81,7 +81,16 @@ enum BlockFormatter {
                         // The author wrote one marker for the item, and it goes
                         // here. A continuation has none, so all of its lines
                         // land at the content indent below.
-                        output += "\(indent)\(marker) \(checkbox)\(line)\n"
+                        //
+                        // The space after the marker SEPARATES it from the
+                        // content, so an item with no content at all does not
+                        // get one: it would be trailing whitespace on a line
+                        // with nothing to separate. A lone checkbox is content,
+                        // and keeps both the space and the box's own.
+                        let content = "\(checkbox)\(line)"
+                        output += content.isEmpty
+                            ? "\(indent)\(marker)\n"
+                            : "\(indent)\(marker) \(content)\n"
                     } else if line.isEmpty {
                         // A blank line carries no indent, or it would be
                         // trailing whitespace.

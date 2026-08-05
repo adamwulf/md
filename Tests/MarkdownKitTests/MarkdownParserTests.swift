@@ -226,6 +226,20 @@ final class MarkdownParserTests: XCTestCase {
         XCTAssertTrue(items.allSatisfy { !$0.continuation })
     }
 
+    /// An item the author wrote empty has no children, which is how it is told
+    /// apart from a mid-item flush that gathered nothing. Drop it and a bullet
+    /// leaves the document.
+    func testAnEmptyItemSurvives() {
+        let blocks = parser.parse("- One\n- \n- Three\n")
+        guard blocks.count == 1, case .list(let items, _, _, _, _) = blocks[0] else {
+            return XCTFail("Expected one list block, got \(blocks.count)")
+        }
+        XCTAssertEqual(items.map(\.text), ["One", "", "Three"])
+        XCTAssertEqual(items.authoredCount, 3)
+        // It is an item in its own right, not a continuation of "One".
+        XCTAssertTrue(items.allSatisfy { !$0.continuation })
+    }
+
     // MARK: - Blockquotes
 
     func testParseBlockquote() {
