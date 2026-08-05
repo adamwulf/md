@@ -10,11 +10,12 @@ python3 scripts/coverage.py --cli-only
 
 This file holds only what those tables do not say.
 
-## The CLI suite adds no line coverage
+## The CLI suite adds almost no line coverage
 
-`--swift-only` and the combined run give the same lines figure, because the
-Swift tests call each command's `run()` in process. Do not read that as "the
-CLI suite is redundant". Line coverage cannot see what that suite is for:
+`--swift-only` and the combined run give nearly the same lines figure, because
+the Swift tests call each command's `run()` in process. The CLI suite holds 4
+lines of 3180 alone, and no function at all. Do not read that as "the CLI
+suite is redundant". Line coverage cannot see what that suite is for:
 
 - the exact bytes on stdout, including a final newline, a lost CR, and a
   trailing space
@@ -38,6 +39,11 @@ JSON serialization is guarded before Foundation sees the value. This matters
 because `JSONSerialization` raises rather than throws for a non-finite number;
 checking first keeps those failure paths in Swift and prevents a process abort.
 
+The last refusal of `MarkdownSourceEditor` joins them. Every edit that reaches
+the re-spelling step is completed by it, so the `return nil` after that loop
+has no input that can arrive there. It stays as the floor under a step that
+may grow.
+
 ## Two traps in measuring this
 
 Both are handled by `scripts/coverage.py`, and both produced a plausible
@@ -53,7 +59,7 @@ and the instrumented subprocess hits that limit writing its own profile.
 --skip-build`, that silently measures whatever test bundle is on disk. It
 reported 88.73% where the truth was 98.24%. `--build-tests` fixes it.
 
-## Defects: 25 found, 11 fixed, 13 open, 1 withdrawn
+## Defects: 26 found, 13 fixed, 12 open, 1 withdrawn
 
 Each open defect is pinned by tests holding the CORRECT expectation, marked as
 known failures, so it turns green by itself when it is fixed. **The `known-fail`
@@ -65,7 +71,7 @@ Numbers are stable. A fixed defect keeps its number, because commit messages and
 
 | # | Defect | Pinned by |
 | --- | --- | --- |
-| 4 | An HTML block is deleted. No `MarkdownBlock` case | 4 CLI, 1 Swift |
+| 4 | An HTML block is deleted. No `MarkdownBlock` case | 6 CLI, 1 Swift |
 | 6 | Two paragraphs in a blockquote flatten into one run | 1 CLI, 3 Swift |
 | 7 | An unused link reference definition is deleted | 3 CLI |
 | 11 | A list block absorbs the blank line below it | 2 CLI |
@@ -77,18 +83,45 @@ Numbers are stable. A fixed defect keeps its number, because commit messages and
 | 22 | `format` has no `-i`. **Do not add it yet** — see below | 1 CLI |
 | 23 | `list --key` breaks its one line per file shape on a multi-line value | 1 CLI |
 | 24 | `list --output json` pretty-prints an empty array over three lines | 1 CLI |
-| 25 | Removing an intervening block lets a list absorb indented code; the safe editor refuses | 1 CLI |
 
 Fixed: **1** non-finite JSON number abort, **2** soft line break dropped, **3**
 hard line break dropped, **5** backslash escapes resolved away, **9** non-ASCII
 YAML values escaped, **10** phantom final line counted, **12** editing commands
 counted frontmatter as blocks, **15** `--key` mapping printed as a Swift
 dictionary, **16** null value serialized as `<null>`, **18** editing commands
-invented a final newline, **19** editing commands re-spelled untouched blocks.
+invented a final newline, **19** editing commands re-spelled untouched blocks,
+**25** an edit destroyed the code block below it, **26** a code fence was
+closed by the backticks it enclosed.
 
 Withdrawn: **8** was an incorrect expectation, not a formatter defect. The
 continuation is indented beneath the list item's content and formatting the
 result again is idempotent, so it remains part of the same item.
+
+## A fence is not a re-spelling the editor chose freely
+
+Defects 25 and 26 are worth reading together, because 25 broke the rule that
+defect 19 established and it had to.
+
+**25.** Blank lines do not end a list, and a line indented as far as the item
+content continues that item. A top-level indented code block therefore cannot
+sit directly below a list: **no document can hold that shape**. The case that
+pinned 25 expected exactly that shape, so the expectation was impossible, and
+the bytes it asked for were the corruption. Reading them back gives one list,
+with the code block turned into a paragraph of the last item.
+
+Only three things close a list there, and each writes something the author did
+not: an HTML block, a thematic break, or text at column 0. The fourth way out
+is to re-spell the code block itself, and that is what the editor does. It is
+the last step it tries, after every byte-preserving candidate has failed, so
+defect 19's promise still holds everywhere it can: an untouched block keeps its
+own bullet, its own break spelling, and its own bytes. Only the block that the
+edit would otherwise destroy is re-spelled, and only into the fenced form that
+`md format` already writes for every code block.
+
+**26** was found on the way. `BlockFormatter` wrote a fixed three-backtick
+fence, so code holding a line of three backticks closed its own fence. The
+fence is now one longer than the longest run it encloses. Without that, the
+fix for 25 would have carried the defect into `remove` and `replace`.
 
 ## Two things to know before you fix
 
@@ -110,9 +143,13 @@ Ordered by tests turned green for code changed:
 
 1. **24**, **14**, **23** — one command each, and small.
 2. **13**, **21** — small, but each touches its callers.
-3. **11**, **6**, **25** — localized parser range and container-separator fixes.
+3. **11**, **6** — localized parser range and container-separator fixes.
 4. **4**, **7**, **17**, **20** need the parsed document model to grow: cases
    for raw HTML and link reference definitions, plus memory of the line ending
    and ordered-list start number. These touch every `switch` over the enum.
+   Take **4** first of the four. `<!-- -->` is the CommonMark idiom for
+   holding two blocks apart, and deleting it does not only lose the comment:
+   `format-keeps-an-html-comment-that-separates-two-lists` shows two lists
+   merging into one, which moves every block index below that point.
 5. **22** only after **4**, **6**, **7**, **17**, and **20**, so in-place
    formatting cannot write any of those losses into the user's file.
