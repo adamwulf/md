@@ -52,7 +52,7 @@ and the instrumented subprocess hits that limit writing its own profile.
 --skip-build`, that silently measures whatever test bundle is on disk. It
 reported 88.73% where the truth was 98.24%. `--build-tests` fixes it.
 
-## Defects: 24 found, 5 fixed, 19 open
+## Defects: 24 found, 6 fixed, 18 open
 
 Each open defect is pinned by tests holding the CORRECT expectation, marked as
 known failures, so it turns green by itself when it is fixed. **The `known-fail`
@@ -68,7 +68,6 @@ Numbers are stable. A fixed defect keeps its number, because commit messages and
 | 6 | Two paragraphs in a blockquote flatten into one run | 1 CLI, 3 Swift |
 | 7 | An unused link reference definition is deleted | 3 CLI |
 | 8 | A wrapped list item reformats so the continuation escapes the item | 1 Swift |
-| 10 | `lines` counts one line too many, from the split after the final newline | 5 CLI |
 | 11 | A list block absorbs the blank line below it | 2 CLI |
 | 12 | `remove`, `replace`, `insert-after` use `parse`, not `parseDocument`, so frontmatter counts as blocks | 4 Swift |
 | 13 | An unparseable frontmatter fence reads as no frontmatter, exit 0 | 3 CLI |
@@ -86,7 +85,7 @@ Numbers are stable. A fixed defect keeps its number, because commit messages and
 
 Fixed: **1** non-finite JSON number abort, **2** soft line break dropped, **3**
 hard line break dropped, **5** backslash escapes resolved away, **9** non-ASCII
-YAML values escaped.
+YAML values escaped, **10** phantom final line counted.
 
 ## Two things to know before you fix
 
@@ -108,14 +107,13 @@ and this goes with it.
 
 Ordered by tests turned green for code changed:
 
-1. **10** — five cases, all inside `LinesCommand.run()`.
-2. **24**, **14**, **15**, **16**, **23** — one command each, and small.
-3. **13**, **21** — small, but each touches its callers.
-4. **12**, **18**, **19**, **20** together. `insert-before` already does the
+1. **24**, **14**, **15**, **16**, **23** — one command each, and small.
+2. **13**, **21** — small, but each touches its callers.
+3. **12**, **18**, **19**, **20** together. `insert-before` already does the
    right thing: `parseDocument` plus a splice through `MarkdownSourceEditor`.
    The other three reformat the whole document. That one difference causes all
    four defects.
-5. **4**, **7**, **17**, **19**, **20** need `MarkdownBlock` to grow: cases for
+4. **4**, **7**, **17**, **19**, **20** need `MarkdownBlock` to grow: cases for
    raw HTML and for a link reference definition, and memory of the line ending,
    the bullet character, the break spelling and the list start number. These
    touch every `switch` over the enum.

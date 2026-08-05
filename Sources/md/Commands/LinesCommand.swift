@@ -47,7 +47,10 @@ struct LinesCommand: AsyncParsableCommand {
 
     func run() async throws {
         let content = try input.readContent()
-        let lines = content.components(separatedBy: "\n")
+        var lines = content.components(separatedBy: "\n")
+        if lines.last?.isEmpty == true {
+            lines.removeLast()
+        }
 
         if count {
             print(lines.count)

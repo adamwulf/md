@@ -1,9 +1,0 @@
-md prints a fourth entry, "4  ", for a document of three lines.
-
-Same cause as lines-counts-a-document-that-ends-with-a-newline: the
-empty element components(separatedBy:) leaves after the final
-newline is listed as a line of its own. Nothing follows the last
-newline, so nothing should be numbered after gamma.
-
-The phantom line also widens the padding once the real count reaches
-9, because the width comes from the inflated count.
