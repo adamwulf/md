@@ -1,0 +1,3 @@
+Setting one key rewrites the whole fence. Reading the untouched
+key back out of the result proves the rewrite kept it: the
+value still holds its colon and the fence still parses.

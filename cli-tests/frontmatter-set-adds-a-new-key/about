@@ -1,0 +1,3 @@
+Without -i the whole document goes to stdout: the rewritten
+fence and the body under it. The keys come back sorted, so the
+order the file had is not the order it prints.

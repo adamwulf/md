@@ -1,0 +1,1 @@
+frontmatter --set "title=Hello" --format toml --file input.md

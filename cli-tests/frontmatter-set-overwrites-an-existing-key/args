@@ -1,0 +1,1 @@
+frontmatter --set "title=New Title" --file input.md

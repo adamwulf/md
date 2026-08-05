@@ -1,0 +1,3 @@
+--set with --format rewrites the fence in the new format,
+delimiters and all, and carries the keys that were already
+there across.

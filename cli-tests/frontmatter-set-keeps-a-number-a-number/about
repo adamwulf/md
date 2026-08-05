@@ -1,0 +1,2 @@
+42 is written as a number, not as the string '42', so a reader
+of the file gets a number back.

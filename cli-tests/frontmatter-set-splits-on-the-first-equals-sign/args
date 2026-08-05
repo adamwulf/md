@@ -1,0 +1,1 @@
+frontmatter --set "equation=a=b" --file input.md

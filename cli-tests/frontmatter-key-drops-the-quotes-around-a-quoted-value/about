@@ -1,0 +1,2 @@
+The quotes are YAML syntax, not part of the value, so they are
+not printed.

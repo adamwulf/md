@@ -1,0 +1,1 @@
+frontmatter --set "draft=false" --format toml --file input.md

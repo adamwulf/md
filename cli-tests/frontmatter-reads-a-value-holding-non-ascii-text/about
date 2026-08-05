@@ -1,0 +1,2 @@
+The é here is U+00E9, two bytes. Reading a fence must not turn
+readable text into escape sequences.

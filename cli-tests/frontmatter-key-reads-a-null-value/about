@@ -1,0 +1,4 @@
+A key with no value is null. `null` is the word YAML uses for
+it, and it is what the file would hold if it were written back.
+The description an Objective-C bridge gives a null is not a
+value the user ever wrote.

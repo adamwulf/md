@@ -1,0 +1,3 @@
+Removing a key that is not there removes nothing. The keys in
+this fence are already in sorted order, so the document that
+comes back is the document that went in, byte for byte.

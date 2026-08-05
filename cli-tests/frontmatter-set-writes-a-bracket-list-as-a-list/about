@@ -1,0 +1,2 @@
+Bracket syntax on the command line becomes a real list in the
+fence, in the order it was given. Only mapping keys are sorted.

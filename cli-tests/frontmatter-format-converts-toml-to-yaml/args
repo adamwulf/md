@@ -1,0 +1,1 @@
+frontmatter --format yaml --file input.md

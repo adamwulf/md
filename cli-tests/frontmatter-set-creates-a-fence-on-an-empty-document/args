@@ -1,0 +1,1 @@
+frontmatter --set "title=Hello" --file input.md

@@ -1,0 +1,2 @@
+yaml, toml and json are the three formats a fence can be
+written in. Anything else is a typo worth refusing.

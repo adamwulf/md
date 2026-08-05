@@ -1,0 +1,10 @@
+Asking for a key inside a fence that is not YAML reports the key as
+missing rather than reporting the broken fence.
+
+Frontmatter.parseFenced swallows the Yams failure into an empty
+dictionary, so `get` finds nothing, and the command prints nothing and
+exits 0. `md frontmatter --key title` therefore answers the same way
+for a file whose fence will not parse as for a file whose fence simply
+has no title.
+
+The parse failure should be reported on stderr with a non-zero exit.

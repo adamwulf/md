@@ -1,0 +1,3 @@
+Two inputs at once is a mistake worth refusing: silently
+picking one of them would edit a document the user did not
+mean.

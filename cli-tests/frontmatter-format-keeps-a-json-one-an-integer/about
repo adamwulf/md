@@ -1,0 +1,4 @@
+JSON numbers and JSON booleans both arrive as NSNumber, and an
+NSNumber holding 1 answers yes to `as? Bool`. The count must
+cross to YAML as 1 and the flag as true; neither may take the
+other's shape.

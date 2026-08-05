@@ -1,0 +1,2 @@
+A TOML table header is a nested key, so dot syntax reaches into
+it the same way it reaches into a nested YAML mapping.

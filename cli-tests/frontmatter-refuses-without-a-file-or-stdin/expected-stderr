@@ -1,0 +1,3 @@
+Error: Must specify either --file or --stdin
+Usage: md frontmatter [--in-place] [--key <key>] [--set <set>] [--remove-key <remove-key>] [--format <format>] [--file <file>] [--stdin]
+  See 'md frontmatter --help' for more information.

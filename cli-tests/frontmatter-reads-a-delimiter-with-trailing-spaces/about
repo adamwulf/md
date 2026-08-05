@@ -1,0 +1,3 @@
+Both delimiter lines in input.md end with two spaces, on
+purpose. Trailing whitespace on a delimiter is invisible in an
+editor and must not stop the fence being found.

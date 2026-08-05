@@ -1,0 +1,2 @@
+Reading in place means nothing. Rather than write the data back
+over the document, the command refuses.

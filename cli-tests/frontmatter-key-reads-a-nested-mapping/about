@@ -1,0 +1,3 @@
+A key can name a whole mapping. What comes back should be that
+mapping written in the format of the fence, the same way a list
+value comes back as lines a shell can read.

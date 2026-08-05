@@ -1,0 +1,3 @@
+--format chooses how a fence is spelled. One value asked for by
+name is printed as itself, not wrapped in the punctuation of a
+format it was never part of.

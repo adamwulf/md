@@ -1,0 +1,14 @@
+Setting a key rewrites every non-ASCII value in the fence as an escape
+sequence. `--set "title=Café"` writes `title: "Caf\xE9"`.
+
+Frontmatter.serializeYAML calls Yams.dump without allowUnicode, and
+that parameter defaults to false, which tells libyaml to escape every
+character outside ASCII.
+
+This is the same defect as in frontmatter-reads-a-value-holding-non-
+ascii-text, but on the write path, where it costs the user more: with
+-i the escaped bytes land in the file. Setting one unrelated key is
+enough to rewrite every accented word, dash and CJK character in a
+fence the user typed by hand.
+
+Yams.dump should be called with allowUnicode: true.

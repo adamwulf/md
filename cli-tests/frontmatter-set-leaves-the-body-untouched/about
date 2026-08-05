@@ -1,0 +1,4 @@
+Everything under the closing delimiter is the body and none of
+it is the frontmatter command's business: a tab, two trailing
+spaces, a fenced block holding a --- line, non-ASCII prose and
+a missing final newline all come back byte for byte.

@@ -1,0 +1,2 @@
+A colon and a space inside a plain scalar would read back as a
+second mapping key, so the value has to come out quoted.

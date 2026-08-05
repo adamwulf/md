@@ -1,0 +1,1 @@
+frontmatter --remove-key author.email --file input.md
