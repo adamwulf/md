@@ -388,16 +388,6 @@ final class MarkdownParserTests: XCTestCase {
         XCTAssertTrue(items.allSatisfy { !$0.continuation })
     }
 
-    /// KNOWN FAILURE, kept as documentation for a later fix.
-    ///
-    /// A list item can hold more than one paragraph. `collectListItems` puts the text
-    /// of each paragraph one after the other, thus the two paragraphs of one item run
-    /// together, the same way that a blockquote loses its paragraph break. See
-    /// `testParseBlockquoteWithTwoParagraphsKeepsThemApart`.
-    ///
-    /// The fix must keep the two paragraphs apart. How many newlines to put between
-    /// them is for that fix to decide, thus this test only asks for a line break.
-    /// Remove the `XCTExpectFailure` when the fix is in.
     func testParseNestedListItemsKeepSoftLineBreaks() {
         let markdown = "- a\n  a2\n    - b\n      b2\n        - c\n          c2"
         let blocks = parser.parse(markdown)

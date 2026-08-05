@@ -141,6 +141,61 @@ final class FormatCommandRunTests: XCTestCase {
         XCTAssertEqual(output, "line one\nline two\n")
     }
 
+    /// A hard line break is two or more trailing spaces before a newline. It is not a
+    /// blank line: it holds one paragraph together and breaks the line inside it. A
+    /// blank line divides two paragraphs, and `md format` handles that correctly.
+    func testFormatKeepsAHardLineBreakWrittenWithTwoSpaces() async throws {
+        XCTExpectFailure("""
+            A hard line break becomes a CMARK_NODE_LINEBREAK, which getNodeText \
+            renders to commonmark and then trims to nothing. Thus md format writes \
+            "line oneline two" and the two words are welded. How to write the break \
+            back is for the fix to decide, thus this test asks only that the two \
+            words stay apart.
+            """)
+        let output = try await runFormat(on: "line one  \nline two\n")
+        XCTAssertFalse(output.contains("oneline"), "the hard break was dropped: \(output.debugDescription)")
+    }
+
+    /// The backslash spelling of the same break. A backslash at the end of a line is a
+    /// hard line break, exactly like two trailing spaces.
+    func testFormatKeepsAHardLineBreakWrittenWithABackslash() async throws {
+        XCTExpectFailure("""
+            Same root cause as the two-space spelling: the CMARK_NODE_LINEBREAK is \
+            trimmed away, thus md format writes "line oneline two".
+            """)
+        let output = try await runFormat(on: "line one\\\nline two\n")
+        XCTAssertFalse(output.contains("oneline"), "the hard break was dropped: \(output.debugDescription)")
+    }
+
+    /// The break dies wherever it sits, not only at the end of the paragraph. Here the
+    /// soft break of the first two lines survives and only the hard break is lost.
+    func testFormatKeepsAHardLineBreakThatFollowsASoftOne() async throws {
+        XCTExpectFailure("""
+            The soft break of line one holds, thus this shows that only the hard \
+            break is lost, wherever in the paragraph it sits.
+            """)
+        let output = try await runFormat(on: "line one\nline two  \nline three\n")
+        XCTAssertFalse(output.contains("twoline"), "the hard break was dropped: \(output.debugDescription)")
+    }
+
+    /// A blank line is not a hard break. This one passes, and it is here so that the
+    /// two are not confused: `md format` divides two paragraphs correctly.
+    func testFormatKeepsTwoParagraphsApart() async throws {
+        let output = try await runFormat(on: "para one\n\npara two\n")
+        XCTAssertEqual(output, "para one\n\npara two\n")
+    }
+
+    /// A setext heading written with a hard break loses the same way, and a heading is
+    /// one line, thus the two lines belong together with a space between them.
+    func testFormatKeepsAHardLineBreakInsideASetextHeading() async throws {
+        XCTExpectFailure("""
+            The heading joins its lines with a space, but the hard line break is \
+            gone before the join happens, thus md format writes "# alphabravo".
+            """)
+        let output = try await runFormat(on: "alpha  \nbravo\n=====\n")
+        XCTAssertEqual(output, "# alpha bravo\n")
+    }
+
     func testFormatKeepsABlockquoteParagraphBreak() async throws {
         XCTExpectFailure("""
             A blockquote holding two paragraphs is flattened to a single run of \
