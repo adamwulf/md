@@ -42,6 +42,11 @@ enum EscapeCases {
         "a < b and x <= y",
         "text with | pipe",
         "issue #42 is open",
+        "path ~/Documents/file",
+        "array[0] and array[1]",
+        "5 \\* 3 = 15",
+        "a - b",
+        "2 + 2 = 4",
     ]
 
     /// The text of every block, joined. Enough to show any change of the text, of the

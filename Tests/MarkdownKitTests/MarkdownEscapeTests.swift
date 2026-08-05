@@ -129,6 +129,41 @@ final class MarkdownEscapeTests: XCTestCase {
         XCTAssertEqual(paragraphText("C:\\\\path\\\\file"), "C:\\\\path\\\\file")
     }
 
+    // MARK: - Trade-offs that this design makes on purpose
+
+    /// `*`, `` ` ``, `~` and `[` get a backslash everywhere, and not only where they
+    /// do damage today. Each of the four needs a second character to make markup, and
+    /// that second character can be in a different node of the same block. The parser
+    /// gives one node at a time, thus it cannot see the pair.
+    ///
+    /// A backslash that a character does not need is safe: a reader shows `\*` as `*`.
+    /// A pair that keeps no backslash is not safe: it changes what the text means.
+    /// Thus these four take the safe side, and the source grows a backslash that the
+    /// reader never shows.
+    ///
+    /// The three tests below hold that decision. Change them together with
+    /// `MarkdownEscaper` if the decision changes.
+    func testStarAlwaysKeepsABackslash() {
+        // `a*b*c` is emphasis, thus a star is live between two letters as well.
+        XCTAssertEqual(paragraphText("5 \\* 3 = 15"), "5 \\* 3 = 15")
+        XCTAssertEqual(paragraphText("2 \\* 3 \\* 4"), "2 \\* 3 \\* 4")
+    }
+
+    func testTildeAlwaysKeepsABackslash() {
+        // `~text~` is strikethrough in GFM, thus one tilde is enough to begin it.
+        XCTAssertEqual(paragraphText("path ~/Documents/file"), "path \\~/Documents/file")
+    }
+
+    func testOpeningSquareBracketAlwaysKeepsABackslash() {
+        // `[a](b)` is a link and `[a]` alone is a link when the file holds a
+        // definition for `a`. A `]` alone opens nothing, thus it keeps no backslash.
+        XCTAssertEqual(paragraphText("array[0] and array[1]"), "array\\[0] and array\\[1]")
+    }
+
+    func testBacktickAlwaysKeepsABackslash() {
+        XCTAssertEqual(paragraphText("a \\` here"), "a \\` here")
+    }
+
     // MARK: - Character entities
 
     /// `&amp;amp;` is the text `&amp;`. Written with no backslash it reads back as `&`,
