@@ -37,8 +37,15 @@ struct FormatCommand: AsyncParsableCommand {
 
     func run() async throws {
         let source = try input.readSource()
-        if frontmatter == .json, let parsed = Frontmatter.parse(source.content) {
-            try parsed.validateForJSON()
+        if let parsed = Frontmatter.parse(source.content) {
+            switch frontmatter {
+            case .json:
+                try parsed.validateForJSON()
+            case .toml:
+                try parsed.validateForTOML()
+            case .yaml, .none:
+                break
+            }
         }
         try InputReader.writeToStdout(
             FormatCommand.format(

@@ -79,10 +79,14 @@ final class FormatCommandRunTests: XCTestCase {
             "--frontmatter", "toml", "--file", path,
         ])
 
-        await XCTAssertThrowsErrorMessage(
-            "TOML cannot represent the null value at key path published"
-        ) {
+        do {
             try await command.run()
+            XCTFail("Expected TOML conversion to reject null")
+        } catch {
+            XCTAssertEqual(
+                error.localizedDescription,
+                "TOML cannot represent the null value at key path published"
+            )
         }
     }
 

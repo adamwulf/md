@@ -156,7 +156,9 @@ struct ListCommand: AsyncParsableCommand {
         _ entries: [Entry]
     ) -> (entries: [Entry], hadErrors: Bool) {
         let plainScalarOutput = output == .plain && key != nil
-        guard !plainScalarOutput, format == .json || output != .plain else {
+        let needsJSON = output != .plain || format == .json
+        let needsTOML = output == .plain && format == .toml
+        guard !plainScalarOutput, needsJSON || needsTOML else {
             return (entries, false)
         }
 
@@ -168,7 +170,12 @@ struct ListCommand: AsyncParsableCommand {
                 continue
             }
             do {
-                try projectedFrontmatter(from: frontmatter).validateForJSON()
+                let projected = projectedFrontmatter(from: frontmatter)
+                if needsJSON {
+                    try projected.validateForJSON()
+                } else {
+                    try projected.validateForTOML()
+                }
                 validEntries.append(entry)
             } catch {
                 writeStderr("md list: \(entry.path): \(error.localizedDescription)")
@@ -350,13 +357,18 @@ struct ListCommand: AsyncParsableCommand {
         // instead of JSON's defensive null representation.
         let normalized = normalizeForPlainScalar(value)
         if let array = normalized as? [Any] {
-            return array.map { "\($0)" }.joined(separator: ",")
+            return array.map { element in
+                element is NSNull ? "null" : "\(element)"
+            }.joined(separator: ",")
         }
         if let dict = normalized as? [String: Any] {
             let data = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys])
             if let data = data, let str = String(data: data, encoding: .utf8) {
                 return str
             }
+        }
+        if normalized is NSNull {
+            return "null"
         }
         return "\(normalized)"
     }

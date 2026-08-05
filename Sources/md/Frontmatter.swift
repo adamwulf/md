@@ -17,12 +17,15 @@ enum FrontmatterFormat: String, Equatable, CaseIterable {
 
 enum FrontmatterSerializationError: LocalizedError {
     case nonFiniteJSONNumber(keyPath: String)
+    case nullNotRepresentableInTOML(keyPath: String)
     case invalidJSONObject
 
     var errorDescription: String? {
         switch self {
         case .nonFiniteJSONNumber(let keyPath):
             return "JSON cannot represent the non-finite number at key path \(keyPath)"
+        case .nullNotRepresentableInTOML(let keyPath):
+            return "TOML cannot represent the null value at key path \(keyPath)"
         case .invalidJSONObject:
             return "Frontmatter contains a value that JSON cannot represent"
         }
@@ -219,7 +222,7 @@ struct Frontmatter {
         case .yaml:
             return try serializeYAML()
         case .toml:
-            return serializeTOML()
+            return try serializeTOML()
         case .json:
             return try serializeJSON()
         }
@@ -232,9 +235,9 @@ struct Frontmatter {
         return yaml
     }
 
-    private func serializeTOML() -> String {
+    private func serializeTOML() throws -> String {
         guard !data.isEmpty else { return "" }
-        let table = Frontmatter.dictToTOMLTable(data)
+        let table = try Frontmatter.dictToTOMLTable(data)
         return table.convert(to: .toml) + "\n"
     }
 
@@ -326,6 +329,12 @@ struct Frontmatter {
         if let keyPath = Frontmatter.firstNonFiniteJSONNumber(in: data) {
             throw FrontmatterSerializationError.nonFiniteJSONNumber(keyPath: keyPath)
         }
+    }
+
+    /// Reject null before TOMLKit sees it. TOML has no null value, so silently
+    /// converting Foundation's NSNull description into text changes its type.
+    func validateForTOML() throws {
+        _ = try Frontmatter.dictToTOMLTable(data)
     }
 
     private static func firstNonFiniteJSONNumber(
@@ -452,16 +461,23 @@ struct Frontmatter {
     }
 
     /// Convert a [String: Any] dictionary to a TOMLTable.
-    static func dictToTOMLTable(_ dict: [String: Any]) -> TOMLTable {
+    static func dictToTOMLTable(
+        _ dict: [String: Any],
+        keyPath: String = ""
+    ) throws -> TOMLTable {
         let table = TOMLTable()
         for (key, value) in dict {
-            table[key] = anyToTOMLValue(value)
+            let childPath = appendingJSONPathKey(key, to: keyPath)
+            table[key] = try anyToTOMLValue(value, keyPath: childPath)
         }
         return table
     }
 
     /// Convert a Swift Any value to a TOMLValueConvertible.
-    private static func anyToTOMLValue(_ value: Any) -> TOMLValueConvertible {
+    private static func anyToTOMLValue(
+        _ value: Any,
+        keyPath: String
+    ) throws -> TOMLValueConvertible {
         switch value {
         case let b as Bool:
             return b
@@ -472,9 +488,18 @@ struct Frontmatter {
         case let s as String:
             return s
         case let dict as [String: Any]:
-            return dictToTOMLTable(dict)
+            return try dictToTOMLTable(dict, keyPath: keyPath)
         case let arr as [Any]:
-            return TOMLArray(arr.map { anyToTOMLValue($0) })
+            return TOMLArray(try arr.enumerated().map { index, element in
+                try anyToTOMLValue(
+                    element,
+                    keyPath: "\(keyPath)[\(index)]"
+                )
+            })
+        case is NSNull:
+            throw FrontmatterSerializationError.nullNotRepresentableInTOML(
+                keyPath: keyPath
+            )
         default:
             return String(describing: value)
         }
@@ -484,8 +509,10 @@ struct Frontmatter {
 
     /// Parse a string value into the most appropriate type.
     static func parseValue(_ string: String) -> Any {
-        // Boolean
         let lower = string.lowercased()
+        if lower == "null" { return NSNull() }
+
+        // Boolean
         if lower == "true" { return true }
         if lower == "false" { return false }
 

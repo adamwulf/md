@@ -361,8 +361,8 @@ final class FrontmatterConversionTests: XCTestCase {
         XCTAssertEqual(dict["dt"] as? String, "2026-04-18T12:34:56Z")
     }
 
-    func testSwiftValuesConvertBackIntoATOMLTable() {
-        let table = Frontmatter.dictToTOMLTable([
+    func testSwiftValuesConvertBackIntoATOMLTable() throws {
+        let table = try Frontmatter.dictToTOMLTable([
             "s": "x",
             "i": 3,
             "d": 1.5,
@@ -378,8 +378,8 @@ final class FrontmatterConversionTests: XCTestCase {
         XCTAssertEqual(table["list"]?.array?.count, 2)
     }
 
-    func testAValueTOMLCannotHoldIsStoredAsItsDescription() {
-        let table = Frontmatter.dictToTOMLTable([
+    func testAValueTOMLCannotHoldIsStoredAsItsDescription() throws {
+        let table = try Frontmatter.dictToTOMLTable([
             "url": URL(fileURLWithPath: "/tmp/x")
         ])
         XCTAssertEqual(table["url"]?.string, "file:///tmp/x")
