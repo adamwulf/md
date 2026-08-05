@@ -163,6 +163,8 @@ python3 scripts/coverage.py --html cov  # a browsable report
 **[docs/TESTING.md](docs/TESTING.md) explains which suite a given test belongs
 in, and how to write one.** [cli-tests/README.md](cli-tests/README.md)
 documents the CLI case format in full. Read both before adding tests.
+[docs/COVERAGE.md](docs/COVERAGE.md) holds the last measured numbers and the
+list of known open defects.
 
 ## Library
 
