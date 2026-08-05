@@ -61,12 +61,18 @@ final class MarkdownParserTests: XCTestCase {
     /// newline, because `getNodeText` renders such a node to commonmark. The heading
     /// text must stay on one line for every such node, not only for a soft break that
     /// is a direct child of the heading.
+    ///
+    /// A code span and a link are of interest, because a space in them is content.
+    /// cmark makes the newline in them a space itself, thus the join at the heading
+    /// finds no newline there and cannot double that space.
     func testParseSetextHeadingWithMultilineInlineNodeStaysOneLine() {
-        let expected = ["*Heading one Heading two*", "Heading **one two**"]
-        for (markdown, expectedText) in zip(
-            ["*Heading one\nHeading two*\n===========", "Heading **one\ntwo**\n==========="],
-            expected
-        ) {
+        let cases = [
+            ("*Heading one\nHeading two*\n===========", "*Heading one Heading two*"),
+            ("Heading **one\ntwo**\n===========", "Heading **one two**"),
+            ("`code\nspan` tail\n===========", "`code span` tail"),
+            ("[link one\nlink two](/url)\n===========", "[link one link two](/url)"),
+        ]
+        for (markdown, expectedText) in cases {
             let blocks = parser.parse(markdown)
             XCTAssertEqual(blocks.count, 1)
             guard case .heading(_, let text, _, _, _) = blocks[0] else {

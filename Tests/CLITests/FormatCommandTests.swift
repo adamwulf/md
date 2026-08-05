@@ -255,15 +255,49 @@ final class FormatCommandTests: XCTestCase {
     /// become live markdown, and one paragraph would divide into two blocks.
     ///
     /// The escape work in `MarkdownEscaper` answers this: the backslash goes back on.
+    /// A character reference (`&#35;`) is inert text in the source in the same way,
+    /// and `getNodeText` loses it in the same way, thus it gets the same backslash.
     func testFormatKeepsEscapedMarkdownOnContinuationLines() {
         let parser = MarkdownParser()
-        for source in ["foo\n\\# bar\n", "foo\n\\- bar\n", "foo\n\\> bar\n", "foo\n\\`\\`\\`js\n"] {
+        let sources = [
+            "foo\n\\# bar\n",
+            "foo\n\\- bar\n",
+            "foo\n\\> bar\n",
+            "foo\n\\`\\`\\`js\n",
+            // A character reference is inert text in the source, the same as a
+            // backslash escape, and `getNodeText` loses it in the same way.
+            "foo\n&#35; bar\n",
+            "foo\n&gt; bar\n",
+            "foo\n&#96;&#96;&#96;js\n",
+        ]
+        for source in sources {
             let once = runFormat(source)
             XCTAssertEqual(
                 parser.parse(once).count,
                 parser.parse(source).count,
                 "md format changed the number of blocks for \(source.debugDescription): \(once.debugDescription)"
             )
+        }
+    }
+
+    /// The same class of loss, but here the number of blocks does not move.
+    ///
+    /// `&#45;&#45;&#45;` is inert text in the source, thus the paragraph keeps it,
+    /// but the block text holds `---`. Written at column 0 below its paragraph line,
+    /// that would become a setext underline, and a second `md format` would make the
+    /// paragraph into a heading and lose the text of the second line. `MarkdownEscaper`
+    /// puts a backslash on it, thus the paragraph stays a paragraph.
+    func testFormatKeepsEscapedSetextUnderlineOnContinuationLine() {
+        let parser = MarkdownParser()
+        let source = "foo\n&#45;&#45;&#45;\n"
+        let once = runFormat(source)
+        XCTAssertEqual(runFormat(once), once, "md format is not idempotent: \(once.debugDescription)")
+
+        let blocks = parser.parse(once)
+        XCTAssertEqual(blocks.count, 1, "expected one block, got: \(once.debugDescription)")
+        guard case .paragraph = blocks[0] else {
+            XCTFail("Expected the block to stay a paragraph, got: \(once.debugDescription)")
+            return
         }
     }
 }
