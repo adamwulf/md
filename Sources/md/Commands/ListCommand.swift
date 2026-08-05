@@ -251,7 +251,7 @@ struct ListCommand: AsyncParsableCommand {
         if let key = key {
             for entry in entries {
                 guard let fm = entry.frontmatter, let value = fm.get(key) else { continue }
-                out += "\(entry.path)\t\(formatScalarValue(value))\n"
+                out += "\(entry.path)\t\(formatScalarValue(value, format: fm.format))\n"
             }
             return out
         }
@@ -350,7 +350,10 @@ struct ListCommand: AsyncParsableCommand {
 
     // MARK: - Scalar formatting
 
-    private func formatScalarValue(_ value: Any) -> String {
+    private func formatScalarValue(
+        _ value: Any,
+        format: FrontmatterFormat
+    ) -> String {
         // Normalize dates / nested structures into JSON-friendly shape first so
         // dates become ISO-8601 instead of Swift's Date debug description. This
         // is plain output, though, so non-finite values remain readable tokens
@@ -358,7 +361,14 @@ struct ListCommand: AsyncParsableCommand {
         let normalized = normalizeForPlainScalar(value)
         if let array = normalized as? [Any] {
             return array.map { element in
-                element is NSNull ? "null" : "\(element)"
+                if element is NSNull { return "null" }
+                if element is [Any] || element is [String: Any] {
+                    return (try? Frontmatter.serializeInlineCollection(
+                        element,
+                        format: format
+                    )) ?? "\(element)"
+                }
+                return "\(element)"
             }.joined(separator: ",")
         }
         if let dict = normalized as? [String: Any] {

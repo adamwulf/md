@@ -83,8 +83,9 @@ struct FormatCommand: AsyncParsableCommand {
                 let delimiter = delimiter(for: targetFrontmatter)
                 return "\(delimiter)\n\(serialized)\(delimiter)\n\(formattedBody)"
             }
-            // Serialization failed — fall through to verbatim emission of the
-            // source frontmatter, using the source's original delimiters.
+            // The command-line entry point validates before calling this API.
+            // Static callers still fall through to verbatim source frontmatter
+            // if conversion cannot be represented.
         }
 
         let delimiter = delimiter(for: parsed.format)

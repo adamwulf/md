@@ -466,11 +466,84 @@ struct Frontmatter {
         keyPath: String = ""
     ) throws -> TOMLTable {
         let table = TOMLTable()
-        for (key, value) in dict {
+        for key in dict.keys.sorted() {
+            guard let value = dict[key] else { continue }
             let childPath = appendingJSONPathKey(key, to: keyPath)
             table[key] = try anyToTOMLValue(value, keyPath: childPath)
         }
         return table
+    }
+
+    /// Serialize a collection used as one item of a projected array. Flow
+    /// style keeps the collection on one line, so an array of arrays retains
+    /// its shape while still using the requested frontmatter syntax.
+    static func serializeInlineCollection(
+        _ value: Any,
+        format: FrontmatterFormat
+    ) throws -> String {
+        switch format {
+        case .yaml:
+            let blockYAML = try Yams.dump(
+                object: normalizeForYAML(value),
+                allowUnicode: true,
+                sortKeys: true
+            )
+            guard let node = try Yams.compose(yaml: blockYAML) else {
+                return ""
+            }
+            return try Yams.serialize(
+                node: yamlFlowNode(node),
+                allowUnicode: true,
+                sortKeys: true
+            ).trimmingCharacters(in: .newlines)
+        case .json:
+            let wrapper = Frontmatter(
+                format: .json,
+                data: ["value": value],
+                rawContent: "",
+                body: "",
+                originalContent: ""
+            )
+            try wrapper.validateForJSON()
+            let normalized = normalizeForJSON(value)
+            guard JSONSerialization.isValidJSONObject(normalized) else {
+                throw FrontmatterSerializationError.invalidJSONObject
+            }
+            let bytes = try JSONSerialization.data(
+                withJSONObject: normalized,
+                options: [.sortedKeys, .fragmentsAllowed]
+            )
+            return String(data: bytes, encoding: .utf8) ?? ""
+        case .toml:
+            let table = try dictToTOMLTable(["value": value])
+            let assignment = table.convert(to: .toml)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let prefix = "value = "
+            guard assignment.hasPrefix(prefix) else { return assignment }
+            return String(assignment.dropFirst(prefix.count))
+        }
+    }
+
+    private static func yamlFlowNode(_ node: Node) -> Node {
+        var result = node
+        if var sequence = node.sequence {
+            sequence.style = .flow
+            for index in sequence.indices {
+                sequence[index] = yamlFlowNode(sequence[index])
+            }
+            result.sequence = sequence
+        } else if var mapping = node.mapping {
+            mapping.style = .flow
+            for index in mapping.indices {
+                let pair = mapping[index]
+                mapping[index] = (
+                    key: yamlFlowNode(pair.key),
+                    value: yamlFlowNode(pair.value)
+                )
+            }
+            result.mapping = mapping
+        }
+        return result
     }
 
     /// Convert a Swift Any value to a TOMLValueConvertible.
@@ -526,6 +599,11 @@ struct Frontmatter {
         if string.hasPrefix("[") && string.hasSuffix("]") {
             let inner = String(string.dropFirst().dropLast())
             let items = inner.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            if items.contains(where: { $0.lowercased() == "null" }) {
+                return items.map { item -> Any in
+                    item.lowercased() == "null" ? NSNull() : item
+                }
+            }
             return items
         }
 

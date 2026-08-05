@@ -228,9 +228,14 @@ final class FormatCommandRunTests: XCTestCase {
         XCTAssertEqual(output, "an escaped \\*asterisk\\*\n")
     }
 
+    /// The continuation is indented under the item's content. A second format
+    /// pass produces the same single-item document, so the old failure marker
+    /// described an incorrect expectation rather than a formatter defect.
     func testFormatKeepsAListItemContinuationInsideItsItem() async throws {
         let output = try await runFormat(on: "- item one\n  continued\n")
         XCTAssertEqual(output, "- item one\n  continued\n")
+        let secondPass = try await runFormat(on: output)
+        XCTAssertEqual(secondPass, output)
     }
 
     func testFormatDropsHtmlBlocksEntirely() async throws {
