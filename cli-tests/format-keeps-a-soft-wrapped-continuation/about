@@ -1,0 +1,16 @@
+EVERY LINE OF A CONTINUATION LANDS AT THE CONTENT INDENT, NOT ONLY THE FIRST.
+
+The writer treats an item's first line differently from the rest: the first
+carries the marker and the checkbox, the rest line up under the content. A
+continuation has no marker, so ALL of its lines take the second path,
+including the one that would have been first.
+
+Get that wrong and only line one moves. `tail line two` would keep an indent
+meant for a line that follows a marker, and the two halves of one soft wrapped
+sentence would sit in different columns.
+
+A soft wrap is also the shape that HIDES indent defects, which is why it is
+worth its own case. A lazy continuation line is paragraph text whatever its
+indentation, so cmark reads the paragraph back correctly even when the columns
+are wrong, and a case that only round trips would see nothing. This one pins
+the bytes.

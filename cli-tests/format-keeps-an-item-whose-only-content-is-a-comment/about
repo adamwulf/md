@@ -1,0 +1,26 @@
+THE CONTROL CASE FOR "AN ITEM WITH NOTHING IN IT".
+
+Three items in, three out, and the middle one keeps its comment. An HTML
+comment renders nothing, so this item looks empty to a reader of the OUTPUT
+and is not empty at all to the parser: the comment is a node, the item has a
+child, and its text is the comment itself.
+
+WHY THAT MATTERS ENOUGH TO PIN. Three shapes reach the writer looking alike,
+and md must tell them apart:
+
+    - <!-- note -->   a child that renders nothing   KEPT, this case
+    -                 no child, written empty        KEPT as `-`,
+                                                     format-keeps-an-empty-list-item
+    - [ref]: /url     no child, cmark ate it         known-fail, its URL is lost
+
+Only the middle two share a mechanism. `collectListItems` decides an item's
+fate by asking whether the item node has any children, so this case is the one
+that must NOT go down that path, and it is the control that says the question
+is being asked of the right thing. A fix that instead asked "is the item's
+text empty" would keep this item too — by luck, since a comment has text — but
+would fall over on an item holding something that renders nothing AND yields
+no text.
+
+It also guards the comment itself. An item's content comes back through the
+CommonMark writer, and a comment that lost its brackets would become ordinary
+prose in the middle of a list.

@@ -1,0 +1,40 @@
+A CONTINUATION PARAGRAPH IS NOT AN ITEM.
+
+The tail here was authored as a paragraph inside the first item, so it stays
+there, at the item's content indent of two columns, with no bullet. Write a
+bullet for it and the author's TWO top-level items become THREE, and the third
+is prose that was never a list item at all. On a task list that reads as a
+task nobody wrote.
+
+The damage lasts because `format` writes the file. Once the bullet is on disk
+the extra item is real, and no later reader — human or tool — can tell it from
+one the author typed.
+
+md already agreed with this when nothing sat between the two paragraphs:
+`blocks-counts-a-task-item-continuation-inside-its-item` has always passed. A
+nested list was the only thing that changed the answer, and it had no business
+changing it.
+
+CAUSE, while it was broken. `MarkdownBlock.list` holds ONE FLAT array, so an
+item cannot hold "text, a nested list, then more text": the nested items must
+sit BETWEEN the two paragraphs. `collectListItems` coped by flushing the text
+before the nested list as a separate `ListItem`, and the piece after the list
+became a sibling indistinguishable from one the author wrote.
+
+The multi-paragraph case already worked, which is what made the shape of the
+fix clear: two paragraphs with no nested list between them are joined into one
+`ListItem.text` and the writer puts the second at the content indent. Only the
+ordering forced by a nested list defeated that.
+
+FIX. `ListItem.continuation` marks every piece after the one that spends the
+item's marker. `BlockFormatter` writes a continuation at the content indent
+with no marker and no checkbox, and `Array.authoredCount` skips it wherever
+items are counted. The flat array is untouched.
+
+This case is the writer's half. `blocks-counts-an-item-split-by-a-nested-list-once`
+is the model's half, and the two were one defect.
+
+IT USED TO DAMAGE A CORRECT DOCUMENT. `expected.md` fed back through
+`md format` came out changed: the tail was torn off again. The case is
+therefore also an idempotence guard. A document that is right before the run
+must still be right after it.

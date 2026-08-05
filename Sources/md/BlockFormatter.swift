@@ -52,7 +52,13 @@ enum BlockFormatter {
                     // Asking the deeper item there would put a blank line
                     // inside the parent item and make the parent list loose,
                     // which gains a level of indent on every pass.
-                    let gapIsTight = level > previousLevel ? previousTight : item.tight
+                    //
+                    // A continuation always takes the blank line. It follows
+                    // the nested list that split its item, and without the gap
+                    // it reads back as one more line of that list.
+                    let gapIsTight = item.continuation
+                        ? false
+                        : (level > previousLevel ? previousTight : item.tight)
                     if !gapIsTight {
                         output += "\n"
                     }
@@ -63,22 +69,34 @@ enum BlockFormatter {
                 let indent = String(repeating: "    ", count: level)
                 let marker = item.ordered ? "1." : "-"
                 let checkbox = Self.checkboxPrefix(for: item.task)
-                // Continuation lines line up under the item content, which
-                // begins after the marker and its one space. The checkbox
-                // stands inside that content and so moves nothing: counting
-                // its width would put a continuation four columns past the
-                // content start, where it becomes an indented code block.
-                let continuation = String(repeating: " ", count: indent.count + marker.count + 1)
+                // Content begins after the marker and its one space, and every
+                // line but the first lines up there. The checkbox stands
+                // INSIDE that content and so moves nothing: counting its width
+                // would put a line four columns past the content start, where
+                // it becomes an indented code block.
+                let contentIndent = String(repeating: " ", count: indent.count + marker.count + 1)
                 let lines = item.text.split(separator: "\n", omittingEmptySubsequences: false)
                 for (lineIndex, line) in lines.enumerated() {
-                    if lineIndex == 0 {
-                        output += "\(indent)\(marker) \(checkbox)\(line)\n"
+                    if lineIndex == 0 && !item.continuation {
+                        // The author wrote one marker for the item, and it goes
+                        // here. A continuation has none, so all of its lines
+                        // land at the content indent below.
+                        //
+                        // The space after the marker SEPARATES it from the
+                        // content, so an item with no content at all does not
+                        // get one: it would be trailing whitespace on a line
+                        // with nothing to separate. A lone checkbox is content,
+                        // and keeps both the space and the box's own.
+                        let content = "\(checkbox)\(line)"
+                        output += content.isEmpty
+                            ? "\(indent)\(marker)\n"
+                            : "\(indent)\(marker) \(content)\n"
                     } else if line.isEmpty {
                         // A blank line carries no indent, or it would be
                         // trailing whitespace.
                         output += "\n"
                     } else {
-                        output += "\(continuation)\(line)\n"
+                        output += "\(contentIndent)\(line)\n"
                     }
                 }
             }

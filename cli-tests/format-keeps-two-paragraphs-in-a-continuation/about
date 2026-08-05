@@ -1,0 +1,16 @@
+A CONTINUATION MAY HOLD MORE THAN ONE PARAGRAPH, AND THEY STAY APART.
+
+Everything after the nested list is ONE continuation, not one per paragraph.
+Its text holds both paragraphs with a blank line between them, exactly as an
+unsplit item does.
+
+Two things could go wrong and this case catches both. Run the paragraphs
+together and the last word of the first welds onto the first word of the
+second. Give the blank line the content indent and it becomes trailing
+whitespace on an otherwise empty line.
+
+The blank line is written bare, which is why the writer tests for an empty
+line before it reaches for the indent. The order of those two tests is the
+whole of the behaviour here, and it also decides the fate of an item that is
+nothing but a checkbox, which is a first line that is legitimately empty; see
+`format-keeps-an-item-that-is-only-a-checkbox`.

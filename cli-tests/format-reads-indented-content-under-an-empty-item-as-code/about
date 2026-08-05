@@ -1,0 +1,26 @@
+THIS OUTPUT LOOKS WRONG AND IS RIGHT. DO NOT "FIX" IT.
+
+A list, a nested list and a paragraph go in. A bullet and a CODE BLOCK come
+out. That is CommonMark, not a defect, and the case exists to stop the next
+reader from spending an afternoon on it.
+
+WHY. A list item may begin with at most one blank line. `- ` followed by a
+blank line is an item with no content, and an empty item cannot go on to hold
+further blocks. So the list ENDS at line 1. The lines below it are no longer
+inside any item, and from the left margin they are indented four columns,
+which is an indented code block.
+
+The four columns are the whole of it. Written under an item that HAS content,
+the same lines are a nested list and a continuation, because content there
+begins at column 2 and four is only two columns past it. It is the empty first
+line that moves the goalposts to the margin.
+
+WHAT THIS CASE IS GUARDING, THEN. That md keeps following cmark here rather
+than guessing at what the author meant. The author probably did mean a nested
+list, and md cannot act on that: the reference parser says code, every other
+CommonMark tool will say code, and a document that md alone reads differently
+is worse than one that is uniformly surprising.
+
+Related, and genuinely a defect rather than a surprise: the bullet on line 1
+used to vanish entirely, taking the list with it. See
+`format-keeps-an-empty-list-item`. The `-` in the expected output is that fix.

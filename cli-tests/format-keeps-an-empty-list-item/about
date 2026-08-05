@@ -1,0 +1,34 @@
+AN ITEM THE AUTHOR WROTE EMPTY IS STILL AN ITEM.
+
+Three bullets in, three out. `format` used to give back two, and it writes the
+file, so the middle line was gone for good after one run. On a checklist that
+is an errand nobody will do, because nothing is left to say it was ever there.
+
+`-` IS WRITTEN BARE, with no trailing space. The space after a marker
+SEPARATES it from the content, and there is no content here to separate it
+from. `- ` would leave whitespace at the end of the line.
+
+A lone checkbox is content and keeps both spaces, its own and the marker's:
+`- [ ] ` is right, and `format-keeps-an-item-that-is-only-a-checkbox` pins it.
+The two cases are the same branch of the writer asking whether anything
+follows the marker, so change one and run the other.
+
+CAUSE, while it was broken. `MarkdownParser.collectListItems` drops a flush
+that gathered nothing:
+
+    guard !text.isEmpty || task != nil else { return }
+
+That guard is right about the pieces a nested list splits off — an item whose
+text runs out before the nested list has nothing to emit — but it could not
+tell those apart from an item that was empty to begin with. An item the author
+wrote empty has NO CHILDREN, which a mid-item flush cannot say, so the guard
+now asks that question too.
+
+THE TRAP THAT MAKES THIS EXCEPTION NARROWER THAN IT LOOKS.
+`format-keeps-a-link-reference-definition-in-a-list-item` is a known-fail
+because `- [ref]: /url` ALSO has no children: cmark consumes a link reference
+definition into the document's reference map and leaves no node behind. So
+this fix gives that input a bare `-` and its URL stays lost. That is an
+improvement — before, the entire list block vanished — but it is not the end
+of it, and the source line is the only thing that can tell an item written
+empty from one whose definition was eaten.

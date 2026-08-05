@@ -1,0 +1,16 @@
+AN ORDERED LIST DOES NOT INVENT A SECOND STEP.
+
+The same defect as `format-keeps-a-tail-paragraph-inside-its-item`, on an
+ordered list. It has its own case for two reasons.
+
+THE HARM IS DIFFERENT IN KIND. A bullet list that gains an item gains a
+bullet. An ordered list that gains an item gains a STEP: the document then
+describes a two step procedure where the author wrote one step and a note
+about it. Prose that explains a step becomes an instruction to carry out, and
+a reader following the list does something nobody asked for.
+
+THE INDENT IS DIFFERENT. Content begins three columns after `1. ` and two
+after `- `. A fix that hard-coded the bullet width would pass the other case
+and fail this one, so this case pins the width to the marker that precedes it.
+`BlockFormatter` derives it as indent + marker + one space, which is why both
+come out right.

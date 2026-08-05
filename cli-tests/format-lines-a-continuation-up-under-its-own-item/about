@@ -1,0 +1,24 @@
+A CONTINUATION LINES UP UNDER THE ITEM IT CONTINUES, WHICHEVER ONE THAT IS.
+
+Two items are split here, at two different depths, and each one's tail belongs
+to a different item:
+
+    Child tail   continues the CHILD, at level 1, so it lands at six columns
+    Parent tail  continues the PARENT, at level 0, so it lands at two
+
+Both tails sit at the same indent in the SOURCE. Only the item each one falls
+inside decides where it is written, so a fix that remembered one indent for
+the whole list, or that used the depth of the nested list rather than of the
+item being continued, would put one of the two in the wrong column.
+
+Four columns is the interesting wrong answer. Six is the content indent of a
+level 1 item; a `Parent tail` written there would be two columns past its own
+content start, and far enough past it on a deeper list to read back as an
+indented code block. Prose would stop being prose.
+
+`BlockFormatter` derives the column as indent + marker + one space, from the
+item's own level and marker. That is the whole reason both come out right, and
+this case is what says so.
+
+The counts confirm it from the model's side: three items in, three out. The
+two tails are continuations and neither is counted.

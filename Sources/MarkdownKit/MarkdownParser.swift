@@ -34,13 +34,47 @@ public struct ListItem: Sendable, Equatable {
     /// separated by blank lines. Like `ordered`, this describes the list the
     /// item belongs to, so a nested list can differ from its parent.
     public let tight: Bool
+    /// Whether this entry continues the item before it rather than starting an
+    /// item of its own.
+    ///
+    /// The array is flat, so an item cannot hold "text, a nested list, then
+    /// more text": the nested items have to sit between the two paragraphs.
+    /// The text after the nested list is therefore carried as its own entry,
+    /// and this flag says that the author wrote no marker for it. It is
+    /// written at the content indent of the item it continues, and whatever
+    /// counts the items the author wrote skips it.
+    ///
+    /// Without the flag a continuation paragraph is indistinguishable from an
+    /// item, so the document gains a bullet nobody wrote — a numbered STEP on
+    /// an ordered list — and every edit by index lands one item out.
+    public let continuation: Bool
 
-    public init(text: String, indentLevel: Int, ordered: Bool, task: TaskState? = nil, tight: Bool = true) {
+    public init(
+        text: String,
+        indentLevel: Int,
+        ordered: Bool,
+        task: TaskState? = nil,
+        tight: Bool = true,
+        continuation: Bool = false
+    ) {
         self.text = text
         self.indentLevel = indentLevel
         self.ordered = ordered
         self.task = task
         self.tight = tight
+        self.continuation = continuation
+    }
+}
+
+public extension Array where Element == ListItem {
+    /// How many items the author wrote.
+    ///
+    /// Not `count`. The array also holds the continuations that a nested list
+    /// split off, and those carry no marker of their own. Counting them tells
+    /// the reader a list is longer than it is, and it makes every edit by
+    /// index land one item out.
+    var authoredCount: Int {
+        lazy.filter { !$0.continuation }.count
     }
 }
 
@@ -332,6 +366,16 @@ public struct MarkdownParser {
             var pendingTask = itemNode.flatMap { taskState(of: $0, lineTable: lineTable) }
             var paragraphs: [String] = []
             var child = cmark_node_first_child(itemNode)
+            // The author wrote ONE marker for this item, and the first piece
+            // to emit spends it. Every later piece is text that ran on after a
+            // nested list, so it continues the item rather than starting one.
+            var markerIsSpent = false
+            // An item with no children at all is one the author wrote empty.
+            // It holds nothing to gather, so the only flush it ever gets would
+            // otherwise fall through the guard below and take the bullet with
+            // it. That is different from a flush mid-item that has nothing to
+            // say, which really should emit nothing.
+            let itemIsEmpty = cmark_node_first_child(itemNode) == nil
 
             /// Emit everything gathered since the last nested list as one item.
             func flushGatheredText() {
@@ -344,19 +388,29 @@ public struct MarkdownParser {
                 // the first content position has passed it has had its turn.
                 paragraphs = []
                 pendingTask = nil
-                // An empty piece is dropped, but a checkbox is state and is
-                // content in its own right, so an item that is nothing but a
-                // box still has to survive. Dropping it loses the box, and it
-                // orphans any nested list at an indent that reads back as a
-                // code block.
-                guard !text.isEmpty || task != nil else { return }
+                // An empty piece is dropped, with two exceptions.
+                //
+                // A checkbox is state and is content in its own right, so an
+                // item that is nothing but a box still has to survive.
+                // Dropping it loses the box, and it orphans any nested list at
+                // an indent that reads back as a code block.
+                //
+                // An item the author wrote empty is still an item. Dropping it
+                // takes a bullet out of the list, and `format` writes the file,
+                // so the line is gone for good after one run.
+                guard !text.isEmpty || task != nil || itemIsEmpty else { return }
                 items.append(ListItem(
                     text: text,
                     indentLevel: indentLevel,
                     ordered: ordered,
                     task: task,
-                    tight: tight
+                    tight: tight,
+                    continuation: markerIsSpent
                 ))
+                // Spent by the piece that EMITS, not by the first flush. A
+                // flush that emits nothing has written no marker, so the
+                // marker is still the next piece's to use.
+                markerIsSpent = true
             }
 
             while let currentChild = child {
