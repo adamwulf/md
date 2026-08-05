@@ -1,0 +1,11 @@
+An item that holds a checkbox and no text survives, and keeps its sublist.
+
+A checkbox is state, so a box on its own IS content. Dropping the item as
+empty lost the box outright, and did worse than that when the item held a
+nested list: the parent vanished and its child was left at four leading
+spaces, which reads back as an indented code block rather than a list, so
+the whole list was destroyed and the output no longer settled.
+
+The trailing space after the box is deliberate. `- [ ]` with nothing after
+it is not a task item to cmark, so the space is what lets an empty box come
+back as a box.

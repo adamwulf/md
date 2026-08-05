@@ -1,0 +1,12 @@
+A backslash escape inside a list item survives, whether or not the item
+opens with a checkbox.
+
+The children of a list item are whole blocks, so each one comes back
+through the CommonMark writer with its backslashes. An escape that is
+dropped turns the author's text back into markup: `\*not emphasis\*`
+becomes emphasis, and `\&amp;` becomes a live entity that renders as a
+bare ampersand, which still LOOKS right in a terminal.
+
+The last item is the one to watch. The box is read from the first bracket
+pair on the line, so an ESCAPED `\[x\]` later in the prose must neither be
+mistaken for the box nor tick the real one.

@@ -1,0 +1,16 @@
+A continuation paragraph lines up under the item CONTENT, at column 2 for
+a `- ` marker, and not past the checkbox.
+
+The checkbox stands inside the content, so it shifts nothing after it.
+Counting its width put the continuation at column 6, which is four columns
+past the content start and therefore an indented code block: the author's
+prose stopped being prose after one pass, and drifted four more columns on
+every pass after that.
+
+Two other defects show in the same fixture. Before the tasklist extension
+was attached the box came back as `\[ \]`, and the two paragraphs of the
+item were run together with nothing between them, welding "release" onto
+"Wait".
+
+The `then-args` pass formats the first pass again, so a drift of even one
+column fails this case.

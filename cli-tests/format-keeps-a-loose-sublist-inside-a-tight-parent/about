@@ -1,0 +1,15 @@
+A blank line belongs to the SHALLOWER of the two items it sits between, so
+a loose sublist does not loosen the parent that holds it.
+
+The items reach the writer as one flat array across every level, so asking
+the item AFTER a gap whether a blank line belongs there puts one in front
+of the FIRST child of a loose sublist. That blank does not fall between two
+children: it falls between the parent's own text and its sublist, and
+CommonMark then reads the PARENT list as loose. The next pass adds another
+blank, and the one after that adds an indent level.
+
+This shape needs a TIGHT parent holding a LOOSE child. When both lists are
+loose the gap is wanted either way and the defect hides.
+
+The `then-args` pass is the whole point of the case: the first pass alone
+looked right, and it was the second that showed the drift.
