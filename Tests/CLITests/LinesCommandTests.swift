@@ -76,6 +76,21 @@ final class LinesCommandTests: XCTestCase {
         XCTAssertEqual(output, "0\n")
     }
 
+    func testCountTreatsLoneCarriageReturnsAsLineEndings() async throws {
+        let output = try await runLines(["--count"], on: "one\rtwo\r")
+        XCTAssertEqual(output, "2\n")
+    }
+
+    func testCountKeepsABlankLineBeforeTheFinalNewline() async throws {
+        let output = try await runLines(["--count"], on: "one\n\n")
+        XCTAssertEqual(output, "2\n")
+    }
+
+    func testOneNewlineIsOneBlankLine() async throws {
+        let output = try await runLines(["--count"], on: "\n")
+        XCTAssertEqual(output, "1\n")
+    }
+
     func testCountTakesPrecedenceOverStartLine() async throws {
         let output = try await runLines(["--count", "1"], on: "one\ntwo")
         XCTAssertEqual(output, "2\n")
@@ -110,6 +125,11 @@ final class LinesCommandTests: XCTestCase {
     func testListingKeepsBlankLinesInPlace() async throws {
         let output = try await runLines([], on: "alpha\n\nbeta")
         XCTAssertEqual(output, "1  alpha\n2  \n3  beta\n")
+    }
+
+    func testListingKeepsLoneCarriageReturnsObservable() async throws {
+        let output = try await runLines([], on: "alpha\rbeta\r")
+        XCTAssertEqual(output, "1  alpha\r\n2  beta\r\n")
     }
 
     /// Lines are raw source, so frontmatter delimiters are listed like any

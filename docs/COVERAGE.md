@@ -21,8 +21,9 @@ CLI suite is redundant". Line coverage cannot see what that suite is for:
 - the exit code
 - what the file holds after `-i`
 - how ArgumentParser reads a real command line
-- **a crash.** No Swift test can assert defect 1 below, because the abort
-  takes the test process with it. In the CLI suite it is only an exit code.
+- **a crash.** Fixed defect 1 was pinned here because its SIGABRT would have
+  taken the Swift test process with it. In the CLI suite it was only an exit
+  code, and the case now guards the clean refusal.
 
 Every open defect below sits on a line that coverage already counted.
 

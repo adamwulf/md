@@ -22,7 +22,7 @@ enum FrontmatterSerializationError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .nonFiniteJSONNumber(let keyPath):
-            return "JSON cannot represent the non-finite number at key '\(keyPath)'"
+            return "JSON cannot represent the non-finite number at key path \(keyPath)"
         case .invalidJSONObject:
             return "Frontmatter contains a value that JSON cannot represent"
         }
@@ -335,7 +335,7 @@ struct Frontmatter {
         if let dict = value as? [String: Any] {
             for key in dict.keys.sorted() {
                 guard let child = dict[key] else { continue }
-                let childPath = keyPath.isEmpty ? key : "\(keyPath).\(key)"
+                let childPath = appendingJSONPathKey(key, to: keyPath)
                 if let invalidPath = firstNonFiniteJSONNumber(
                     in: child,
                     keyPath: childPath
@@ -364,6 +364,24 @@ struct Frontmatter {
             return keyPath
         }
         return nil
+    }
+
+    private static func appendingJSONPathKey(
+        _ key: String,
+        to keyPath: String
+    ) -> String {
+        if !key.isEmpty,
+           key.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" }) {
+            return keyPath.isEmpty ? key : "\(keyPath).\(key)"
+        }
+
+        let encoded = try? JSONSerialization.data(
+            withJSONObject: key,
+            options: [.fragmentsAllowed]
+        )
+        let quotedKey = encoded.flatMap { String(data: $0, encoding: .utf8) }
+            ?? "\"\(key)\""
+        return "\(keyPath)[\(quotedKey)]"
     }
 
     /// Normalize Foundation types (NSString, NSNumber) to Swift native types for Yams compatibility.

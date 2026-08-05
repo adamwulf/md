@@ -12,6 +12,12 @@ import XCTest
 
 enum StandardStream {
 
+    struct CapturedCommandRun {
+        let standardOutput: String
+        let standardError: String
+        let error: Error?
+    }
+
     /// Runs `body` with `STDOUT_FILENO` pointed at a scratch file and returns
     /// everything the body wrote. A file is used instead of a pipe because a
     /// pipe fills after 64 KB and would deadlock a body that writes more.
@@ -70,6 +76,77 @@ enum StandardStream {
         restore()
 
         return try Data(contentsOf: url)
+    }
+
+    /// Captures both output streams and the error thrown by a command. Unlike
+    /// `capturingStandardOutput`, the command error is returned rather than
+    /// rethrown so tests can assert on bytes written before a final exit code.
+    static func capturingCommandRun(
+        _ body: () async throws -> Void
+    ) async throws -> CapturedCommandRun {
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("md-stdout-\(UUID().uuidString)")
+        let errorURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("md-stderr-\(UUID().uuidString)")
+        guard FileManager.default.createFile(atPath: outputURL.path, contents: nil),
+              FileManager.default.createFile(atPath: errorURL.path, contents: nil) else {
+            throw TestSupportError.cannotCreateScratchFile(outputURL.path)
+        }
+        defer {
+            try? FileManager.default.removeItem(at: outputURL)
+            try? FileManager.default.removeItem(at: errorURL)
+        }
+
+        fflush(stdout)
+        fflush(stderr)
+        let savedOutput = dup(STDOUT_FILENO)
+        let savedError = dup(STDERR_FILENO)
+        guard savedOutput >= 0, savedError >= 0 else {
+            if savedOutput >= 0 { close(savedOutput) }
+            if savedError >= 0 { close(savedError) }
+            throw TestSupportError.cannotDuplicateDescriptor
+        }
+
+        let redirectedOutput = open(outputURL.path, O_WRONLY | O_TRUNC)
+        let redirectedError = open(errorURL.path, O_WRONLY | O_TRUNC)
+        guard redirectedOutput >= 0, redirectedError >= 0 else {
+            close(savedOutput)
+            close(savedError)
+            if redirectedOutput >= 0 { close(redirectedOutput) }
+            if redirectedError >= 0 { close(redirectedError) }
+            throw TestSupportError.cannotCreateScratchFile(outputURL.path)
+        }
+
+        dup2(redirectedOutput, STDOUT_FILENO)
+        dup2(redirectedError, STDERR_FILENO)
+        close(redirectedOutput)
+        close(redirectedError)
+
+        var commandError: Error?
+        do {
+            try await body()
+        } catch {
+            commandError = error
+        }
+
+        fflush(stdout)
+        fflush(stderr)
+        dup2(savedOutput, STDOUT_FILENO)
+        dup2(savedError, STDERR_FILENO)
+        close(savedOutput)
+        close(savedError)
+
+        let outputData = try Data(contentsOf: outputURL)
+        let errorData = try Data(contentsOf: errorURL)
+        guard let output = String(data: outputData, encoding: .utf8),
+              let errorOutput = String(data: errorData, encoding: .utf8) else {
+            throw TestSupportError.capturedOutputIsNotUTF8
+        }
+        return CapturedCommandRun(
+            standardOutput: output,
+            standardError: errorOutput,
+            error: commandError
+        )
     }
 
     /// Runs `body` with `stdin` re-associated to a scratch file holding `text`,

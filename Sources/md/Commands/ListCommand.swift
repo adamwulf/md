@@ -155,7 +155,8 @@ struct ListCommand: AsyncParsableCommand {
     private func prepareEntriesForRendering(
         _ entries: [Entry]
     ) -> (entries: [Entry], hadErrors: Bool) {
-        guard format == .json || output != .plain else {
+        let plainScalarOutput = output == .plain && key != nil
+        guard !plainScalarOutput, format == .json || output != .plain else {
             return (entries, false)
         }
 
@@ -167,7 +168,7 @@ struct ListCommand: AsyncParsableCommand {
                 continue
             }
             do {
-                try frontmatter.validateForJSON()
+                try projectedFrontmatter(from: frontmatter).validateForJSON()
                 validEntries.append(entry)
             } catch {
                 writeStderr("md list: \(entry.path): \(error.localizedDescription)")
@@ -343,6 +344,15 @@ struct ListCommand: AsyncParsableCommand {
     // MARK: - Scalar formatting
 
     private func formatScalarValue(_ value: Any) -> String {
+        // A plain scalar is not JSON. Keep non-finite numbers readable instead
+        // of passing them through JSON normalization, which represents them as
+        // null solely to protect Foundation's serializer.
+        if let number = value as? Double, !number.isFinite {
+            return "\(number)"
+        }
+        if let number = value as? Float, !number.isFinite {
+            return "\(number)"
+        }
         // Normalize dates / nested structures into JSON-friendly shape first so
         // dates become ISO-8601 instead of Swift's Date debug description.
         let normalized = Frontmatter.normalizeForJSON(value)

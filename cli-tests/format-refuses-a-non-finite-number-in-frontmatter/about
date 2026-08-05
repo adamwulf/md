@@ -1,7 +1,6 @@
-Guards against a crash: `md format --frontmatter json` on a document whose
-frontmatter holds .nan aborts with SIGABRT instead of refusing.
+Guards the clean refusal from `md format --frontmatter json` on a document
+whose frontmatter holds .nan. This path once aborted with SIGABRT.
 
 This case exists in the CLI suite rather than the Swift suite because a
-SIGABRT cannot be asserted from inside the process that dies. Here the crash
-is simply an exit code, and the case will start passing the moment the tool
-refuses cleanly instead.
+SIGABRT cannot be asserted from inside the process that dies. The CLI case
+therefore pins the exit code and exact diagnostic outside the process.

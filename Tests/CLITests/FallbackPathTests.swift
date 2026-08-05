@@ -126,7 +126,25 @@ final class FallbackPathTests: XCTestCase {
         XCTAssertThrowsError(try frontmatter.serializeData()) { error in
             XCTAssertEqual(
                 error.localizedDescription,
-                "JSON cannot represent the non-finite number at key 'measurements.ratio'"
+                "JSON cannot represent the non-finite number at key path measurements.ratio"
+            )
+        }
+    }
+
+    func testJSONSerializationEscapesPunctuationInTheRejectedKeyPath() {
+        let frontmatter = Frontmatter(
+            format: .json,
+            data: ["measurement.ratio\nraw": Double.infinity],
+            rawContent: "",
+            body: "",
+            originalContent: ""
+        )
+
+        XCTAssertThrowsError(try frontmatter.serializeData()) { error in
+            XCTAssertEqual(
+                error.localizedDescription,
+                "JSON cannot represent the non-finite number at key path " +
+                    "[\"measurement.ratio\\nraw\"]"
             )
         }
     }

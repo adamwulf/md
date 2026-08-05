@@ -47,10 +47,7 @@ struct LinesCommand: AsyncParsableCommand {
 
     func run() async throws {
         let content = try input.readContent()
-        var lines = content.components(separatedBy: "\n")
-        if lines.last?.isEmpty == true {
-            lines.removeLast()
-        }
+        let lines = LinesCommand.sourceLines(in: content)
 
         if count {
             print(lines.count)
@@ -76,6 +73,37 @@ struct LinesCommand: AsyncParsableCommand {
         for i in start...end {
             print(lines[i - 1])
         }
+    }
+
+    /// Split logical source lines without inventing an empty line after a final
+    /// line ending. A retained carriage return keeps printed CRLF and lone-CR
+    /// source bytes observable, matching this command's raw-line contract.
+    private static func sourceLines(in content: String) -> [String] {
+        guard !content.isEmpty else { return [] }
+
+        var lines: [String] = []
+        var current = ""
+        for character in content {
+            switch character {
+            case "\n":
+                lines.append(current)
+                current = ""
+            case "\r":
+                current.append("\r")
+                lines.append(current)
+                current = ""
+            case "\r\n":
+                current.append("\r")
+                lines.append(current)
+                current = ""
+            default:
+                current.append(character)
+            }
+        }
+        if !current.isEmpty {
+            lines.append(current)
+        }
+        return lines
     }
 }
 
