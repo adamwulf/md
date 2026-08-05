@@ -1,0 +1,3 @@
+Error: Must specify either --file or --stdin
+Usage: md toc [--blocks] [--lines] [--file <file>] [--stdin]
+  See 'md toc --help' for more information.

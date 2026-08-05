@@ -1,0 +1,10 @@
+A fence that is not YAML is reported as no frontmatter at all.
+
+Frontmatter.parseFenced reads the fence with `try? Yams.load(...)` and
+swallows the failure into an empty dictionary. The command then prints
+nothing and exits 0, which is exactly what it prints for a document
+that has no fence.
+
+So a typo in a fence looks like an empty document, and a script that
+tests the exit code cannot tell the two apart. The parse failure should
+be reported on stderr with a non-zero exit.

@@ -1,0 +1,3 @@
+Setting a key on a document with no frontmatter opens a fence
+for it. The fence defaults to YAML, and the whole of the old
+document becomes the body under it.

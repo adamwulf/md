@@ -1,0 +1,3 @@
+A document whose top heading is level two is indented as level two.
+The indent reports the heading level the author wrote; it is not
+re-based on the shallowest heading in the file.

@@ -1,0 +1,3 @@
+Read mode prints the frontmatter data on its own: no delimiters,
+no body, so the output can be piped into another tool. Keys come
+out in sorted order.

@@ -1,0 +1,3 @@
+insert-after 1 "## New Section
+
+A paragraph under it." --file input.md

@@ -1,0 +1,31 @@
+md breaks one file across two lines when the value holds a newline.
+
+The README describes --key as "path<TAB>value lines, one per file", and that
+shape is the whole reason --key exists: it is the output a script cuts on the
+tab. The fixture here holds one file whose `note` is a YAML literal block:
+
+    note: |
+      first
+      second
+
+so the value is `first\nsecond`. md prints it raw, and the output becomes
+
+    <path><TAB>first
+    second
+
+Two lines for one file. A reader that takes the field after the first tab of
+each line gets `first` for this file and then a line with no tab at all, which
+it will either drop or mistake for another file. There is no way to tell that
+second line apart from a path whose value is missing.
+
+`md lines --count` reports 3 for that: two lines plus the empty final one. One
+line per file, plus the final newline, is 2.
+
+The cause is ListCommand.renderPlain, which for the --key branch writes
+`"\(entry.path)\t\(formatScalarValue(value))\n"`, and formatScalarValue ends at
+`"\(normalized)"` for a scalar: no escaping, no quoting, no check for a newline.
+
+Any fix that keeps one record on one line closes this. Escaping the newline as
+\\n is the smallest one, and matches what the tab-separated shape already
+implies. If instead the fix quotes the whole value, the expected count stays 2,
+so this case still holds.

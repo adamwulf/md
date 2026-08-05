@@ -1,0 +1,2 @@
+Nothing after the equals sign is an empty string, and an empty
+string has to be quoted in YAML or it reads back as null.

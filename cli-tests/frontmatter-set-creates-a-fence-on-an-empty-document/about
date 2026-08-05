@@ -1,0 +1,3 @@
+input.md is empty, zero bytes. The document that comes back is
+a fence and nothing else: no body, and no blank line invented
+under the closing delimiter.

@@ -1,0 +1,18 @@
+format runs the two quoted paragraphs together on one line:
+
+    > First quoted paragraph.Second quoted paragraph.
+
+The blank quoted line between them is dropped, and no separator takes its
+place, so a full stop is followed immediately by a capital letter with no
+space. The quote now says something the author did not write.
+
+What it should do: keep the two paragraphs apart, with a `>` line between
+them.
+
+Cause: MarkdownParser stores a blockquote as one flat string. getChildrenText
+walks the blockquote's children — here two paragraph nodes — and concatenates
+their rendered text with nothing between them. BlockFormatter then splits that
+string on newlines and prefixes each line with "> ", so it can only ever
+recover the breaks that survived the concatenation. Any structure inside a
+blockquote is flattened the same way: two paragraphs, a heading above a
+paragraph, or a list under a sentence.

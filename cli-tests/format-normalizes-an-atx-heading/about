@@ -1,0 +1,3 @@
+A heading keeps its level and its text. The run of spaces after the
+hashes collapses to one, and the optional closing hash sequence goes
+away, because neither carries meaning.

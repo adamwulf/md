@@ -1,0 +1,1 @@
+replace 5 "Final paragraph." --file input.md

@@ -1,0 +1,3 @@
+replace --file input.md 2 -- "- one
+    - nested
+- two"

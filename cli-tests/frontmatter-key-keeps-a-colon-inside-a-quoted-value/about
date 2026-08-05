@@ -1,0 +1,2 @@
+The colon belongs to the value, not to the YAML. Reading the key
+must hand back every byte of it.

@@ -1,0 +1,5 @@
+---
+title: Café
+---
+
+A note.

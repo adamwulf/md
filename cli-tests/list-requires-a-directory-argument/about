@@ -1,0 +1,6 @@
+`list` walks directories, so with no directory named there is nothing it could
+mean. It must be refused, not treated as "the current directory".
+
+stderr is not pinned, for the reason given in list-rejects-key-and-keys-together:
+ArgumentParser appends the usage line for the subcommand, which changes whenever
+a flag is added.

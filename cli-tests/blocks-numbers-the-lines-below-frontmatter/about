@@ -1,0 +1,3 @@
+The frontmatter is skipped before parsing, but the line numbers in
+the summary must still point at the original file: the heading is on
+line 6 and the paragraph on line 8.

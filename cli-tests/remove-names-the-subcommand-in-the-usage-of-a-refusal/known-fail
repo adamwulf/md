@@ -1,0 +1,20 @@
+md prints the usage of the whole tool, not of the subcommand that
+refused:
+
+    Usage: md <subcommand>
+      See 'md --help' for more information.
+
+So a user who mistypes an index is told to read the help of `md`, and
+is never shown the arguments of the command they actually ran.
+
+The cause is where the guard sits. RemoveCommand checks the
+index inside run(), and a ValidationError thrown there reaches
+MessageInfo as a bare error rather than as a CommandError, so the
+command stack has been lost and falls back to the root command. The
+same command's --in-place with --stdin guard is thrown from validate(),
+keeps its command stack, and does name the subcommand: see
+remove-refuses-in-place-with-stdin, which passes.
+
+Moving the index guards into validate() would fix every refusal at
+once. validate() may read the file, so the block count is reachable
+from there.

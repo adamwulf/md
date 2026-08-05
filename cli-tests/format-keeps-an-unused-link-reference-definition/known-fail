@@ -1,0 +1,18 @@
+format deletes the definition. The output is just
+
+    Just a paragraph.
+
+and the URL, which appears nowhere else in the file, is gone for good.
+
+What it should do: write the definition back out. A definition that no link
+uses yet is still text the author wrote, and the next edit is likely to use
+it.
+
+Cause: cmark-gfm consumes a link reference definition while parsing and stores
+it in the document's reference map rather than leaving a node in the tree, so
+MarkdownParser.parse never sees one and FormatCommand has nothing to write.
+Keeping it needs the definitions read out of the source text before the tree
+is walked, since the parser will not hand them back.
+
+Related, and owned by another case: a definition that IS used survives only as
+the inline URL pasted into the link that referenced it.

@@ -1,0 +1,9 @@
+--key prints one value per file and --keys projects a subset into the normal
+per-file block. They describe different output, so asking for both is a mistake
+and must be refused rather than silently resolved to one of them. 64 is the
+usage exit status.
+
+stderr is not pinned. The refusal is a ValidationError, so ArgumentParser prints
+md's sentence followed by the whole usage line for `list`, and that usage line
+lists every option the subcommand has. Pinning it would turn "someone added a
+flag to list" into a failure of this case, which guards something else entirely.

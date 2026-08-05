@@ -1,0 +1,3 @@
+The CR of a CRLF file ends the line; it is not part of the heading.
+So the block content is `# Title` and the terminator is the newline
+the command writes.

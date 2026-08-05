@@ -1,0 +1,2 @@
+The nesting level of every item survives, and the two children stay
+under alpha rather than being flattened beside it.

@@ -1,0 +1,4 @@
+`md help blocks` and `md blocks --help` are two spellings of one request, and
+both must answer with the same thing on stdout, and exit 0. This case pins the
+first line of the `help` spelling; cli-blocks-help-prints-its-abstract pins the
+first line of the flag spelling, and the two expected files are identical.

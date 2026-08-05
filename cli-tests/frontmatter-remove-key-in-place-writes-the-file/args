@@ -1,0 +1,1 @@
+frontmatter --remove-key draft --file input.md -i

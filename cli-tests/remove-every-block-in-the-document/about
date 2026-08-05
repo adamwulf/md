@@ -1,0 +1,2 @@
+A range over the whole document empties it. Nothing at all is
+printed, not even a newline.

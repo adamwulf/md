@@ -1,0 +1,2 @@
+Read mode re-serializes the data, and it sorts the keys while it
+does so. The order in the file does not reach the output.

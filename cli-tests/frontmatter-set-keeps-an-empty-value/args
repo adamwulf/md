@@ -1,0 +1,1 @@
+frontmatter --set "subtitle=" --file input.md

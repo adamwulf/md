@@ -1,0 +1,2 @@
+Neither --file nor --stdin. The document could come from anywhere,
+so the tool must ask rather than guess.

@@ -1,0 +1,2 @@
+A list value prints one item per line, in the order the file
+gives them, so the output feeds a shell loop.

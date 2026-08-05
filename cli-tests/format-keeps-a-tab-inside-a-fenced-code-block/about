@@ -1,0 +1,2 @@
+A tab inside a fence is content. Expanding it to spaces would
+silently rewrite source code the author pasted in.

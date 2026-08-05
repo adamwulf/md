@@ -1,0 +1,3 @@
+Error: Block index must be in range 1...5, got 9
+Usage: md insert-after [--in-place] <block-index> <content> [--file <file>] [--stdin]
+  See 'md insert-after --help' for more information.

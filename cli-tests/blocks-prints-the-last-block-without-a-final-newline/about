@@ -1,0 +1,3 @@
+The document has no final newline. The block content ends at the
+last byte of the file, and the one newline in the output is the
+terminator the command writes after the block.

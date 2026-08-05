@@ -1,0 +1,2 @@
+A range whose end equals its start replaces that one block, and must
+read the same as the two argument form.

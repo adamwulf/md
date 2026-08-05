@@ -1,0 +1,3 @@
+Error: Cannot specify both --file and --stdin
+Usage: md replace [--in-place] <start> <end-or-content> [<content>] [--file <file>] [--stdin]
+  See 'md replace --help' for more information.

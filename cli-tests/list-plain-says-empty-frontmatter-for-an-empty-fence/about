@@ -1,0 +1,8 @@
+`md list` prints an ABSOLUTE path in every record, and the harness runs each
+case in a scratch directory whose name is random, so a line holding a path can
+never be pinned byte for byte. Cases that list at least one file therefore pipe
+the output through `md lines`, which selects the lines that hold no path.
+
+A fence that opens and closes with nothing between it is not the same thing as
+a file with no fence at all: the file HAS frontmatter, it just holds no keys.
+The two states get different words, so a folder index can tell them apart.

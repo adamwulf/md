@@ -1,0 +1,5 @@
+then-args runs format over the output of the first format. A normalizer
+has to reach its fixed point in one pass, so the second run must not move
+a single byte.
+The indented body line must not be read as an indented code block
+on the second pass.

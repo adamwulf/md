@@ -1,0 +1,3 @@
+The new block goes above the header row. Landing on the delimiter
+row instead would cut the table in half and leave a stray row of
+hyphens behind.

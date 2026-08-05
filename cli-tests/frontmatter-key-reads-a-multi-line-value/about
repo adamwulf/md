@@ -1,0 +1,3 @@
+A block scalar holds a value of two lines. `|-` strips the
+trailing newline, so the value is exactly `first line\nsecond
+line` and printing it adds one newline of its own.

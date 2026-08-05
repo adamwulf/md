@@ -1,0 +1,2 @@
+With no input option the command must refuse rather than wait on a
+stdin nobody promised it.

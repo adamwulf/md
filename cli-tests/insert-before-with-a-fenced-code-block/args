@@ -1,0 +1,3 @@
+insert-before 2 "```swift
+let x = 1
+```" --file input.md

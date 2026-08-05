@@ -1,0 +1,3 @@
+A refusal must name the command that refused, so that the user
+is shown the arguments of the command they ran. This case also
+holds the exact wording of the message.

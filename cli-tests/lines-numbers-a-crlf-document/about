@@ -1,0 +1,3 @@
+The listing prints each line as it is, so the two CRLF lines keep
+their CR and the last line, which has no ending in the file, gets
+the newline the command writes.

@@ -1,0 +1,1 @@
+replace 5 2 "New paragraph." --file input.md

@@ -1,0 +1,1 @@
+frontmatter --format xml --file input.md

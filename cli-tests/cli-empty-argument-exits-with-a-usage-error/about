@@ -1,0 +1,15 @@
+The argument is one empty string, which names no subcommand, so it is refused
+the same way any other unknown word is.
+
+This is as close as the harness can come to `md` with no arguments at all.
+run.py raises on an empty `args` file, so an empty argument LIST cannot be
+staged, and the zero-argument behaviour - printing the root help and exiting 0 -
+is not covered by this suite. cli-help-prints-the-overview-to-stdout pins the
+same help text through `md --help`.
+
+stderr is not pinned. ArgumentParser answers a refusal with md's own sentence
+followed by the whole usage line for the command, and that usage line names
+every option the command has. Pinning it would turn "someone added a flag" into
+a failure of this case, which guards the exit status instead. md's own stderr,
+with no usage line around it, is pinned in the two
+list-fails-when-... cases.

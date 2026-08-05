@@ -1,0 +1,1 @@
+replace 2 3 "Merged paragraph." --file input.md

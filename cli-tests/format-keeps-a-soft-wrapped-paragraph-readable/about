@@ -1,0 +1,5 @@
+A paragraph wrapped over two source lines is one paragraph with a
+soft break in it. Keeping the break is the least surprising result;
+joining the lines with a space would also be defensible. What is not
+defensible is dropping the break with no space, because that fuses
+the last word of one line onto the first word of the next.

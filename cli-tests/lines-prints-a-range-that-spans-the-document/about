@@ -1,0 +1,2 @@
+A range of every line reproduces the document. The one newline the
+input lacks at the end is the terminator the command writes.

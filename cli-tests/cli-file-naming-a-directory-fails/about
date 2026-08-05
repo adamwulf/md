@@ -1,0 +1,9 @@
+--file wants a file. Handed a directory it must fail rather than answer with
+whatever reading a directory produces.
+
+`.` is used as the directory because run.py copies only the FILES of a case
+directory to the scratch directory, never a subdirectory, so a directory fixture
+cannot be staged. The scratch directory itself is always there.
+
+stderr is not pinned, for the reason given in cli-file-that-does-not-exist-fails:
+the message is Foundation's, and localized.

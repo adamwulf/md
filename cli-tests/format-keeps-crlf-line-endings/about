@@ -1,0 +1,4 @@
+A file written on Windows uses CRLF, and every line of it does.
+Rewriting it with bare LF changes every line of the file, which
+turns one formatting run into a whole file diff for anyone
+sharing the document.

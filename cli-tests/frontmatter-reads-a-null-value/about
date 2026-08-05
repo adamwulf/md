@@ -1,0 +1,2 @@
+A key with no value is null in YAML. Reading it back must keep
+it null, not turn it into a string.

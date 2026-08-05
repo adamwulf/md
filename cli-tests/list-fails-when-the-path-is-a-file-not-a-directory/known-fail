@@ -1,0 +1,10 @@
+md warns on stderr and then exits 0, the same defect as
+list-fails-when-the-directory-does-not-exist, reached the other way: the path
+exists but is a regular file.
+
+`md list note.md` is an easy thing to type when you meant `md frontmatter --file
+note.md`, and md answers it with silence on stdout and a 0 exit status. It must
+exit non-zero.
+
+Same cause: ListCommand.walkDirectory writes the warning and returns [], and
+run() never learns that a directory could not be walked.

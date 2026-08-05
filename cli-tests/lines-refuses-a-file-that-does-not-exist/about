@@ -1,0 +1,3 @@
+There is no fixture in this case, so the path cannot be read. Only
+the exit code is pinned: the message comes from Foundation and is
+localized.

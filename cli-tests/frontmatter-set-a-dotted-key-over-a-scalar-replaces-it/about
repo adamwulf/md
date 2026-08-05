@@ -1,0 +1,3 @@
+title held a string and the dotted key asks for a mapping under
+it. The mapping is built, and the string it stood on is gone:
+asking for a nested key is asking for the shape that key needs.

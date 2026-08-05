@@ -1,0 +1,2 @@
+With no input named, toc must say so and stop. It must not sit
+waiting on a terminal that nobody is going to type into.

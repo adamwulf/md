@@ -1,0 +1,10 @@
+With neither --file nor --stdin there is no document, and md must say so rather
+than sit waiting on a terminal that will never send anything, or answer 0 blocks
+for a document nobody supplied.
+
+stderr is not pinned. ArgumentParser answers a refusal with md's own sentence
+followed by the whole usage line for the command, and that usage line names
+every option the command has. Pinning it would turn "someone added a flag" into
+a failure of this case, which guards the exit status instead. md's own stderr,
+with no usage line around it, is pinned in the two
+list-fails-when-... cases.

@@ -1,0 +1,2 @@
+An empty document holds no blocks, so the EOF marker reports block
+zero and no heading line is printed.

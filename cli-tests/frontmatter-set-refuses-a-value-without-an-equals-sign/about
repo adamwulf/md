@@ -1,0 +1,2 @@
+--set takes key=value. A bare key says nothing about what to
+set it to, so the command refuses it instead of guessing.

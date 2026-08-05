@@ -1,0 +1,17 @@
+The plain happy path: two files, each with one frontmatter key.
+
+`md list` prints an ABSOLUTE path in every header line, and the harness runs
+each case in a scratch directory whose name is random, so the header line can
+never be pinned byte for byte. Every list case that lists at least one file
+therefore pipes the output through `md lines`, which selects the lines that do
+not hold a path.
+
+The plain output for this fixture is:
+
+    1  == <scratch>/alpha.md ==
+    2  title: Alpha
+    3
+    4  == <scratch>/beta.md ==
+    5  title: Beta
+
+so line 2 is the first file's frontmatter, serialized back to YAML.

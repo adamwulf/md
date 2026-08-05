@@ -1,0 +1,10 @@
+Without -r, `md list` must look at the top level of the directory only. The
+fixture holds notes/one.md and notes/deeper/two.md, so the answer is one file.
+
+This is the pair of list-recurses-into-a-subdirectory. Together they prove
+that -r is what makes the difference, which neither case can show alone: the
+same tree gives one file without the flag and two with it.
+
+The output cannot be pinned byte for byte, because `list` prints an absolute
+path that holds the scratch directory name. See the sibling case for why the
+block count stands in for the file count.

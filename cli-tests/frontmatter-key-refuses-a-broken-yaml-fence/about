@@ -1,0 +1,3 @@
+The quoted value is never closed, so the fence is not YAML.
+Asking for one key out of a fence that cannot be read must fail
+rather than report the key as missing.

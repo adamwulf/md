@@ -1,0 +1,1 @@
+END defaults to START, so `blocks 2 2` and `blocks 2` agree.

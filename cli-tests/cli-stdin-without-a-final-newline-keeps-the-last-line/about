@@ -1,0 +1,6 @@
+stdin.md ends at the `a` of `beta`, with no final newline. The last line is
+still a line and must still be readable. A read that dropped an unterminated
+last line would fail this with a line-range error instead.
+
+The newline in expected.md is the one `md lines` writes after each line it
+prints, not one carried over from the input.

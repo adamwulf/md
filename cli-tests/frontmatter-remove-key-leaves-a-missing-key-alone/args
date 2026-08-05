@@ -1,0 +1,1 @@
+frontmatter --remove-key subtitle --file input.md

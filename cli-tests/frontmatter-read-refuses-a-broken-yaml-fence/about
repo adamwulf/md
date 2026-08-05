@@ -1,0 +1,4 @@
+`title: [unclosed` opens a flow sequence that never closes, so
+the fence is not YAML. A fence that cannot be read is an error,
+not an empty document: the user asked for the frontmatter and
+there is no honest answer to give.

@@ -1,0 +1,3 @@
+The same input with no final newline holds two lines. Counting three would mean
+inventing an empty last line that the bytes do not have; counting one would mean
+losing the unterminated one.

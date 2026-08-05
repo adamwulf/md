@@ -1,0 +1,9 @@
+InputReader reads stdin in 64 KiB chunks and stops when a read comes back short.
+This document is 1025 lines of 64 bytes, 65600 bytes in all, so it takes one
+full 65536 byte chunk and then a 64 byte one: the second pass through the loop
+is what is being pinned.
+
+1025 lines each ending in a newline count as 1026, because the bytes after the
+last newline are an empty final line.
+
+A document truncated at the buffer boundary would report 1025.

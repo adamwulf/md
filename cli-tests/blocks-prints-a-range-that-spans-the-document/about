@@ -1,0 +1,2 @@
+A range prints one blank line between blocks. The blank line is a
+separator the command adds, not the source spacing.

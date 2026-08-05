@@ -1,0 +1,2 @@
+With -i the document is written back to the file and nothing
+goes to stdout.

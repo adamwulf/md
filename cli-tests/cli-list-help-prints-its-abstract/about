@@ -1,0 +1,3 @@
+`md <subcommand> --help` must describe that subcommand, not the root command.
+Only the first line is pinned, for the reason given in
+cli-help-prints-the-overview-to-stdout.

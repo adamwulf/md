@@ -1,0 +1,2 @@
+Accented letters, an em dash and an emoji are ordinary text. They
+come back as the same UTF-8 bytes, neither re-encoded nor escaped.

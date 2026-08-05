@@ -1,5 +1,7 @@
 .build
 .ittybitty
+cov
+cov-html
 .env
 .claude/scheduled_tasks.lock
 .codex/

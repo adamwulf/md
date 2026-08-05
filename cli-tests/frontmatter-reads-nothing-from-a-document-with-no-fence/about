@@ -1,0 +1,2 @@
+A document with no frontmatter has no data to print. Printing
+nothing and exiting 0 keeps `md frontmatter` usable in a pipe.

@@ -1,0 +1,3 @@
+The README promises that empty frontmatter is stripped. An empty
+fence carries nothing, and leaving it behind would leave a thematic
+break at the top of the file.

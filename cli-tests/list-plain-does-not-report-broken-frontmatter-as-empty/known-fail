@@ -1,0 +1,27 @@
+md prints `(empty frontmatter)` for a file whose frontmatter cannot be parsed.
+
+That is the same words it prints for `---\n---\n`, a fence that really is
+empty, so a folder index cannot tell "this file declares no keys" from "this
+file declares keys that md could not read". The file here holds
+`title: [unclosed`, an unterminated YAML flow sequence.
+
+The cause is in Frontmatter.parseFenced: the YAML branch is
+`(try? Yams.load(yaml: rawString) as? [String: Any]) ?? [:]`, so a throwing
+parse and a genuinely empty mapping both land on `[:]`. ListCommand then sees a
+non-nil Frontmatter whose serializeData() returns "", and renderPlain turns that
+into `(empty frontmatter)`.
+
+Two things are wrong, and the expectation here only pins the first:
+
+  1. md obtained NO frontmatter data from this file, so of the two strings the
+     README documents, `(no frontmatter)` is the honest one. `(empty
+     frontmatter)` states something about the file that is not true.
+  2. The README also promises "Parse errors for individual files are reported to
+     stderr and the run continues". No diagnostic is written at all. That half
+     cannot be pinned here, because any such message would have to name the file
+     by its absolute path, and the path lives in a randomly named scratch
+     directory.
+
+The complete fix is to keep the parse failure distinct from an empty mapping and
+report it on stderr. If the fix chooses a third string rather than reusing
+`(no frontmatter)`, update this expectation to match it and delete this marker.

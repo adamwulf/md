@@ -1,0 +1,6 @@
+The scratch directory is empty, because this case directory holds only control
+files and run.py copies none of those.
+
+--output json promises a single JSON array, so an empty directory must still be
+valid JSON: the empty array, and one final newline. A consumer piping this into
+a JSON parser must not have to special-case the empty run.

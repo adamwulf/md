@@ -1,0 +1,2 @@
+A fenced block already ends with a newline of its own. The document
+must end right after the closing fence.

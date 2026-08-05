@@ -1,0 +1,2 @@
+insert-after 1 "First line of the note
+second line of the note." --file input.md

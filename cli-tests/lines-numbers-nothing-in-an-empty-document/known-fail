@@ -1,0 +1,6 @@
+md prints one entry, "1  ", for an empty file.
+
+There is no line to number in an empty file, so the listing should
+print nothing at all, the way `blocks` does.
+
+Same cause as lines-counts-a-document-that-ends-with-a-newline.

@@ -1,0 +1,2 @@
+There is no file to edit in place when the document arrives on
+stdin, so the two options cannot be used together.

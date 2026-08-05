@@ -1,0 +1,2 @@
+The command reads a document and neither flag says where the
+document is. Exit 64 is the usage failure code.

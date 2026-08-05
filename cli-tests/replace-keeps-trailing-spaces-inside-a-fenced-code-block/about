@@ -1,0 +1,2 @@
+Line 4 of input.md ends with two spaces. Inside a code block they
+are content, so replacing the heading must not strip them.

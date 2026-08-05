@@ -1,0 +1,15 @@
+`md list -r` must find a .md file in a subdirectory, not only the ones at the
+top level. The fixture holds notes/one.md and notes/deeper/two.md, so the
+answer is two files.
+
+This case is also the reason the harness stages a subdirectory whole. Before
+that, a fixture could only be a file, and no case could hand `list` a tree to
+walk, so recursion went untested.
+
+The output cannot be pinned byte for byte, because `list` prints the absolute
+path of every file it finds and the scratch directory is named afresh on each
+run. So the case asserts a property instead: `list` puts a blank line between
+entries, so each file becomes one block, and the block count is the file
+count.
+
+Its pair is list-does-not-recurse-without-the-r-flag, which sees only one.

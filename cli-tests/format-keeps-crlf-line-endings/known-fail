@@ -1,0 +1,14 @@
+format writes every line back with a bare LF, so a CRLF document loses every
+CR it had. The runner says so in words above the diff.
+
+What it should do: notice the line ending the document already uses and write
+the output with that ending.
+
+Cause: BlockFormatter builds its output by appending "\n" literally, in every
+one of its cases, and FormatCommand hands that straight to stdout. Nothing
+anywhere records what the source used. A fix has to detect the dominant ending
+when the source is read and re-apply it on the way out.
+
+Why it matters: formatting a file written on Windows rewrites every line of
+it. One tidy-up turns into a whole-file diff, and every line of the real
+change is buried in it.

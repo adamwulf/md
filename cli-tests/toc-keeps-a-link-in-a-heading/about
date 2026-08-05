@@ -1,0 +1,3 @@
+The heading text is reported as markdown, the same way the code span
+case reports its backticks, so a long link makes for a short run of
+dots.

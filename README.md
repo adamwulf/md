@@ -135,6 +135,37 @@ md list ./notes --missing only                        # list only files without 
 
 Files with no frontmatter appear with `(no frontmatter)` in plain output (or `null` in JSON). Parse errors for individual files are reported to stderr and the run continues.
 
+## Testing
+
+This package has two test suites, and a change should keep both green:
+
+```bash
+swift test                    # the Swift types, called directly
+python3 cli-tests/run.py      # the built binary, run as a user runs it
+```
+
+The Swift tests live in `Tests/`. They are fast and can reach a private
+detail, but they never run the binary, so argument parsing, exit codes, and
+the exact bytes on stdout stay outside their reach.
+
+The CLI tests live in `cli-tests/`. Each case is a directory of plain files
+holding a fixture, the arguments to run, and the exact bytes the command
+should print. Comparison is byte for byte, so a lost CR or an invented final
+newline is a failure rather than a shrug.
+
+Measure both together:
+
+```bash
+python3 scripts/coverage.py             # both suites, merged
+python3 scripts/coverage.py --html cov  # a browsable report
+```
+
+**[docs/TESTING.md](docs/TESTING.md) explains which suite a given test belongs
+in, and how to write one.** [cli-tests/README.md](cli-tests/README.md)
+documents the CLI case format in full. Read both before adding tests.
+[docs/COVERAGE.md](docs/COVERAGE.md) holds the last measured numbers and the
+list of known open defects.
+
 ## Library
 
 The `MarkdownKit` library can be used independently in other Swift packages:

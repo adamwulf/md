@@ -1,0 +1,3 @@
+Line 4 of input.md opens with a real tab, not with spaces. Inside a
+code block a tab is content, so removing the paragraph under the
+block must leave the tab where it is.

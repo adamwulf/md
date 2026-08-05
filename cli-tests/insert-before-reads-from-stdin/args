@@ -1,0 +1,1 @@
+insert-before 4 "New paragraph." --stdin

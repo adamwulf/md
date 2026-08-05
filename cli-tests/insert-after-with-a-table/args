@@ -1,0 +1,3 @@
+insert-after 1 "| Name | Age |
+| ---- | --- |
+| Ann | 34 |" --file input.md

@@ -1,0 +1,12 @@
+# Every file under cli-tests is compared byte for byte, so git must not touch a
+# single one of them.
+#
+# Some fixtures have CRLF endings on purpose (replace-keeps-crlf-line-endings)
+# and some have no final newline on purpose
+# (remove-last-block-invents-final-newline). Those bytes ARE the test. With
+# git's end of line conversion in play, a checkout on another machine, or any
+# core.autocrlf setting, would rewrite them and the cases would pass while
+# testing nothing.
+#
+# -text turns off all end of line conversion for this directory.
+* -text

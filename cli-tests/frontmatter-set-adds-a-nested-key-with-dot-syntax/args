@@ -1,0 +1,1 @@
+frontmatter --set "author.name=Jane" --file input.md

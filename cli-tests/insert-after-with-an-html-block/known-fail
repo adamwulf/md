@@ -1,0 +1,7 @@
+md prints nothing at all where the html block should be, and leaves
+two blank lines between the heading and the closing paragraph.
+
+MarkdownParser.parseNode has no case for CMARK_NODE_HTML_BLOCK, so it
+falls to the default branch, finds the type name is html_block rather
+than table, and returns nil. The block never reaches BlockFormatter.
+Content the user handed the tool must never be dropped in silence.

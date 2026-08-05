@@ -1,0 +1,5 @@
+then-args runs format over the output of the first format. A normalizer
+has to reach its fixed point in one pass, so the second run must not move
+a single byte.
+The four space indent format writes for a nested item has to read
+back as the same nesting level, or the list flattens on every run.

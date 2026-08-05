@@ -1,0 +1,2 @@
+With --stdin the whole rewritten document goes to stdout, so
+the command can sit in the middle of a pipe.

@@ -1,0 +1,3 @@
+Asking for the format the file already uses is a no-op. The inline
+sequence is not re-serialized into a block sequence, and the keys are
+not re-sorted, because there is nothing to convert.

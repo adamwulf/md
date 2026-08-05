@@ -1,0 +1,2 @@
+The closing fence already ends with a newline. Adding a block under
+it must give one blank line, not two, and one final newline.

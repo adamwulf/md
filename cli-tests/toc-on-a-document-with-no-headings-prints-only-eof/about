@@ -1,0 +1,2 @@
+No headings means no heading lines, but the EOF marker is still
+printed. An empty table of contents is a result, not an error.

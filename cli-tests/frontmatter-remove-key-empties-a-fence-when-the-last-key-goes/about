@@ -1,0 +1,3 @@
+The user asked for one key to go, not for the fence to go. An
+empty fence stays, so a later --set writes into the fence the
+document already has instead of opening a second one.

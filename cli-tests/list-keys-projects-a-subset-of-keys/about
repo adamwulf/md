@@ -1,0 +1,7 @@
+`md list` prints an ABSOLUTE path in every record, and the harness runs each
+case in a scratch directory whose name is random, so a line holding a path can
+never be pinned byte for byte. Cases that list at least one file therefore pipe
+the output through `md lines`, which selects the lines that hold no path.
+
+--keys keeps only the named keys, and drops `author`. The two survivors are
+printed in sorted order, so `draft` comes before `title`.

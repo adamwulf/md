@@ -1,0 +1,8 @@
+`md list` prints an ABSOLUTE path in every record, and the harness runs each
+case in a scratch directory whose name is random, so a line holding a path can
+never be pinned byte for byte. Cases that list at least one file therefore pipe
+the output through `md lines`, which selects the lines that hold no path.
+
+--missing only inverts the filter, so alpha.md is dropped and plain.md is all
+that is left. Line 2 is `(no frontmatter)`; if alpha.md had survived the filter
+it would sort first and line 2 would read `title: Alpha`.

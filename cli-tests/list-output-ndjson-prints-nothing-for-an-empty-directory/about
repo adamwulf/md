@@ -1,0 +1,2 @@
+The scratch directory is empty. ndjson is one JSON object per line, so no files
+means no lines: zero bytes, not an empty line.
