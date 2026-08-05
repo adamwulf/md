@@ -1,0 +1,27 @@
+NESTING IS WRITTEN AT FOUR COLUMNS A LEVEL, WHATEVER THE SOURCE USED.
+
+Two columns in, four out, at every depth. `then-args` runs `format` again over
+the result, so `expected.md` is the SECOND pass: the widening happens once and
+then stops.
+
+That "and then stops" is the point. Re-indenting on every pass is the failure
+mode this normalization invites, and it is not hypothetical on this code: the
+blank line between two items is given to the SHALLOWER of them precisely
+because handing it to the deeper one made the parent list loose and gained a
+level of indent on every run. A document that drifts four columns per pass
+ends up as an indented code block, and prose stops being prose.
+
+Every other list case in this suite writes its fixtures at four columns
+already, so none of them can see a change in this behaviour. This one starts
+at two on purpose.
+
+WHY WIDENING IS SAFE HERE. Two columns and four columns nest identically under
+a `- ` marker, since content begins at column 2 and anything from there to
+three past it is item content rather than code. The choice is cosmetic, and
+the only thing that could make it a defect is instability, which is what the
+second pass rules out.
+
+It is NOT safe in general, and the neighbouring case says where it stops:
+`format-reads-indented-content-under-an-empty-item-as-code`. Four columns
+under an EMPTY item is measured from the margin, not from any content, and
+there it really is code.
