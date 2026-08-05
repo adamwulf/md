@@ -181,10 +181,9 @@ is everything a coverage number cannot see:
 - the exit code
 - what the file holds after `-i`
 - how ArgumentParser reads a real command line
-- **a crash.** `md format --frontmatter json` aborts with SIGABRT on a
-  frontmatter value of `.nan`. No Swift test can assert that, because the
-  abort takes the test process with it. In the CLI suite it is just an exit
-  code, and two cases pin it.
+- **a crash.** `md format --frontmatter json` once aborted with SIGABRT on a
+  frontmatter value of `.nan`. No Swift test could safely provoke that abort,
+  so two CLI cases pinned it as an exit code and now guard the clean refusal.
 
 A line can be covered and still be wrong. The CLI suite is what says whether
 it is right.

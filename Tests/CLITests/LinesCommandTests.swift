@@ -66,16 +66,33 @@ final class LinesCommandTests: XCTestCase {
         XCTAssertEqual(output, "3\n")
     }
 
-    /// Splitting on "\n" leaves an empty component after a trailing newline, so
-    /// a three-line file that ends in a newline counts as four lines. The
-    /// listing mode agrees with the count, printing that trailing empty line.
-    func testTrailingNewlineCountsAsAnExtraEmptyLine() async throws {
+    func testTrailingNewlineTerminatesTheLastLineWithoutAddingAnother() async throws {
         let output = try await runLines(["--count"], on: "one\ntwo\nthree\n")
-        XCTAssertEqual(output, "4\n")
+        XCTAssertEqual(output, "3\n")
     }
 
-    func testCountOfEmptyDocumentIsOne() async throws {
+    func testCountOfEmptyDocumentIsZero() async throws {
         let output = try await runLines(["--count"], on: "")
+        XCTAssertEqual(output, "0\n")
+    }
+
+    func testCountTreatsLoneCarriageReturnsAsLineEndings() async throws {
+        let output = try await runLines(["--count"], on: "one\rtwo\r")
+        XCTAssertEqual(output, "2\n")
+    }
+
+    func testFinalCRLFTerminatesWithoutAddingAnotherLine() async throws {
+        let output = try await runLines(["--count"], on: "one\r\ntwo\r\n")
+        XCTAssertEqual(output, "2\n")
+    }
+
+    func testCountKeepsABlankLineBeforeTheFinalNewline() async throws {
+        let output = try await runLines(["--count"], on: "one\n\n")
+        XCTAssertEqual(output, "2\n")
+    }
+
+    func testOneNewlineIsOneBlankLine() async throws {
+        let output = try await runLines(["--count"], on: "\n")
         XCTAssertEqual(output, "1\n")
     }
 
@@ -91,6 +108,11 @@ final class LinesCommandTests: XCTestCase {
         XCTAssertEqual(output, "1  alpha\n2  beta\n")
     }
 
+    func testListingDoesNotInventALineAfterATrailingNewline() async throws {
+        let output = try await runLines([], on: "alpha\nbeta\n")
+        XCTAssertEqual(output, "1  alpha\n2  beta\n")
+    }
+
     func testListingRightAlignsNumbersToTheWidestLineNumber() async throws {
         let content = (1...10).map { "line \($0)" }.joined(separator: "\n")
         let output = try await runLines([], on: content)
@@ -100,14 +122,24 @@ final class LinesCommandTests: XCTestCase {
         XCTAssertEqual(printed[9], "10  line 10")
     }
 
-    func testListingPrintsOneEmptyLineForAnEmptyDocument() async throws {
+    func testListingPrintsNothingForAnEmptyDocument() async throws {
         let output = try await runLines([], on: "")
-        XCTAssertEqual(output, "1  \n")
+        XCTAssertEqual(output, "")
     }
 
     func testListingKeepsBlankLinesInPlace() async throws {
         let output = try await runLines([], on: "alpha\n\nbeta")
         XCTAssertEqual(output, "1  alpha\n2  \n3  beta\n")
+    }
+
+    func testListingKeepsLoneCarriageReturnsObservable() async throws {
+        let output = try await runLines([], on: "alpha\rbeta\r")
+        XCTAssertEqual(output, "1  alpha\r\n2  beta\r\n")
+    }
+
+    func testListingKeepsABlankLastLineBeforeItsTerminator() async throws {
+        let output = try await runLines([], on: "alpha\n\n")
+        XCTAssertEqual(output, "1  alpha\n2  \n")
     }
 
     /// Lines are raw source, so frontmatter delimiters are listed like any
@@ -145,6 +177,11 @@ final class LinesCommandTests: XCTestCase {
         XCTAssertEqual(output, "three\n")
     }
 
+    func testBlankLastLineIsAccepted() async throws {
+        let output = try await runLines(["2"], on: "one\n\n")
+        XCTAssertEqual(output, "\n")
+    }
+
     // MARK: - Slice mode rejects out-of-range line numbers
 
     func testStartBelowOneIsRejected() async {
@@ -168,6 +205,22 @@ final class LinesCommandTests: XCTestCase {
             "Line numbers must be in range 1...3, got 1...4"
         ) {
             _ = try await self.runLines(["1", "4"], on: "one\ntwo\nthree")
+        }
+    }
+
+    func testLineAfterATrailingNewlineIsRejected() async {
+        await XCTAssertThrowsErrorMessage(
+            "Line numbers must be in range 1...3, got 4...4"
+        ) {
+            _ = try await self.runLines(["4"], on: "one\ntwo\nthree\n")
+        }
+    }
+
+    func testAnyLineInAnEmptyDocumentIsRejected() async {
+        await XCTAssertThrowsErrorMessage(
+            "Line numbers must be in range 1...0, got 1...1"
+        ) {
+            _ = try await self.runLines(["1"], on: "")
         }
     }
 

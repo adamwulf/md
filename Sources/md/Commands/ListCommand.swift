@@ -87,9 +87,12 @@ struct ListCommand: AsyncParsableCommand {
     // MARK: - Run
 
     func run() async throws {
-        let entries = collectEntries()
-        let text = try render(entries)
+        let prepared = prepareEntriesForRendering(collectEntries())
+        let text = try render(prepared.entries)
         print(text, terminator: "")
+        if prepared.hadErrors {
+            throw ExitCode.failure
+        }
     }
 
     func render(_ entries: [Entry]) throws -> String {
@@ -144,6 +147,35 @@ struct ListCommand: AsyncParsableCommand {
         case .only:
             return entries.filter { $0.frontmatter == nil }
         }
+    }
+
+    /// JSONSerialization aborts the process when it receives a non-finite
+    /// number. Validate every file independently so a bad file is reported and
+    /// skipped without preventing valid neighbors from being rendered.
+    private func prepareEntriesForRendering(
+        _ entries: [Entry]
+    ) -> (entries: [Entry], hadErrors: Bool) {
+        let plainScalarOutput = output == .plain && key != nil
+        guard !plainScalarOutput, format == .json || output != .plain else {
+            return (entries, false)
+        }
+
+        var validEntries: [Entry] = []
+        var hadErrors = false
+        for entry in entries {
+            guard let frontmatter = entry.frontmatter else {
+                validEntries.append(entry)
+                continue
+            }
+            do {
+                try projectedFrontmatter(from: frontmatter).validateForJSON()
+                validEntries.append(entry)
+            } catch {
+                writeStderr("md list: \(entry.path): \(error.localizedDescription)")
+                hadErrors = true
+            }
+        }
+        return (validEntries, hadErrors)
     }
 
     private func loadEntry(path: String) -> Entry {
@@ -313,8 +345,10 @@ struct ListCommand: AsyncParsableCommand {
 
     private func formatScalarValue(_ value: Any) -> String {
         // Normalize dates / nested structures into JSON-friendly shape first so
-        // dates become ISO-8601 instead of Swift's Date debug description.
-        let normalized = Frontmatter.normalizeForJSON(value)
+        // dates become ISO-8601 instead of Swift's Date debug description. This
+        // is plain output, though, so non-finite values remain readable tokens
+        // instead of JSON's defensive null representation.
+        let normalized = normalizeForPlainScalar(value)
         if let array = normalized as? [Any] {
             return array.map { "\($0)" }.joined(separator: ",")
         }
@@ -325,6 +359,22 @@ struct ListCommand: AsyncParsableCommand {
             }
         }
         return "\(normalized)"
+    }
+
+    private func normalizeForPlainScalar(_ value: Any) -> Any {
+        if let dict = value as? [String: Any] {
+            return dict.mapValues { normalizeForPlainScalar($0) }
+        }
+        if let array = value as? [Any] {
+            return array.map { normalizeForPlainScalar($0) }
+        }
+        if let number = value as? Double, !number.isFinite {
+            return "\(number)"
+        }
+        if let number = value as? Float, !number.isFinite {
+            return "\(number)"
+        }
+        return Frontmatter.normalizeForJSON(value)
     }
 
     // MARK: - Stderr

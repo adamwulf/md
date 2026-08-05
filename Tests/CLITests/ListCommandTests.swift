@@ -5,6 +5,7 @@
 //  Created by Adam Wulf on 4/12/26.
 //
 
+import ArgumentParser
 import XCTest
 @testable import md
 
@@ -217,6 +218,112 @@ final class ListCommandTests: XCTestCase {
         XCTAssertTrue(out.contains("\"name\":\"Jane\""))
         XCTAssertTrue(out.contains("\"email\":\"j@e.com\""))
         XCTAssertFalse(out.contains("\"name\": \"Jane\""))
+    }
+
+    func testPlainKeyKeepsANonFiniteNumberAsAPlainScalar() throws {
+        try write("---\nratio: .nan\n---\n", to: "a.md")
+
+        let out = try runList(["--key", "ratio"])
+
+        XCTAssertTrue(out.hasSuffix("\tnan\n"), "got: \(out.debugDescription)")
+    }
+
+    func testPlainKeyDoesNotTurnNestedNonFiniteNumbersIntoNull() throws {
+        try write(
+            "---\nmeasurements:\n  values: [.nan, 1.0]\n---\n",
+            to: "a.md"
+        )
+
+        let mapping = try runList(["--key", "measurements"])
+        let array = try runList(["--key", "measurements.values"])
+
+        XCTAssertTrue(mapping.contains("\"nan\""), "got: \(mapping.debugDescription)")
+        XCTAssertFalse(mapping.contains("null"), "got: \(mapping.debugDescription)")
+        XCTAssertTrue(array.hasSuffix("\tnan,1.0\n"), "got: \(array.debugDescription)")
+        XCTAssertFalse(array.contains("null"), "got: \(array.debugDescription)")
+    }
+
+    func testRunReportsInvalidJSONKeepsValidNeighborsAndExitsFailure() async throws {
+        try write("---\nratio: .nan\n---\n", to: "a-bad.md")
+        try write("---\ntitle: Good\n---\n", to: "b-good.md")
+        let command = try ListCommand.parse(["--format", "json", tempRoot.path])
+        let paths = command.collectEntries().map(\.path)
+        let badPath = try XCTUnwrap(paths.first { $0.hasSuffix("/a-bad.md") })
+        let goodPath = try XCTUnwrap(paths.first { $0.hasSuffix("/b-good.md") })
+
+        let captured = try await StandardStream.capturingCommandRun {
+            try await command.run()
+        }
+
+        XCTAssertFalse(captured.standardOutput.contains(badPath))
+        XCTAssertTrue(captured.standardOutput.contains(goodPath))
+        XCTAssertTrue(captured.standardOutput.contains("\"title\" : \"Good\""))
+        XCTAssertEqual(
+            captured.standardError,
+            "md list: \(badPath): JSON cannot represent the non-finite number " +
+                "at key path ratio\n"
+        )
+        guard let exitCode = captured.error as? ExitCode else {
+            return XCTFail("Expected ExitCode.failure, got \(String(describing: captured.error))")
+        }
+        XCTAssertEqual(exitCode.rawValue, ExitCode.failure.rawValue)
+    }
+
+    func testJSONProjectionDoesNotRejectAnExcludedNonFiniteValue() async throws {
+        try write("---\ntitle: Kept\nratio: .nan\n---\n", to: "a.md")
+        let command = try ListCommand.parse([
+            "--output", "json", "--key", "title", tempRoot.path,
+        ])
+
+        let captured = try await StandardStream.capturingCommandRun {
+            try await command.run()
+        }
+
+        XCTAssertNil(captured.error)
+        XCTAssertEqual(captured.standardError, "")
+        let records = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: Data(captured.standardOutput.utf8)
+            ) as? [[String: Any]]
+        )
+        let frontmatter = try XCTUnwrap(records.first?["frontmatter"] as? [String: Any])
+        XCTAssertEqual(frontmatter["title"] as? String, "Kept")
+        XCTAssertNil(frontmatter["ratio"])
+    }
+
+    func testJSONAndNDJSONSkipInvalidFilesRenderNeighborsAndExitFailure() async throws {
+        try write("---\nratio: .nan\n---\n", to: "a-bad.md")
+        try write("---\ntitle: Good\n---\n", to: "b-good.md")
+
+        for output in ["json", "ndjson"] {
+            let command = try ListCommand.parse([
+                "--output", output, tempRoot.path,
+            ])
+            let paths = command.collectEntries().map(\.path)
+            let badPath = try XCTUnwrap(paths.first { $0.hasSuffix("/a-bad.md") })
+
+            let captured = try await StandardStream.capturingCommandRun {
+                try await command.run()
+            }
+
+            XCTAssertFalse(captured.standardOutput.contains("a-bad.md"), output)
+            XCTAssertTrue(captured.standardOutput.contains("b-good.md"), output)
+            XCTAssertTrue(captured.standardOutput.contains("Good"), output)
+            XCTAssertEqual(
+                captured.standardError,
+                "md list: \(badPath): JSON cannot represent the non-finite " +
+                    "number at key path ratio\n",
+                output
+            )
+            guard let exitCode = captured.error as? ExitCode else {
+                XCTFail(
+                    "Expected ExitCode.failure for \(output), got " +
+                        "\(String(describing: captured.error))"
+                )
+                continue
+            }
+            XCTAssertEqual(exitCode.rawValue, ExitCode.failure.rawValue, output)
+        }
     }
 
     // MARK: - JSON output

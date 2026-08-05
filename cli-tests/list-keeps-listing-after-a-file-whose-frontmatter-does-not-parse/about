@@ -6,8 +6,8 @@ the output through `md lines`, which selects the lines that hold no path.
 broken.md opens a YAML flow sequence and never closes it, so its frontmatter
 cannot be read. The README says a parse error is reported and the run CONTINUES,
 and broken.md sorts before zeta.md, so zeta.md is the proof: its `title` line is
-still printed, giving one line plus the final newline, which `md lines --count`
-reports as 2. A run that gave up at broken.md would report 1.
+still printed, giving one line, which `md lines --count` reports as 1. A run
+that gave up at broken.md would report 0.
 
 --key is used rather than the plain listing so that this case does not also
 depend on how the broken file itself is rendered. That is pinned separately by

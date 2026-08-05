@@ -4,5 +4,4 @@ never be pinned byte for byte. Cases that list at least one file therefore pipe
 the output through `md lines`, which selects the lines that hold no path.
 
 A dot file is not part of a folder index, so .hidden.md is skipped even though
-its extension matches. One block survives: three lines counting the final
-newline.
+its extension matches. One two-line block survives.

@@ -5,4 +5,4 @@ the output through `md lines`, which selects the lines that hold no path.
 
 `--key author.name` walks into the nested mapping and finds a value, so the file
 produces a line. Without dot support the key would miss and nothing would print,
-making the count 1 instead of 2.
+making the count 0 instead of 1.

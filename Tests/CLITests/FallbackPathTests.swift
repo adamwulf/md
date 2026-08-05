@@ -98,41 +98,55 @@ final class FallbackPathTests: XCTestCase {
         XCTAssertTrue(ratio.isNaN, "expected a not-a-number, got \(ratio)")
     }
 
-    /// The value handed to JSONSerialization must be a valid JSON object.
-    /// JSONSerialization signals an invalid number by raising an Objective-C
-    /// exception, not by throwing a Swift error, so no `try` or `try?` around
-    /// it can catch the failure — the process aborts instead. These tests
-    /// therefore check the precondition rather than calling the serializer.
+    /// The value handed to JSONSerialization must always be a valid JSON
+    /// object. Non-finite values are normalized only after validation has
+    /// produced the useful refusal that names their key.
     func testFrontmatterNormalizedForJSONIsAlwaysAValidJSONObject() throws {
         let frontmatter = try XCTUnwrap(
             Frontmatter.parse("---\nratio: .nan\n---\nBody\n")
         )
         let normalized = Frontmatter.normalizeForJSON(frontmatter.data)
-        XCTExpectFailure("""
-            YAML has a not-a-number literal and JSON does not, but \
-            normalizeForJSON passes the Double straight through, so the object \
-            reaching JSONSerialization is not valid JSON. JSONSerialization \
-            raises NSInvalidArgumentException for it rather than throwing, so \
-            neither the `try` in Frontmatter.serializeJSON nor the `try?` in \
-            FormatCommand.format can catch it: `md format --frontmatter json` \
-            and `md list --format json` both abort on such a document. \
-            normalizeForJSON should map a non-finite Double to a value JSON can \
-            hold, or serializeJSON should check isValidJSONObject first.
-            """)
         XCTAssertTrue(JSONSerialization.isValidJSONObject(normalized))
     }
 
-    func testAnInfiniteFrontmatterValueIsAlsoInvalidJSON() throws {
+    func testAnInfiniteFrontmatterValueAlsoNormalizesToValidJSON() throws {
         let frontmatter = try XCTUnwrap(
             Frontmatter.parse("---\nratio: .inf\n---\nBody\n")
         )
         let normalized = Frontmatter.normalizeForJSON(frontmatter.data)
-        XCTExpectFailure("""
-            The infinity literal reaches JSONSerialization the same way the \
-            not-a-number literal does, with the same aborting result. Same \
-            defect as testFrontmatterNormalizedForJSONIsAlwaysAValidJSONObject.
-            """)
         XCTAssertTrue(JSONSerialization.isValidJSONObject(normalized))
+    }
+
+    func testJSONSerializationRejectsANonFiniteValueAndNamesItsKey() throws {
+        var frontmatter = try XCTUnwrap(
+            Frontmatter.parse("---\nmeasurements:\n  ratio: .nan\n---\nBody\n")
+        )
+        frontmatter.format = .json
+
+        XCTAssertThrowsError(try frontmatter.serializeData()) { error in
+            XCTAssertEqual(
+                error.localizedDescription,
+                "JSON cannot represent the non-finite number at key path measurements.ratio"
+            )
+        }
+    }
+
+    func testJSONSerializationEscapesPunctuationInTheRejectedKeyPath() {
+        let frontmatter = Frontmatter(
+            format: .json,
+            data: ["measurement.ratio\nraw": Double.infinity],
+            rawContent: "",
+            body: "",
+            originalContent: ""
+        )
+
+        XCTAssertThrowsError(try frontmatter.serializeData()) { error in
+            XCTAssertEqual(
+                error.localizedDescription,
+                "JSON cannot represent the non-finite number at key path " +
+                    "[\"measurement.ratio\\nraw\"]"
+            )
+        }
     }
 
     func testAFiniteFrontmatterValueIsValidJSON() throws {

@@ -18,8 +18,7 @@ each line gets `first` for this file and then a line with no tab at all, which
 it will either drop or mistake for another file. There is no way to tell that
 second line apart from a path whose value is missing.
 
-`md lines --count` reports 3 for that: two lines plus the empty final one. One
-line per file, plus the final newline, is 2.
+`md lines --count` reports 2 for that. One record for the one file would be 1.
 
 The cause is ListCommand.renderPlain, which for the --key branch writes
 `"\(entry.path)\t\(formatScalarValue(value))\n"`, and formatScalarValue ends at
@@ -27,5 +26,5 @@ The cause is ListCommand.renderPlain, which for the --key branch writes
 
 Any fix that keeps one record on one line closes this. Escaping the newline as
 \\n is the smallest one, and matches what the tab-separated shape already
-implies. If instead the fix quotes the whole value, the expected count stays 2,
+implies. If instead the fix quotes the whole value, the expected count stays 1,
 so this case still holds.

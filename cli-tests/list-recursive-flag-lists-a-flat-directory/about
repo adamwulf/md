@@ -6,5 +6,5 @@ the output through `md lines`, which selects the lines that hold no path.
 run.py copies only the FILES of a case directory to the scratch directory, and
 never a subdirectory, so a real nested tree cannot be staged and the recursion
 itself is not tested here. What this case does guard is that -r leaves a flat
-directory alone: the same two blocks, five lines plus the final newline, which
-`md lines --count` reports as 6.
+directory alone: the same two blocks and five lines, which `md lines --count`
+reports as 5.
