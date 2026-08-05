@@ -348,7 +348,7 @@ final class ListCommandTests: XCTestCase {
         let mapping = try runList(["--key", "measurements"])
         let array = try runList(["--key", "measurements.values"])
 
-        XCTAssertTrue(mapping.contains("\"nan\""), "got: \(mapping.debugDescription)")
+        XCTAssertTrue(mapping.contains("nan"), "got: \(mapping.debugDescription)")
         XCTAssertFalse(mapping.contains("null"), "got: \(mapping.debugDescription)")
         XCTAssertTrue(array.hasSuffix("\tnan,1.0\n"), "got: \(array.debugDescription)")
         XCTAssertFalse(array.contains("null"), "got: \(array.debugDescription)")

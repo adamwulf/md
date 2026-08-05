@@ -515,7 +515,12 @@ struct Frontmatter {
             )
             return String(data: bytes, encoding: .utf8) ?? ""
         case .toml:
-            let table = try dictToTOMLTable(["value": value])
+            let table = TOMLTable()
+            table["value"] = try anyToTOMLValue(
+                value,
+                keyPath: "value",
+                inlineTables: true
+            )
             let assignment = table.convert(to: .toml)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             let prefix = "value = "
@@ -549,7 +554,8 @@ struct Frontmatter {
     /// Convert a Swift Any value to a TOMLValueConvertible.
     private static func anyToTOMLValue(
         _ value: Any,
-        keyPath: String
+        keyPath: String,
+        inlineTables: Bool = false
     ) throws -> TOMLValueConvertible {
         switch value {
         case let b as Bool:
@@ -561,12 +567,23 @@ struct Frontmatter {
         case let s as String:
             return s
         case let dict as [String: Any]:
-            return try dictToTOMLTable(dict, keyPath: keyPath)
+            let table = TOMLTable(inline: inlineTables)
+            for key in dict.keys.sorted() {
+                guard let child = dict[key] else { continue }
+                let childPath = appendingJSONPathKey(key, to: keyPath)
+                table[key] = try anyToTOMLValue(
+                    child,
+                    keyPath: childPath,
+                    inlineTables: inlineTables
+                )
+            }
+            return table
         case let arr as [Any]:
             return TOMLArray(try arr.enumerated().map { index, element in
                 try anyToTOMLValue(
                     element,
-                    keyPath: "\(keyPath)[\(index)]"
+                    keyPath: "\(keyPath)[\(index)]",
+                    inlineTables: true
                 )
             })
         case is NSNull:

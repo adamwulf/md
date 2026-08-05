@@ -121,7 +121,10 @@ struct FrontmatterCommand: AsyncParsableCommand {
             return
         }
 
-        if let outputFormat = format {
+        // Key projection reports a value in the source fence's syntax. The
+        // format flag applies only when serializing a complete frontmatter
+        // document or data block.
+        if let outputFormat = format, key == nil {
             frontmatter.format = outputFormat
         }
 
