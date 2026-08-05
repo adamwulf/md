@@ -1,9 +1,0 @@
-md runs the two lines together with no space at all, printing
-"First line of the notesecond line of the note." as one word pair.
-
-MarkdownParser.getNodeText renders every non-text inline node with
-cmark_render_commonmark and then trims it. A soft break renders as a
-single newline, which the trim reduces to the empty string, so the
-line break between the two lines disappears and the words on either
-side of it are joined. A soft wrap must survive, or at the very least
-leave the space that held the two words apart.
