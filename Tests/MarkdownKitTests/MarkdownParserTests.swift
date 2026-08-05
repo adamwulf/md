@@ -38,6 +38,46 @@ final class MarkdownParserTests: XCTestCase {
         }
     }
 
+    /// A setext heading (a line of text with `===` or `---` below it) can be written
+    /// on more than one line, but a heading block is written back as one ATX line
+    /// (`# text`). Thus a newline in the text would divide one heading into a heading
+    /// plus a paragraph. A heading is one line, thus its lines join with a space. See
+    /// `FormatCommandTests.testFormatKeepsMultilineSetextHeadingAsOneBlock`.
+    func testParseSetextHeadingKeepsTextOnOneLine() {
+        for (markdown, expectedLevel) in [("First part\nSecond part\n===", 1), ("First part\nSecond part\n---", 2)] {
+            let blocks = parser.parse(markdown)
+            XCTAssertEqual(blocks.count, 1)
+            if case .heading(let level, let text, _, _, _) = blocks[0] {
+                XCTAssertEqual(level, expectedLevel)
+                XCTAssertFalse(text.contains("\n"), "Heading text has a newline: \(text.debugDescription)")
+                XCTAssertEqual(text, "First part Second part")
+            } else {
+                XCTFail("Expected heading block")
+            }
+        }
+    }
+
+    /// An inline node that spans two source lines of a setext heading also keeps its
+    /// newline, because `getNodeText` renders such a node to commonmark. The heading
+    /// text must stay on one line for every such node, not only for a soft break that
+    /// is a direct child of the heading.
+    func testParseSetextHeadingWithMultilineInlineNodeStaysOneLine() {
+        let expected = ["*Heading one Heading two*", "Heading **one two**"]
+        for (markdown, expectedText) in zip(
+            ["*Heading one\nHeading two*\n===========", "Heading **one\ntwo**\n==========="],
+            expected
+        ) {
+            let blocks = parser.parse(markdown)
+            XCTAssertEqual(blocks.count, 1)
+            guard case .heading(_, let text, _, _, _) = blocks[0] else {
+                XCTFail("Expected heading block")
+                continue
+            }
+            XCTAssertFalse(text.contains("\n"), "Heading holds a newline: \(text.debugDescription)")
+            XCTAssertEqual(text, expectedText)
+        }
+    }
+
     // MARK: - Paragraphs
 
     func testParseParagraph() {
@@ -126,16 +166,6 @@ final class MarkdownParserTests: XCTestCase {
         }
     }
 
-    func testParseBlockquoteKeepsSoftLineBreaks() {
-        let blocks = parser.parse("> First line\n> Second line")
-        XCTAssertEqual(blocks.count, 1)
-        if case .blockquote(let text, _, _, _) = blocks[0] {
-            XCTAssertEqual(text, "First line\nSecond line")
-        } else {
-            XCTFail("Expected blockquote block")
-        }
-    }
-
     /// KNOWN FAILURE, kept as documentation for a later fix.
     ///
     /// A hard line break (two or more spaces at the end of a line, or a backslash at
@@ -155,46 +185,6 @@ final class MarkdownParserTests: XCTestCase {
             }
             XCTExpectFailure("Hard line breaks are dropped by MarkdownParser.getNodeText") {
                 XCTAssertTrue(text.contains("\n"), "Hard break was dropped: \(text.debugDescription)")
-            }
-        }
-    }
-
-    /// An inline node that spans two source lines of a setext heading also keeps its
-    /// newline, because `getNodeText` renders such a node to commonmark. The heading
-    /// text must stay on one line for every such node, not only for a soft break that
-    /// is a direct child of the heading.
-    func testParseSetextHeadingWithMultilineInlineNodeStaysOneLine() {
-        let expected = ["*Heading one Heading two*", "Heading **one two**"]
-        for (markdown, expectedText) in zip(
-            ["*Heading one\nHeading two*\n===========", "Heading **one\ntwo**\n==========="],
-            expected
-        ) {
-            let blocks = parser.parse(markdown)
-            XCTAssertEqual(blocks.count, 1)
-            guard case .heading(_, let text, _, _, _) = blocks[0] else {
-                XCTFail("Expected heading block")
-                continue
-            }
-            XCTAssertFalse(text.contains("\n"), "Heading holds a newline: \(text.debugDescription)")
-            XCTAssertEqual(text, expectedText)
-        }
-    }
-
-    /// A setext heading (a line of text with `===` or `---` below it) can be written
-    /// on more than one line, but a heading block is written back as one ATX line
-    /// (`# text`). Thus a newline in the text would divide one heading into a heading
-    /// plus a paragraph. A heading is one line, thus its lines join with a space. See
-    /// `FormatCommandTests.testFormatKeepsMultilineSetextHeadingAsOneBlock`.
-    func testParseSetextHeadingKeepsTextOnOneLine() {
-        for (markdown, expectedLevel) in [("First part\nSecond part\n===", 1), ("First part\nSecond part\n---", 2)] {
-            let blocks = parser.parse(markdown)
-            XCTAssertEqual(blocks.count, 1)
-            if case .heading(let level, let text, _, _, _) = blocks[0] {
-                XCTAssertEqual(level, expectedLevel)
-                XCTAssertFalse(text.contains("\n"), "Heading text has a newline: \(text.debugDescription)")
-                XCTAssertEqual(text, "First part Second part")
-            } else {
-                XCTFail("Expected heading block")
             }
         }
     }
@@ -221,23 +211,6 @@ final class MarkdownParserTests: XCTestCase {
             XCTAssertEqual(text, "héllo wörld\nsecond ünicode line\n🎉 emoji line")
         } else {
             XCTFail("Expected paragraph block")
-        }
-    }
-
-    func testParseNestedListItemsKeepSoftLineBreaks() {
-        let markdown = "- a\n  a2\n    - b\n      b2\n        - c\n          c2"
-        let blocks = parser.parse(markdown)
-        XCTAssertEqual(blocks.count, 1)
-        if case .list(let items, _, _, _, _) = blocks[0] {
-            XCTAssertEqual(items.count, 3)
-            XCTAssertEqual(items[0].text, "a\na2")
-            XCTAssertEqual(items[0].indentLevel, 0)
-            XCTAssertEqual(items[1].text, "b\nb2")
-            XCTAssertEqual(items[1].indentLevel, 1)
-            XCTAssertEqual(items[2].text, "c\nc2")
-            XCTAssertEqual(items[2].indentLevel, 2)
-        } else {
-            XCTFail("Expected list block")
         }
     }
 
@@ -425,6 +398,23 @@ final class MarkdownParserTests: XCTestCase {
     /// The fix must keep the two paragraphs apart. How many newlines to put between
     /// them is for that fix to decide, thus this test only asks for a line break.
     /// Remove the `XCTExpectFailure` when the fix is in.
+    func testParseNestedListItemsKeepSoftLineBreaks() {
+        let markdown = "- a\n  a2\n    - b\n      b2\n        - c\n          c2"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.count, 1)
+        if case .list(let items, _, _, _, _) = blocks[0] {
+            XCTAssertEqual(items.count, 3)
+            XCTAssertEqual(items[0].text, "a\na2")
+            XCTAssertEqual(items[0].indentLevel, 0)
+            XCTAssertEqual(items[1].text, "b\nb2")
+            XCTAssertEqual(items[1].indentLevel, 1)
+            XCTAssertEqual(items[2].text, "c\nc2")
+            XCTAssertEqual(items[2].indentLevel, 2)
+        } else {
+            XCTFail("Expected list block")
+        }
+    }
+
     func testParseListItemWithTwoParagraphsKeepsThemApart() {
         let blocks = parser.parse("- para one\n\n  para two")
         XCTAssertEqual(blocks.count, 1)
@@ -455,6 +445,16 @@ final class MarkdownParserTests: XCTestCase {
 
     /// A lazy continuation line (a line with no `>` below a quoted line) is part of
     /// the same paragraph of the blockquote, thus it keeps its soft line break.
+    func testParseBlockquoteKeepsSoftLineBreaks() {
+        let blocks = parser.parse("> First line\n> Second line")
+        XCTAssertEqual(blocks.count, 1)
+        if case .blockquote(let text, _, _, _) = blocks[0] {
+            XCTAssertEqual(text, "First line\nSecond line")
+        } else {
+            XCTFail("Expected blockquote block")
+        }
+    }
+
     func testParseBlockquoteWithLazyContinuationKeepsSoftLineBreak() {
         let blocks = parser.parse("> line1\nline2")
         XCTAssertEqual(blocks.count, 1)

@@ -221,14 +221,14 @@ final class FormatCommandTests: XCTestCase {
         XCTAssertEqual(parser.parse(runFormat(source)).count, parser.parse(source).count)
     }
 
-    /// REGRESSION for the soft-break change, currently FAILING.
+    /// REGRESSION cover for the soft-break change.
     ///
-    /// A setext heading written on two lines now holds a newline in its text, but
-    /// BlockFormatter writes a heading as one ATX line. Thus `md format` turns one
-    /// heading into a heading plus a paragraph, the block count moves from 2 to 3,
-    /// and a second `md format` gives a different result again.
+    /// The first form of that change let a setext heading written on two lines hold a
+    /// newline in its text, but BlockFormatter writes a heading as one ATX line. Thus
+    /// `md format` turned one heading into a heading plus a paragraph, the block count
+    /// moved from 2 to 3, and a second `md format` gave a different result again.
     ///
-    /// The fix belongs in `MarkdownParser`: heading text must stay on one line. See
+    /// `MarkdownParser` now holds heading text on one line. See
     /// `MarkdownParserTests.testParseSetextHeadingKeepsTextOnOneLine`.
     func testFormatKeepsMultilineSetextHeadingAsOneBlock() {
         let source = "First part\nSecond part\n===\n\nnext para\n"
@@ -250,16 +250,21 @@ final class FormatCommandTests: XCTestCase {
         }
     }
 
-    /// KNOWN FAILURE that came before the soft-break change.
+    /// KNOWN FAILURE, kept as documentation for a later fix.
     ///
+    /// The lost escape came before the soft-break change, but this failure did not.
     /// `MarkdownParser.getNodeText` gives the text of a node without its backslash
-    /// escapes, thus `\#` in the source becomes `#` in the block text. On one line
-    /// this already turns a paragraph into a heading. With soft breaks kept, the
-    /// same loss now also cuts one paragraph into two blocks, because the second
-    /// line starts at column 0 of the written file.
+    /// escapes, thus `\#` in the source becomes `#` in the block text. While the two
+    /// lines ran together, that `#` stayed in the middle of a line and did nothing.
+    /// Now that a soft break keeps its newline, the second line starts at column 0 of
+    /// the written file, thus the marker becomes live markdown and one paragraph
+    /// divides into two blocks. Reverting the soft-break hunk makes all four cases
+    /// pass again.
     ///
-    /// The fix is to put the escapes back in `getNodeText`, which is more than the
-    /// soft-break change does. Remove the `XCTExpectFailure` when the fix is in.
+    /// The fix is to put the escapes back in `getNodeText`, or to escape such a line
+    /// in `BlockFormatter`. Both are more than the soft-break change does. This is the
+    /// same class as `BlockFormatterTests.testFormatParagraphWithInertMarkerOnContinuationLine`.
+    /// Remove the `XCTExpectFailure` when the fix is in.
     func testFormatKeepsEscapedMarkdownOnContinuationLines() {
         let parser = MarkdownParser()
         for source in ["foo\n\\# bar\n", "foo\n\\- bar\n", "foo\n\\> bar\n", "foo\n\\`\\`\\`js\n"] {

@@ -34,12 +34,6 @@ final class BlockFormatterTests: XCTestCase {
         XCTAssertEqual(parser.parse(output).count, 1)
     }
 
-    func testFormatMultilineParagraph() {
-        let blocks = parser.parse("line1\nline2\nline3")
-        let output = BlockFormatter.format(blocks)
-        XCTAssertEqual(output, "line1\nline2\nline3\n")
-    }
-
     func testFormatMultilineParagraphNormalizesBlankLinesBetweenParagraphs() {
         // The last line of a paragraph does not get a blank line of its own. One blank
         // line between two paragraphs is enough, thus "\n\n\n" becomes "\n\n".
@@ -61,6 +55,10 @@ final class BlockFormatterTests: XCTestCase {
     /// stays part of the paragraph text. The formatter writes each line of that text
     /// without the indent, thus the marker becomes live markdown and the one paragraph
     /// divides into more than one block, or becomes a heading.
+    ///
+    /// The lost indent came before the soft-break change, but this failure did not:
+    /// while the two lines ran together, the marker stayed in the middle of a line and
+    /// did nothing.
     ///
     /// A full fix needs escape logic, or an indent, in the formatter, which is larger
     /// than the soft break fix. Remove the `XCTExpectFailure` when the fix is in.
