@@ -172,15 +172,9 @@ final class MarkdownParserTests: XCTestCase {
         }
     }
 
-    /// KNOWN FAILURE, kept as documentation for a later fix.
-    ///
-    /// A hard line break (two or more spaces at the end of a line, or a backslash at
-    /// the end of a line) becomes a CMARK_NODE_LINEBREAK, which `getNodeText` still
-    /// throws away. Thus the two lines become one word.
-    ///
-    /// The fix must keep the two lines apart. How to write the hard break in the block
-    /// text is for that fix to decide, thus this test only asks for a line break.
-    /// Remove the `XCTExpectFailure` when the fix is in.
+    /// A hard line break is two or more spaces at the end of a line, or a backslash at
+    /// the end of a line. Both spellings mean the same break, thus both keep the two
+    /// lines apart. `getNodeText` writes the break back with the backslash.
     func testParseParagraphKeepsHardLineBreaks() {
         for markdown in ["First line  \nSecond line", "First line\\\nSecond line"] {
             let blocks = parser.parse(markdown)
@@ -189,9 +183,7 @@ final class MarkdownParserTests: XCTestCase {
                 XCTFail("Expected paragraph block")
                 continue
             }
-            XCTExpectFailure("Hard line breaks are dropped by MarkdownParser.getNodeText") {
-                XCTAssertTrue(text.contains("\n"), "Hard break was dropped: \(text.debugDescription)")
-            }
+            XCTAssertTrue(text.contains("\n"), "Hard break was dropped: \(text.debugDescription)")
         }
     }
 
