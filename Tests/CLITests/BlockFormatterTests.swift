@@ -25,6 +25,15 @@ final class BlockFormatterTests: XCTestCase {
         XCTAssertEqual(output, "Hello world.\n")
     }
 
+    func testFormatMultilineSetextHeadingStaysOneBlock() {
+        let source = "Heading one\nHeading two\n==========="
+        let output = BlockFormatter.format(parser.parse(source))
+        XCTAssertEqual(output, "# Heading one Heading two\n")
+        // The formatted heading must parse again as one heading, not as a heading
+        // plus a stray paragraph, or an edit of a later block would move it.
+        XCTAssertEqual(parser.parse(output).count, 1)
+    }
+
     func testFormatMultilineParagraph() {
         let blocks = parser.parse("line1\nline2\nline3")
         let output = BlockFormatter.format(blocks)
@@ -44,6 +53,26 @@ final class BlockFormatterTests: XCTestCase {
         let firstPass = BlockFormatter.format(parser.parse(source))
         let secondPass = BlockFormatter.format(parser.parse(firstPass))
         XCTAssertEqual(secondPass, firstPass)
+    }
+
+    /// KNOWN FAILURE, kept as documentation for a later fix.
+    ///
+    /// An indent of four or more spaces makes a markdown marker inert, thus the marker
+    /// stays part of the paragraph text. The formatter writes each line of that text
+    /// without the indent, thus the marker becomes live markdown and the one paragraph
+    /// divides into more than one block, or becomes a heading.
+    ///
+    /// A full fix needs escape logic, or an indent, in the formatter, which is larger
+    /// than the soft break fix. Remove the `XCTExpectFailure` when the fix is in.
+    func testFormatParagraphWithInertMarkerOnContinuationLine() {
+        for source in ["line1\n    ---", "line1\n    - x", "line1\n    1) x"] {
+            XCTAssertEqual(parser.parse(source).count, 1, "Expected one paragraph: \(source.debugDescription)")
+            let firstPass = BlockFormatter.format(parser.parse(source))
+            let secondPass = BlockFormatter.format(parser.parse(firstPass))
+            XCTExpectFailure("An inert marker becomes live markdown after format") {
+                XCTAssertEqual(secondPass, firstPass, "source: \(source.debugDescription)")
+            }
+        }
     }
 
     func testFormatMultilineBlockquote() {

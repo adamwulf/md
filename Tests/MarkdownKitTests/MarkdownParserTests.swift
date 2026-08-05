@@ -38,6 +38,19 @@ final class MarkdownParserTests: XCTestCase {
         }
     }
 
+    func testParseMultilineSetextHeadingJoinsLinesWithSpace() {
+        // A setext heading can use more than one source line, but a heading is always
+        // one line. Thus its lines join with a space, not with a newline.
+        let blocks = parser.parse("Heading one\nHeading two\n===========")
+        XCTAssertEqual(blocks.count, 1)
+        if case .heading(let level, let text, _, _, _) = blocks[0] {
+            XCTAssertEqual(level, 1)
+            XCTAssertEqual(text, "Heading one Heading two")
+        } else {
+            XCTFail("Expected heading block")
+        }
+    }
+
     // MARK: - Paragraphs
 
     func testParseParagraph() {
@@ -146,15 +159,40 @@ final class MarkdownParserTests: XCTestCase {
     /// text is for that fix to decide, thus this test only asks for a line break.
     /// Remove the `XCTExpectFailure` when the fix is in.
     func testParseParagraphKeepsHardLineBreaks() {
-        XCTExpectFailure("Hard line breaks are dropped by MarkdownParser.getNodeText")
-
         for markdown in ["First line  \nSecond line", "First line\\\nSecond line"] {
             let blocks = parser.parse(markdown)
             XCTAssertEqual(blocks.count, 1)
-            if case .paragraph(let text, _, _, _) = blocks[0] {
-                XCTAssertTrue(text.contains("\n"), "Hard break was dropped: \(text.debugDescription)")
-            } else {
+            guard case .paragraph(let text, _, _, _) = blocks[0] else {
                 XCTFail("Expected paragraph block")
+                continue
+            }
+            XCTExpectFailure("Hard line breaks are dropped by MarkdownParser.getNodeText") {
+                XCTAssertTrue(text.contains("\n"), "Hard break was dropped: \(text.debugDescription)")
+            }
+        }
+    }
+
+    /// KNOWN FAILURE, kept as documentation for a later fix.
+    ///
+    /// A heading is always one line, thus its text must hold no newline. An inline
+    /// node that spans two source lines of a setext heading keeps its newline,
+    /// because `getNodeText` renders such a node to commonmark. `BlockFormatter`
+    /// then writes a heading of two lines, which parses again as a heading plus a
+    /// paragraph, and an edit of a later block moves it.
+    ///
+    /// This is older than the soft break fix, which handles only a soft break that
+    /// is a direct child of the heading.
+    /// Remove the `XCTExpectFailure` when the fix is in.
+    func testParseSetextHeadingWithMultilineInlineNodeStaysOneLine() {
+        for markdown in ["*Heading one\nHeading two*\n===========", "Heading **one\ntwo**\n==========="] {
+            let blocks = parser.parse(markdown)
+            XCTAssertEqual(blocks.count, 1)
+            guard case .heading(_, let text, _, _, _) = blocks[0] else {
+                XCTFail("Expected heading block")
+                continue
+            }
+            XCTExpectFailure("An inline node of a setext heading keeps its newline") {
+                XCTAssertFalse(text.contains("\n"), "Heading holds a newline: \(text.debugDescription)")
             }
         }
     }

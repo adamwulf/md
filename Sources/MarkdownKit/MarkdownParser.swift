@@ -479,9 +479,11 @@ public struct MarkdownParser {
         }
 
         // A soft break is a single newline inside a block. Keep it, so a paragraph
-        // written on more than one line keeps its line structure.
+        // written on more than one line keeps its line structure. A heading is always
+        // one line, thus a soft break in a setext heading becomes a space.
         if type == CMARK_NODE_SOFTBREAK {
-            return "\n"
+            let parentType = cmark_node_get_type(cmark_node_parent(node))
+            return parentType == CMARK_NODE_HEADING ? " " : "\n"
         }
 
         // Every other kind of node comes back through the CommonMark writer, thus it
