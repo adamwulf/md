@@ -171,6 +171,14 @@ final class FrontmatterCommandTests: XCTestCase {
         XCTAssertEqual(output, "author: Jane\ntitle: Hello\n")
     }
 
+    func testReadModePreservesANullValue() async throws {
+        let output = try await runFrontmatter(
+            [],
+            on: "---\npublished: null\n---\nBody\n"
+        )
+        XCTAssertEqual(output, "published: null\n")
+    }
+
     func testReadModeConvertsToTheRequestedFormat() async throws {
         let output = try await runFrontmatter(
             ["--format", "json"],
@@ -243,6 +251,20 @@ final class FrontmatterCommandTests: XCTestCase {
             on: "---\ntags:\n  - swift\n  - markdown\n---\nBody\n"
         )
         XCTAssertEqual(output, "swift\nmarkdown\n")
+    }
+
+    func testKeyPrintsNullValuesAsYAMLNulls() async throws {
+        let scalarOutput = try await runFrontmatter(
+            ["--key", "published"],
+            on: "---\npublished: null\n---\nBody\n"
+        )
+        XCTAssertEqual(scalarOutput, "null\n")
+
+        let arrayOutput = try await runFrontmatter(
+            ["--key", "values"],
+            on: "---\nvalues: [first, null]\n---\nBody\n"
+        )
+        XCTAssertEqual(arrayOutput, "first\nnull\n")
     }
 
     func testKeyPrintsNothingWhenTheKeyIsAbsent() async throws {

@@ -209,15 +209,8 @@ final class FormatCommandRunTests: XCTestCase {
     }
 
     func testFormatKeepsAListItemContinuationInsideItsItem() async throws {
-        XCTExpectFailure("""
-            A list item that wraps onto a second source line is rendered as \
-            "- item one\\ncontinued\\n", where the continuation line no longer \
-            starts inside the item. Re-parsing that output yields a list plus a \
-            separate paragraph, so formatting twice changes the document \
-            structure.
-            """)
         let output = try await runFormat(on: "- item one\n  continued\n")
-        XCTAssertEqual(output, "- item one continued\n")
+        XCTAssertEqual(output, "- item one\n  continued\n")
     }
 
     func testFormatDropsHtmlBlocksEntirely() async throws {

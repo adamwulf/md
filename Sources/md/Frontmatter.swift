@@ -404,6 +404,9 @@ struct Frontmatter {
         if let s = value as? String {
             return s
         }
+        if value is NSNull {
+            return NSNull()
+        }
         return "\(value)"
     }
 

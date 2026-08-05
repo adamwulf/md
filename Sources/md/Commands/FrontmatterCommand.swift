@@ -179,7 +179,10 @@ struct FrontmatterCommand: AsyncParsableCommand {
 
     private func formatValue(_ value: Any) -> String {
         if let array = value as? [Any] {
-            return array.map { "\($0)" }.joined(separator: "\n")
+            return array.map(formatValue).joined(separator: "\n")
+        }
+        if value is NSNull {
+            return "null"
         }
         return "\(value)"
     }
