@@ -286,4 +286,134 @@ final class MarkdownSourceEditorTests: XCTestCase {
             "New.\n\n   # Indented\n\nBody.\n"
         )
     }
+
+    // MARK: - Replacing parsed blocks
+
+    func testReplacingAMiddleBlockKeepsUntouchedSourceBytes() {
+        let source = "#    Loose heading\n\nDelete me.\n\n***\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "Replacement.\n",
+                within: source
+            ),
+            "#    Loose heading\n\nReplacement.\n\n***\n"
+        )
+    }
+
+    func testRemovingAMiddleBlockCollapsesWideSeparators() {
+        let source = "Alpha.\n\n\n\nBravo.\n\n\n\nCharlie.\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "",
+                within: source
+            ),
+            "Alpha.\n\nCharlie.\n"
+        )
+    }
+
+    /// cmark reports the blank line after a list as part of the list's range.
+    /// Removing the following final block must not therefore leave that blank
+    /// line at the end of the document.
+    func testRemovingTheBlockAfterAListLeavesNoTrailingBlankLine() {
+        let source = "* alpha\n* bravo\n\nTail.\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "",
+                within: source
+            ),
+            "* alpha\n* bravo\n"
+        )
+    }
+
+    func testReplacingTheFinalBlockKeepsAMissingFinalLineEnding() {
+        let source = "# Title\n\nOld."
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "New.\n",
+                within: source
+            ),
+            "# Title\n\nNew."
+        )
+    }
+
+    func testReplacingUsesTheDocumentsCarriageReturnLineFeeds() {
+        let source = "# One\r\n\r\nOld.\r\n\r\n# Three\r\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "New.\n",
+                within: source
+            ),
+            "# One\r\n\r\nNew.\r\n\r\n# Three\r\n"
+        )
+    }
+
+    func testInsertingAfterTheFinalBlockKeepsAMissingFinalLineEnding() throws {
+        let source = "# Only"
+        let block = try XCTUnwrap(parser.parseDocument(source).first)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.inserting("New.\n", after: block, in: source),
+            "# Only\n\nNew."
+        )
+    }
+
+    func testInsertingBetweenBlocksCollapsesWideSeparators() throws {
+        let source = "Alpha.\n\n\n\nBravo.\n"
+        let blocks = parser.parseDocument(source)
+        let first = try XCTUnwrap(blocks.first)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.inserting(
+                "Inserted.\n",
+                after: first,
+                in: source
+            ),
+            "Alpha.\n\nInserted.\n\nBravo.\n"
+        )
+    }
+
+    func testInsertingAfterABlockPreservesUnparsedSourceThatFollows() throws {
+        let source = "# Title\n\n<div>raw</div>\n\nTail.\n"
+        let block = try XCTUnwrap(parser.parseDocument(source).first)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.inserting("Inserted.\n", after: block, in: source),
+            "# Title\n\nInserted.\n\n<div>raw</div>\n\nTail.\n"
+        )
+    }
+
+    func testReplacingABlockPreservesUnparsedSourceThatFollows() {
+        let source = "# Old\n\n[ref]: /url\n\nTail.\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 0...0,
+                in: blocks,
+                with: "# New\n",
+                within: source
+            ),
+            "# New\n\n[ref]: /url\n\nTail.\n"
+        )
+    }
 }

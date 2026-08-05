@@ -48,7 +48,7 @@ struct RemoveCommand: AsyncParsableCommand {
         let end = end ?? start
 
         let parser = MarkdownParser()
-        let blocks = parser.parse(content)
+        let blocks = parser.parseDocument(content)
 
         guard start >= 1 else {
             throw ValidationError("Start index must be >= 1, got \(start)")
@@ -60,16 +60,14 @@ struct RemoveCommand: AsyncParsableCommand {
             throw ValidationError("End index must be <= \(blocks.count), got \(end)")
         }
 
-        var remaining: [MarkdownBlock] = []
-        for (i, block) in blocks.enumerated() {
-            let blockNum = i + 1
-            if blockNum >= start && blockNum <= end {
-                continue
-            }
-            remaining.append(block)
+        guard let result = MarkdownSourceEditor.replacing(
+            blocks: (start - 1)...(end - 1),
+            in: blocks,
+            with: "",
+            within: content
+        ) else {
+            throw ValidationError("Unable to locate blocks \(start)...\(end) in the source")
         }
-
-        let result = BlockFormatter.format(remaining)
         if inPlace {
             guard let file = input.file else {
                 throw ValidationError("Cannot use --in-place with --stdin")

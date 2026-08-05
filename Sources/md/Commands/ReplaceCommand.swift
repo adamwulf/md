@@ -71,7 +71,7 @@ struct ReplaceCommand: AsyncParsableCommand {
         let parser = MarkdownParser()
         let source = try input.readSource()
         let fileContent = source.content
-        let blocks = parser.parse(fileContent)
+        let blocks = parser.parseDocument(fileContent)
 
         guard start >= 1 else {
             throw ValidationError("Start index must be >= 1, got \(start)")
@@ -85,19 +85,13 @@ struct ReplaceCommand: AsyncParsableCommand {
 
         let newBlocks = parser.parse(newContent)
 
-        var result = ""
-        for (i, block) in blocks.enumerated() {
-            let blockNum = i + 1
-
-            if blockNum == start {
-                if !result.isEmpty { result += "\n" }
-                result += BlockFormatter.format(newBlocks)
-            } else if blockNum > start && blockNum <= end {
-                continue
-            } else {
-                if !result.isEmpty { result += "\n" }
-                result += BlockFormatter.format(block)
-            }
+        guard let result = MarkdownSourceEditor.replacing(
+            blocks: (start - 1)...(end - 1),
+            in: blocks,
+            with: BlockFormatter.format(newBlocks),
+            within: fileContent
+        ) else {
+            throw ValidationError("Unable to locate blocks \(start)...\(end) in the source")
         }
 
         if inPlace {

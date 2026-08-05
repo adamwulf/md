@@ -1,9 +1,0 @@
-md throws the html block away, printing only the heading, the new
-paragraph and the tail paragraph.
-
-InsertAfterCommand rebuilds the whole document from parsed blocks,
-and MarkdownParser.parseNode returns nil for CMARK_NODE_HTML_BLOCK,
-so the html never reaches the output. insert-before splices into the
-source instead and keeps the same html, which is why the matching
-case insert-before-keeps-an-html-block-elsewhere-in-the-document
-passes. insert-after should splice too.

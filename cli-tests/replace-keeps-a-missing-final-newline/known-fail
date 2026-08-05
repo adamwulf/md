@@ -1,9 +1,0 @@
-md ends the document with a newline that the fixture does not have.
-
-ReplaceCommand rebuilds the whole document from parsed blocks, and
-BlockFormatter.format ends every block with a newline of its own, so a
-document that ended without one gets one. A file that a user keeps
-without a final newline stays that way through an edit somewhere else
-in it. insert-before splices into the source rather than rebuilding it,
-and keeps the missing newline, which is why the matching case
-insert-before-keeps-a-missing-final-newline passes.
