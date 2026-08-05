@@ -229,6 +229,14 @@ final class FrontmatterCommandTests: XCTestCase {
         XCTAssertEqual(output, "Jane\n")
     }
 
+    func testKeyIgnoresTheFormatFlagForAMapping() async throws {
+        let output = try await runFrontmatter(
+            ["--key", "author", "--format", "json"],
+            on: "---\nauthor:\n  name: Jane\n---\nBody\n"
+        )
+        XCTAssertEqual(output, "name: Jane\n")
+    }
+
     func testKeyPrintsABooleanValue() async throws {
         let output = try await runFrontmatter(
             ["--key", "draft"],
@@ -283,6 +291,17 @@ final class FrontmatterCommandTests: XCTestCase {
             on: "---\nvalues: [[first, null], c]\n---\nBody\n"
         )
         XCTAssertEqual(output, "[first, null]\nc\n")
+    }
+
+    func testKeyPrintsATOMLArrayOfTablesOneItemPerLine() async throws {
+        let output = try await runFrontmatter(
+            ["--key", "values"],
+            on: "+++\nvalues = [{ name = \"Jane\", nested = { count = 1 } }, \"tail\"]\n+++\n"
+        )
+        XCTAssertEqual(
+            output,
+            "{ name = 'Jane', nested = { count = 1 } }\ntail\n"
+        )
     }
 
     func testKeyPrintsNothingWhenTheKeyIsAbsent() async throws {

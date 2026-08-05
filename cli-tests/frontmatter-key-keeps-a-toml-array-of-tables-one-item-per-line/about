@@ -1,0 +1,2 @@
+A mapping inside a projected TOML array is emitted as an inline table, keeping
+the command's one-output-line-per-top-level-item contract at every depth.

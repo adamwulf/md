@@ -255,6 +255,50 @@ final class ListCommandTests: XCTestCase {
         )
     }
 
+    func testPlainKeyPrintsATOMLArrayOfTablesOnOneLine() throws {
+        try write(
+            "+++\nvalues = [{ name = \"Jane\", nested = { count = 1 } }, \"tail\"]\n+++\n",
+            to: "a.md"
+        )
+
+        let out = try runList(["--format", "toml", "--key", "values"])
+
+        XCTAssertTrue(
+            out.hasSuffix("\t{ name = 'Jane', nested = { count = 1 } },tail\n"),
+            "got: \(out.debugDescription)"
+        )
+    }
+
+    func testRunRejectsANestedNullInATOMLKeyProjection() async throws {
+        try write("---\nvalues: [{x: null}, bad]\n---\n", to: "a-bad.md")
+        try write("---\nvalues: [good]\n---\n", to: "b-good.md")
+        let command = try ListCommand.parse([
+            "--format", "toml", "--key", "values", tempRoot.path,
+        ])
+        let paths = command.collectEntries().map(\.path)
+        let badPath = try XCTUnwrap(paths.first { $0.hasSuffix("/a-bad.md") })
+        let goodPath = try XCTUnwrap(paths.first { $0.hasSuffix("/b-good.md") })
+
+        let captured = try await StandardStream.capturingCommandRun {
+            try await command.run()
+        }
+
+        XCTAssertFalse(captured.standardOutput.contains(badPath))
+        XCTAssertTrue(captured.standardOutput.contains(goodPath))
+        XCTAssertFalse(captured.standardOutput.contains("<null>"))
+        XCTAssertEqual(
+            captured.standardError,
+            "md list: \(badPath): TOML cannot represent the null value " +
+                "at key path values[0].x\n"
+        )
+        guard let exitCode = captured.error as? ExitCode else {
+            return XCTFail(
+                "Expected ExitCode.failure, got \(String(describing: captured.error))"
+            )
+        }
+        XCTAssertEqual(exitCode.rawValue, ExitCode.failure.rawValue)
+    }
+
     func testRunReportsANullThatTOMLCannotRepresent() async throws {
         try write("---\npublished: null\n---\n", to: "a-bad.md")
         try write("---\ntitle: Good\n---\n", to: "b-good.md")
@@ -376,6 +420,41 @@ final class ListCommandTests: XCTestCase {
                 XCTFail(
                     "Expected ExitCode.failure for \(output), got " +
                         "\(String(describing: captured.error))"
+                )
+                continue
+            }
+            XCTAssertEqual(exitCode.rawValue, ExitCode.failure.rawValue, output)
+        }
+    }
+
+    func testJSONAndNDJSONEnvelopesStillValidateRequestedTOML() async throws {
+        try write("---\npublished: null\n---\n", to: "a-bad.md")
+        try write("---\ntitle: Good\n---\n", to: "b-good.md")
+
+        for output in ["json", "ndjson"] {
+            let command = try ListCommand.parse([
+                "--format", "toml", "--output", output, tempRoot.path,
+            ])
+            let paths = command.collectEntries().map(\.path)
+            let badPath = try XCTUnwrap(paths.first { $0.hasSuffix("/a-bad.md") })
+
+            let captured = try await StandardStream.capturingCommandRun {
+                try await command.run()
+            }
+
+            XCTAssertFalse(captured.standardOutput.contains("a-bad.md"), output)
+            XCTAssertTrue(captured.standardOutput.contains("b-good.md"), output)
+            XCTAssertTrue(captured.standardOutput.contains("Good"), output)
+            XCTAssertEqual(
+                captured.standardError,
+                "md list: \(badPath): TOML cannot represent the null value " +
+                    "at key path published\n",
+                output
+            )
+            guard let exitCode = captured.error as? ExitCode else {
+                XCTFail(
+                    "[\(output)] Expected ExitCode.failure, got " +
+                        String(describing: captured.error)
                 )
                 continue
             }

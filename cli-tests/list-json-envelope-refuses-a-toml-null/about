@@ -1,0 +1,2 @@
+The JSON envelope does not override `--format toml`: a null TOML cannot
+represent is rejected before the file becomes a JSON record.
