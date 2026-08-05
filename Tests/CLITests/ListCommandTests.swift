@@ -228,6 +228,22 @@ final class ListCommandTests: XCTestCase {
         XCTAssertTrue(out.hasSuffix("\tnan\n"), "got: \(out.debugDescription)")
     }
 
+    func testPlainKeyPrintsANullValueAsYAMLNull() throws {
+        try write("---\npublished: null\n---\n", to: "a.md")
+
+        let out = try runList(["--key", "published"])
+
+        XCTAssertTrue(out.hasSuffix("\tnull\n"), "got: \(out.debugDescription)")
+    }
+
+    func testPlainKeyPrintsANullInsideAnArrayAsYAMLNull() throws {
+        try write("---\nvalues: [first, null]\n---\n", to: "a.md")
+
+        let out = try runList(["--key", "values"])
+
+        XCTAssertTrue(out.hasSuffix("\tfirst,null\n"), "got: \(out.debugDescription)")
+    }
+
     func testPlainKeyDoesNotTurnNestedNonFiniteNumbersIntoNull() throws {
         try write(
             "---\nmeasurements:\n  values: [.nan, 1.0]\n---\n",

@@ -1,0 +1,2 @@
+TOML has no null value. Converting YAML null to TOML must fail clearly rather
+than silently changing it into the string `<null>`.

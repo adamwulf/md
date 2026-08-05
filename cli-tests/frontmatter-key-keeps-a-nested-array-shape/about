@@ -1,0 +1,3 @@
+A nested array projected with `frontmatter --key` keeps each top-level item on
+one line. Recursively flattening the value makes a matrix indistinguishable
+from a flat list and changes existing output beyond the null fix.

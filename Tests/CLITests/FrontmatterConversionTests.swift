@@ -289,6 +289,10 @@ final class FrontmatterConversionTests: XCTestCase {
 
     // MARK: - normalizeForYAML
 
+    func testNormalizeForYAMLPreservesNull() {
+        XCTAssertTrue(Frontmatter.normalizeForYAML(NSNull()) is NSNull)
+    }
+
     func testNormalizeForYAMLPreservesScalarTypes() {
         XCTAssertEqual(Frontmatter.normalizeForYAML(true) as? Bool, true)
         XCTAssertEqual(Frontmatter.normalizeForYAML(7) as? Int, 7)
@@ -379,6 +383,23 @@ final class FrontmatterConversionTests: XCTestCase {
             "url": URL(fileURLWithPath: "/tmp/x")
         ])
         XCTAssertEqual(table["url"]?.string, "file:///tmp/x")
+    }
+
+    func testTOMLSerializationRefusesANullValue() {
+        let frontmatter = Frontmatter(
+            format: .toml,
+            data: ["published": NSNull()],
+            rawContent: "",
+            body: "",
+            originalContent: ""
+        )
+
+        XCTAssertThrowsError(try frontmatter.serializeData()) { error in
+            XCTAssertEqual(
+                error.localizedDescription,
+                "TOML cannot represent the null value at key path published"
+            )
+        }
     }
 
     // MARK: - parseValue
