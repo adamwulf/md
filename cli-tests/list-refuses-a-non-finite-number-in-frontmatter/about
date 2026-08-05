@@ -1,0 +1,6 @@
+Guards against a crash: `md list --format json` aborts with SIGABRT when any
+one file in the directory holds .nan in its frontmatter.
+
+The pair of format-refuses-a-non-finite-number-in-frontmatter. Both are worth
+keeping: they are one defect, but two code paths reach it, and a fix to one
+serializer would leave the other crashing.

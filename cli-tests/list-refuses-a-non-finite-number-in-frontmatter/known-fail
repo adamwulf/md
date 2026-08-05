@@ -1,0 +1,18 @@
+md CRASHES. It dies on SIGABRT, which the harness reports as exit -6.
+
+This is the same defect as in format-refuses-a-non-finite-number-in-frontmatter,
+reached down a second path. A frontmatter value of .nan reaches
+JSONSerialization, which RAISES an Objective-C exception rather than throwing,
+so the catch at ListCommand.swift:226 never runs and the process aborts.
+
+It costs more here than in `format`. `md list` walks a directory, so ONE bad
+file among hundreds takes down the whole run, and the files already scanned
+print nothing. Every other per-file failure in `list` is reported to stderr
+and the walk continues; this one should behave the same way.
+
+What it should do: report the file and the key on stderr, skip that file, and
+carry on. Exit non-zero at the end, as `list` already does for a file it could
+not read.
+
+Read the marker in format-refuses-a-non-finite-number-in-frontmatter for the
+cause and the fix.
