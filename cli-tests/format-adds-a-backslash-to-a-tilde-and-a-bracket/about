@@ -1,0 +1,15 @@
+A backslash that the source did not have. This case is here so that the
+decision is visible, and not a surprise.
+
+`~`, `[`, `*` and a backtick each need a SECOND character to make markup:
+`~~text~~`, `[text](url)`, `*text*`. That second character can sit in another
+node of the same block, and the parser gives one node at a time. Thus it cannot
+see the pair, and it always adds the backslash.
+
+A backslash that a character does not need is safe: a reader shows `\~` as `~`
+and `\[` as `[`. A pair that keeps no backslash is not safe: it changes what the
+text means. These four take the safe side.
+
+A `]` alone opens nothing, thus it keeps no backslash and only the `[` gets one.
+
+Change this case together with `MarkdownEscaper` if the decision changes.

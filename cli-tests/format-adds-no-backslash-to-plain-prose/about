@@ -1,0 +1,12 @@
+The other side of the escaping rules. None of these characters begins markdown
+where it sits, thus none of them may grow a backslash:
+
+  `#` and `-` and `+` and `=` in the middle of a line, and never at its start
+  `&` with no name and `;` after it, thus `AT&T` is not a character entity
+  `<` before a number, thus `<3` opens no autolink and no HTML tag
+  `_` between two letters or numbers, thus `snake_case_name` is one word
+  `|` outside a table, where it divides nothing
+
+An escaper that is safe but not narrow would write `issue \#42` and `AT\&T`.
+A reader shows those the same way, thus the damage is only to the source, and
+`md format` writes that source into the file of everybody who runs it.

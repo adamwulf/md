@@ -1,0 +1,6 @@
+A `|` divides one cell from the next, thus a `|` INSIDE a cell keeps its
+backslash. Without it the header row grows from two cells to three, and the
+table no longer agrees with its own line of dashes.
+
+The line of dashes gets wider, because `md` sizes it from the text of the header
+cell. That is not part of this bug, and the table reads the same either way.

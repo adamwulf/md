@@ -1,0 +1,2 @@
+Adding a block must not change the two blocks that were already there. Without
+the backslashes, block 1 becomes a heading and block 2 becomes a block quote.

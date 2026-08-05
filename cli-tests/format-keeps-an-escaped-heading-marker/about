@@ -1,0 +1,3 @@
+The backslash makes the `#` inert, thus block 2 is a paragraph and not a
+heading. If the backslash is lost, block 2 becomes a heading, the meaning of
+the document changes, and a later `md replace 3` writes over the wrong block.
