@@ -255,6 +255,65 @@ final class TaskListFormattingTests: XCTestCase {
         assertStable("- A\n\n- B\n", "- A\n\n- B\n")
     }
 
+    /// A loose sublist inside a TIGHT parent. The gap between two children
+    /// must not be written in front of the FIRST child, where it would fall
+    /// between the parent and its own sublist and make the parent loose. The
+    /// parent would then gain a blank line, and an indent level, on every
+    /// pass.
+    ///
+    /// `testALooseSublistLoosensItsParent` cannot catch this, because both
+    /// lists are loose there and the gap is wanted either way.
+    func testALooseSublistInsideATightParentIsStable() {
+        let source = """
+        - Parent one
+            - Child A
+
+            - Child B
+        - Parent two
+
+        """
+        assertStable(source, source)
+    }
+
+    func testALooseTaskSublistInsideATightParentIsStable() {
+        let source = """
+        - [ ] Parent one
+            - [x] Child A
+
+            - [ ] Child B
+        - [ ] Parent two
+
+        """
+        assertStable(source, source)
+    }
+
+    /// The mirror case: the gap before the first child belongs to the parent,
+    /// so a loose parent keeps it even when the sublist itself is tight.
+    func testATightSublistInsideALooseParentIsStable() {
+        let source = """
+        - Parent one
+
+            - Child A
+            - Child B
+
+        - Parent two
+
+        """
+        assertStable(source, source)
+    }
+
+    /// An item may not stand more than one level deeper than the item before
+    /// it. `- - inner` has no text on the outer item, so nothing is written at
+    /// level 0 and the child would land at four spaces, which reads back as an
+    /// indented code block rather than a list.
+    func testAnItemNeverJumpsMoreThanOneIndentLevel() {
+        let source = "- - inner child\n"
+        let output = BlockFormatter.format(parser.parse(source))
+        XCTAssertFalse(output.hasPrefix("    "), "the item was orphaned into a code block:\n\(output)")
+        let second = BlockFormatter.format(parser.parse(output))
+        XCTAssertEqual(second, output, "second pass changed the document")
+    }
+
     /// A blank line inside the child also makes the PARENT list loose, which
     /// is cmark's rule and not a shortcut here: the blank line falls inside
     /// the parent's first item. So a blank line appears between the parent and

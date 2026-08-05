@@ -31,16 +31,36 @@ enum BlockFormatter {
             output += "```\n"
 
         case .list(let items, _, _, _, _):
+            // The items are one flat array across every level of nesting, so
+            // the level of the item before decides what a gap means.
+            var previousLevel = -1
+            var previousTight = true
             for (index, item) in items.enumerated() {
-                // A loose list has a blank line between its items. Tightness
-                // travels on the item, so a loose sublist does not loosen the
-                // parent it sits in.
-                if !item.tight && index > 0 {
-                    output += "\n"
+                // An item may not stand more than one level deeper than the
+                // item before it. A wider jump writes an indent that reads
+                // back as an indented code block instead of a nested list.
+                // Clamping only ever pulls an item outwards, so the chain of
+                // levels stays unbroken. `max(0,)` also keeps the count out of
+                // negative territory, where `String(repeating:count:)` traps.
+                let level = min(max(0, item.indentLevel), previousLevel + 1)
+
+                if index > 0 {
+                    // A loose list has a blank line between its items, and the
+                    // gap belongs to the SHALLOWER of the two items around it.
+                    // When this item is the deeper one the gap falls between a
+                    // parent and its own sublist, so the parent's list decides.
+                    // Asking the deeper item there would put a blank line
+                    // inside the parent item and make the parent list loose,
+                    // which gains a level of indent on every pass.
+                    let gapIsTight = level > previousLevel ? previousTight : item.tight
+                    if !gapIsTight {
+                        output += "\n"
+                    }
                 }
-                // `String(repeating:count:)` traps on a negative count, so a
-                // malformed item must not be able to bring the process down.
-                let indent = String(repeating: "    ", count: max(0, item.indentLevel))
+                previousLevel = level
+                previousTight = item.tight
+
+                let indent = String(repeating: "    ", count: level)
                 let marker = item.ordered ? "1." : "-"
                 let checkbox = Self.checkboxPrefix(for: item.task)
                 // Continuation lines line up under the item content, which

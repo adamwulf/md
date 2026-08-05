@@ -291,7 +291,10 @@ public struct MarkdownParser {
            let box = firstCheckbox(in: lineTable[startLine - 1].content) {
             return box
         }
-        // No line to read: keep cmark's answer rather than drop the box.
+        // Defensive only. cmark gives every task item a start line inside the
+        // source, and the box is on it, so neither guard above is expected to
+        // fail. Keeping cmark's answer here loses the strstr fix rather than
+        // the box itself, which is the better of the two ways to be wrong.
         return cmark_gfm_extensions_get_tasklist_item_checked(itemNode) ? .checked : .unchecked
     }
 

@@ -91,42 +91,32 @@ final class TaskListParsingTests: XCTestCase {
     /// model. Dropping it would lose the box and orphan any nested list.
     func testAnItemThatIsOnlyABoxReachesTheModel() {
         let items = items("- [ ] \n- [x] Another task\n")
-        XCTAssertEqual(items.count, 2)
-        XCTAssertEqual(items[0].task, .unchecked)
-        XCTAssertEqual(items[0].text, "")
-        XCTAssertEqual(items[1].task, .checked)
+        XCTAssertEqual(items.map(\.task), [.unchecked, .checked])
+        XCTAssertEqual(items.map(\.text), ["", "Another task"])
     }
 
     func testAnEmptyBoxKeepsItsSublistAttached() {
         let items = items("- [ ] \n    - [x] Child task\n")
-        XCTAssertEqual(items.count, 2)
-        XCTAssertEqual(items[0].indentLevel, 0)
-        XCTAssertEqual(items[0].task, .unchecked)
-        XCTAssertEqual(items[1].indentLevel, 1)
+        XCTAssertEqual(items.map(\.indentLevel), [0, 1])
+        XCTAssertEqual(items.map(\.task), [.unchecked, .checked])
     }
 
     func testATaskItemAndAPlainItemKeepTheirOwnState() {
         let items = items("- [ ] A task\n- A plain item\n")
-        XCTAssertEqual(items.count, 2)
-        XCTAssertEqual(items[0].task, .unchecked)
-        XCTAssertNil(items[1].task)
+        XCTAssertEqual(items.map(\.task), [.unchecked, nil])
     }
 
     // MARK: - Sublists
 
     func testANestedTaskItemCarriesItsOwnBox() {
         let items = items("- [ ] Parent\n    - [x] Child\n")
-        XCTAssertEqual(items.count, 2)
-        XCTAssertEqual(items[0].task, .unchecked)
-        XCTAssertEqual(items[0].indentLevel, 0)
-        XCTAssertEqual(items[1].task, .checked)
-        XCTAssertEqual(items[1].indentLevel, 1)
+        XCTAssertEqual(items.map(\.task), [.unchecked, .checked])
+        XCTAssertEqual(items.map(\.indentLevel), [0, 1])
     }
 
     func testATaskItemNestsUnderAPlainParent() {
         let items = items("- Parent\n    - [ ] Child\n")
-        XCTAssertNil(items[0].task)
-        XCTAssertEqual(items[1].task, .unchecked)
+        XCTAssertEqual(items.map(\.task), [nil, .unchecked])
     }
 
     func testThreeLevelsOfNestingEachKeepTheirOwnBox() {
@@ -144,10 +134,49 @@ final class TaskListParsingTests: XCTestCase {
 
     func testATaskSublistUnderAnOrderedParent() {
         let items = items("1. First\n    - [ ] Sub task\n")
-        XCTAssertNil(items[0].task)
-        XCTAssertTrue(items[0].ordered)
-        XCTAssertEqual(items[1].task, .unchecked)
-        XCTAssertFalse(items[1].ordered)
+        XCTAssertEqual(items.map(\.task), [nil, .unchecked])
+        XCTAssertEqual(items.map(\.ordered), [true, false])
+    }
+
+    // MARK: - Tightness
+
+    // `tight` describes the list an item belongs to, so a nested list can
+    // differ from its parent. The writer reads it to decide where a blank
+    // line goes, which is why each shape is pinned here.
+
+    func testATightListReportsTight() {
+        XCTAssertEqual(items("- A\n- B\n").map(\.tight), [true, true])
+    }
+
+    func testAListWithBlankLinesBetweenItemsReportsLoose() {
+        XCTAssertEqual(items("- A\n\n- B\n").map(\.tight), [false, false])
+    }
+
+    func testAnItemHoldingTwoParagraphsMakesItsListLoose() {
+        let source = """
+        - A
+
+          A second paragraph
+
+        """
+        XCTAssertEqual(items(source).map(\.tight), [false])
+    }
+
+    /// A loose sublist inside a tight parent. The parent keeps `tight` and
+    /// only the children report loose, which is what stops the writer from
+    /// putting a blank line between a parent and its own sublist.
+    func testALooseSublistDoesNotReportItsParentLoose() {
+        let source = """
+        - Parent one
+            - Child A
+
+            - Child B
+        - Parent two
+
+        """
+        let items = items(source)
+        XCTAssertEqual(items.map(\.indentLevel), [0, 1, 1, 0])
+        XCTAssertEqual(items.map(\.tight), [true, false, false, true])
     }
 
     // MARK: - The box is spent once
