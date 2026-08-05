@@ -31,10 +31,36 @@ enum BlockFormatter {
             output += "```\n"
 
         case .list(let items, _, _, _, _):
-            for item in items {
+            // An item holding more than one paragraph makes the whole list
+            // loose, and a loose list puts a blank line between every item.
+            // Writing them back to back would close the gap the author left.
+            let loose = items.contains { $0.text.contains("\n\n") }
+            for (index, item) in items.enumerated() {
+                if loose && index > 0 {
+                    output += "\n"
+                }
                 let indent = String(repeating: "    ", count: item.indentLevel)
                 let marker = item.ordered ? "1." : "-"
-                output += "\(indent)\(marker) \(item.text)\n"
+                let checkbox = Self.checkbox(for: item.task)
+                // Continuation lines line up under the item CONTENT, which
+                // begins after the marker and the one space that follows it.
+                // The checkbox stands INSIDE that content, so it moves
+                // nothing: counting its width too would push a continuation
+                // four columns past the content start, where it stops being a
+                // paragraph and becomes an indented code block.
+                let continuation = String(repeating: " ", count: indent.count + marker.count + 1)
+                let lines = item.text.split(separator: "\n", omittingEmptySubsequences: false)
+                for (lineIndex, line) in lines.enumerated() {
+                    if lineIndex == 0 {
+                        output += "\(indent)\(marker) \(checkbox)\(line)\n"
+                    } else if line.isEmpty {
+                        // A blank line carries no indent, or it would be
+                        // trailing whitespace.
+                        output += "\n"
+                    } else {
+                        output += "\(continuation)\(line)\n"
+                    }
+                }
             }
 
         case .blockquote(let text, _, _, _):
@@ -58,6 +84,17 @@ enum BlockFormatter {
         }
 
         return output
+    }
+
+    /// The checkbox that opens a task list item, written so that it reads back
+    /// as the same checkbox. An item with no checkbox contributes nothing, so
+    /// a plain item is untouched by task list support.
+    private static func checkbox(for task: TaskState?) -> String {
+        switch task {
+        case .none: return ""
+        case .unchecked: return "[ ] "
+        case .checked: return "[x] "
+        }
     }
 
     /// Format an array of MarkdownBlocks into normalized markdown text.

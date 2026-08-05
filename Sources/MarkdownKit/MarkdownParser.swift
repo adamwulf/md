@@ -9,16 +9,30 @@ import Foundation
 import cmark_gfm
 import cmark_gfm_extensions
 
+/// The checkbox that opens a task list item.
+///
+/// A task list item is an ordinary list item that begins with `[ ]` or `[x]`.
+/// The box is a MARKER and not text: it is written back as a box rather than
+/// as escaped brackets, and it stands inside the item content, so it shifts
+/// nothing that follows it.
+public enum TaskState: Sendable, Equatable {
+    case unchecked
+    case checked
+}
+
 /// Represents a single item in a markdown list, with support for nested lists via indent levels
 public struct ListItem: Sendable, Equatable {
     public let text: String
     public let indentLevel: Int
     public let ordered: Bool
+    /// The checkbox this item opens with, or `nil` for an item that has none.
+    public let task: TaskState?
 
-    public init(text: String, indentLevel: Int, ordered: Bool) {
+    public init(text: String, indentLevel: Int, ordered: Bool, task: TaskState? = nil) {
         self.text = text
         self.indentLevel = indentLevel
         self.ordered = ordered
+        self.task = task
     }
 }
 
@@ -108,6 +122,12 @@ public struct MarkdownParser {
         }
         if let strikethroughExt = cmark_find_syntax_extension("strikethrough") {
             cmark_parser_attach_syntax_extension(parser, strikethroughExt)
+        }
+        // Without this, cmark reads `- [ ] text` as an item whose text opens
+        // with a bracket. Escaping that bracket is right for text and wrong
+        // for a checkbox, so every task list would come back as `- \[ \]`.
+        if let tasklistExt = cmark_find_syntax_extension("tasklist") {
+            cmark_parser_attach_syntax_extension(parser, tasklistExt)
         }
 
         cmark_parser_feed(parser, markdown, markdown.utf8.count)
@@ -242,6 +262,17 @@ public struct MarkdownParser {
         return .table(rows: rows, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
     }
 
+    /// The checkbox an item opens with, or `nil` for an item that has none.
+    ///
+    /// The tasklist extension marks the ITEM node rather than its text, and
+    /// reports itself through the node's type string. An item the extension
+    /// never touched keeps the ordinary type and has no box.
+    private func taskState(of itemNode: UnsafeMutablePointer<cmark_node>) -> TaskState? {
+        guard let typeString = cmark_node_get_type_string(itemNode) else { return nil }
+        guard String(cString: typeString) == "tasklist" else { return nil }
+        return cmark_gfm_extensions_get_tasklist_item_checked(itemNode) ? .checked : .unchecked
+    }
+
     private func collectListItems(
         from listNode: UnsafeMutablePointer<cmark_node>,
         indentLevel: Int,
@@ -251,8 +282,34 @@ public struct MarkdownParser {
         var itemNode = cmark_node_first_child(listNode)
 
         while itemNode != nil {
-            var itemText = ""
+            // A nested list splits its item into the piece before it and the
+            // piece after it. The checkbox belongs to the piece holding the
+            // item's FIRST paragraph and to no other, or a plain tail
+            // paragraph comes back claiming a task nobody wrote.
+            var pendingTask = itemNode.flatMap { taskState(of: $0) }
+            var paragraphs: [String] = []
             var child = cmark_node_first_child(itemNode)
+
+            /// Emit everything gathered since the last nested list as one item.
+            /// The checkbox is spent whether or not a piece was emitted: once
+            /// the first content position has passed, the box has had its turn.
+            func flushGatheredText() {
+                defer {
+                    paragraphs = []
+                    pendingTask = nil
+                }
+                // Each child of an item is its own paragraph, so they are
+                // joined by a blank line. Running them together would weld the
+                // last word of one onto the first word of the next.
+                let text = paragraphs.joined(separator: "\n\n")
+                guard !text.isEmpty else { return }
+                items.append(ListItem(
+                    text: text,
+                    indentLevel: indentLevel,
+                    ordered: ordered,
+                    task: pendingTask
+                ))
+            }
 
             while child != nil {
                 let childType = cmark_node_get_type(child)
@@ -261,32 +318,22 @@ public struct MarkdownParser {
                     let nestedOrdered = cmark_node_get_list_type(child) == CMARK_ORDERED_LIST
                     guard let child = child else { continue }
                     let nestedItems = collectListItems(from: child, indentLevel: indentLevel + 1, ordered: nestedOrdered)
-                    if !itemText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        items.append(ListItem(
-                            text: itemText.trimmingCharacters(in: .whitespacesAndNewlines),
-                            indentLevel: indentLevel,
-                            ordered: ordered
-                        ))
-                        itemText = ""
-                    }
+                    flushGatheredText()
                     items.append(contentsOf: nestedItems)
                 } else {
                     // The children of a list item are whole blocks, thus each one
                     // comes back through the CommonMark writer with its backslashes.
-                    itemText += getNodeText(child, context: .paragraph)
+                    let text = getNodeText(child, context: .paragraph)
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !text.isEmpty {
+                        paragraphs.append(text)
+                    }
                 }
 
                 child = cmark_node_next(child)
             }
 
-            let trimmedText = itemText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmedText.isEmpty {
-                items.append(ListItem(
-                    text: trimmedText,
-                    indentLevel: indentLevel,
-                    ordered: ordered
-                ))
-            }
+            flushGatheredText()
 
             itemNode = cmark_node_next(itemNode)
         }
