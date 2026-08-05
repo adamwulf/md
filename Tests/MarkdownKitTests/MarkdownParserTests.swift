@@ -172,28 +172,24 @@ final class MarkdownParserTests: XCTestCase {
         }
     }
 
-    /// KNOWN FAILURE, kept as documentation for a later fix.
-    ///
-    /// A heading is always one line, thus its text must hold no newline. An inline
-    /// node that spans two source lines of a setext heading keeps its newline,
-    /// because `getNodeText` renders such a node to commonmark. `BlockFormatter`
-    /// then writes a heading of two lines, which parses again as a heading plus a
-    /// paragraph, and an edit of a later block moves it.
-    ///
-    /// This is older than the soft break fix, which handles only a soft break that
+    /// An inline node that spans two source lines of a setext heading also keeps its
+    /// newline, because `getNodeText` renders such a node to commonmark. The heading
+    /// text must stay on one line for every such node, not only for a soft break that
     /// is a direct child of the heading.
-    /// Remove the `XCTExpectFailure` when the fix is in.
     func testParseSetextHeadingWithMultilineInlineNodeStaysOneLine() {
-        for markdown in ["*Heading one\nHeading two*\n===========", "Heading **one\ntwo**\n==========="] {
+        let expected = ["*Heading one Heading two*", "Heading **one two**"]
+        for (markdown, expectedText) in zip(
+            ["*Heading one\nHeading two*\n===========", "Heading **one\ntwo**\n==========="],
+            expected
+        ) {
             let blocks = parser.parse(markdown)
             XCTAssertEqual(blocks.count, 1)
             guard case .heading(_, let text, _, _, _) = blocks[0] else {
                 XCTFail("Expected heading block")
                 continue
             }
-            XCTExpectFailure("An inline node of a setext heading keeps its newline") {
-                XCTAssertFalse(text.contains("\n"), "Heading holds a newline: \(text.debugDescription)")
-            }
+            XCTAssertFalse(text.contains("\n"), "Heading holds a newline: \(text.debugDescription)")
+            XCTAssertEqual(text, expectedText)
         }
     }
 
