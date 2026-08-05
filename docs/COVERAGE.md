@@ -57,7 +57,8 @@ and the instrumented subprocess hits that limit writing its own profile.
 
 **`swift build` does not build test targets.** Paired with `swift test
 --skip-build`, that silently measures whatever test bundle is on disk. It
-reported 88.73% where the truth was 98.24%. `--build-tests` fixes it.
+reported 88.73% where the truth was 98.24%, which were the figures of that
+day. `--build-tests` fixes it.
 
 ## Defects: 26 found, 13 fixed, 12 open, 1 withdrawn
 
@@ -141,7 +142,9 @@ asterisk bullet, or thematic break remains byte-for-byte unchanged.
 
 Ordered by tests turned green for code changed:
 
-1. **24**, **14**, **23** — one command each, and small.
+1. **24**, **14**, **23** — all three in `ListCommand.swift`, in three
+   different functions, and none of them touches the parser or the shared
+   block model. 4 markers for one file. See the section below.
 2. **13**, **21** — small, but each touches its callers.
 3. **11**, **6** — localized parser range and container-separator fixes.
 4. **4**, **7**, **17**, **20** need the parsed document model to grow: cases
@@ -153,3 +156,33 @@ Ordered by tests turned green for code changed:
    merging into one, which moves every block index below that point.
 5. **22** only after **4**, **6**, **7**, **17**, and **20**, so in-place
    formatting cannot write any of those losses into the user's file.
+
+## The three `list` defects, read but not yet fixed
+
+Each `known-fail` file says what `md` does and why. This is what reading the
+source added, so the next session does not read it again.
+
+**14 has a mechanism waiting for it.** `run()` already ends with
+
+    if prepared.hadErrors { throw ExitCode.failure }
+
+and `prepareEntriesForRendering` already sets that flag for a file it had to
+skip. So `list` knows how to walk everything and then exit non-zero, which is
+the behaviour wanted here. What is missing is only the report: `walkDirectory`
+writes to stderr and returns `[]`, and `collectEntries` returns a plain array,
+so nothing reaches `run()`. Give both of them a way to carry the flag that
+already exists. Do not add a second exit path.
+
+**24 is one branch.** `renderJSON` hands the array straight to
+`JSONSerialization` with `.prettyPrinted`, and Foundation writes `[\n\n]` for
+an empty array. Answer `[]` before that call. Note that `render` appends the
+final newline itself, so the branch returns `[]` and nothing more.
+
+**23 must not lose the tab shape.** The `--key` branch of `renderPlain` writes
+`"\(entry.path)\t\(formatted)\n"`, and `formatScalarValue` ends at
+`"\(normalized)"` for a scalar: no quoting, no escaping, no test for a
+newline. Escaping the newline as `\n` is the smallest fix. The case asserts
+`md lines --count` is 1, so any fix that keeps one record on one line closes
+it. `formatScalarValue` also serves arrays and mappings through
+`serializeInlineCollection`, thus check where the escape belongs before you
+write it: a newline inside a mapping value has the same problem.
