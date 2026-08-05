@@ -1,0 +1,14 @@
+The safe source-splicing path refuses this edit instead of printing the
+expected document. Removing the blockquote brings an indented code block next
+to a list; CommonMark then parses the code as part of the final list item.
+
+What it should do: remove only the selected block and keep the formerly
+separate indented code block separate, without rewriting that untouched code.
+
+Cause: blank lines alone cannot terminate the list before an indented code
+block. The source editor detects the block-count loss and refuses the edit,
+but a lossless representation for this new boundary is not yet implemented.
+
+Why it matters: accepting the naive splice silently changes the structure of
+an untouched block. Refusal is safer, but the requested removal still cannot
+be completed.

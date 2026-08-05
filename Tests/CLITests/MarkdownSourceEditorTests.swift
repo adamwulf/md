@@ -286,4 +286,304 @@ final class MarkdownSourceEditorTests: XCTestCase {
             "New.\n\n   # Indented\n\nBody.\n"
         )
     }
+
+    // MARK: - Replacing parsed blocks
+
+    func testReplacingAMiddleBlockKeepsUntouchedSourceBytes() {
+        let source = "#    Loose heading\n\nDelete me.\n\n***\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "Replacement.\n",
+                within: source
+            ),
+            "#    Loose heading\n\nReplacement.\n\n***\n"
+        )
+    }
+
+    func testRemovingAMiddleBlockCollapsesWideSeparators() {
+        let source = "Alpha.\n\n\n\nBravo.\n\n\n\nCharlie.\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "",
+                within: source
+            ),
+            "Alpha.\n\nCharlie.\n"
+        )
+    }
+
+    /// cmark reports the blank line after a list as part of the list's range.
+    /// Removing the following final block must not therefore leave that blank
+    /// line at the end of the document.
+    func testRemovingTheBlockAfterAListLeavesNoTrailingBlankLine() {
+        let source = "* alpha\n* bravo\n\nTail.\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "",
+                within: source
+            ),
+            "* alpha\n* bravo\n"
+        )
+    }
+
+    func testReplacingTheFinalBlockKeepsAMissingFinalLineEnding() {
+        let source = "# Title\n\nOld."
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "New.\n",
+                within: source
+            ),
+            "# Title\n\nNew."
+        )
+    }
+
+    func testReplacingUsesTheDocumentsCarriageReturnLineFeeds() {
+        let source = "# One\r\n\r\nOld.\r\n\r\n# Three\r\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "New.\n",
+                within: source
+            ),
+            "# One\r\n\r\nNew.\r\n\r\n# Three\r\n"
+        )
+    }
+
+    func testReplacingUsesTheDocumentsLoneCarriageReturns() {
+        let source = "# One\r\rOld.\r\r# Three\r"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "New.\n",
+                within: source
+            ),
+            "# One\r\rNew.\r\r# Three\r"
+        )
+    }
+
+    func testInsertingAfterTheFinalBlockKeepsAMissingFinalLineEnding() throws {
+        let source = "# Only"
+        let block = try XCTUnwrap(parser.parseDocument(source).first)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.inserting("New.\n", after: block, in: source),
+            "# Only\n\nNew."
+        )
+    }
+
+    func testInsertingBetweenBlocksCollapsesWideSeparators() throws {
+        let source = "Alpha.\n\n\n\nBravo.\n"
+        let blocks = parser.parseDocument(source)
+        let first = try XCTUnwrap(blocks.first)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.inserting(
+                "Inserted.\n",
+                after: first,
+                in: source
+            ),
+            "Alpha.\n\nInserted.\n\nBravo.\n"
+        )
+    }
+
+    func testInsertingAfterUsesCarriageReturnLineFeeds() throws {
+        let source = "Alpha.\r\n\r\nBravo.\r\n"
+        let block = try XCTUnwrap(parser.parseDocument(source).first)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.inserting("Inserted.\n", after: block, in: source),
+            "Alpha.\r\n\r\nInserted.\r\n\r\nBravo.\r\n"
+        )
+    }
+
+    func testInsertingAfterUsesLoneCarriageReturns() throws {
+        let source = "Alpha.\r\rBravo.\r"
+        let block = try XCTUnwrap(parser.parseDocument(source).first)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.inserting("Inserted.\n", after: block, in: source),
+            "Alpha.\r\rInserted.\r\rBravo.\r"
+        )
+    }
+
+    func testInsertingAfterPreservesATXHeadingTrailingSource() throws {
+        let cases = [
+            (
+                "# Title   \n\nBody.\n",
+                "# Title   \n\nInserted.\n\nBody.\n"
+            ),
+            (
+                "# Title\t\n\nBody.\n",
+                "# Title\t\n\nInserted.\n\nBody.\n"
+            ),
+            (
+                "# Title #\n\nBody.\n",
+                "# Title #\n\nInserted.\n\nBody.\n"
+            ),
+            (
+                "# Title   \r\n\r\nBody.\r\n",
+                "# Title   \r\n\r\nInserted.\r\n\r\nBody.\r\n"
+            ),
+        ]
+
+        for (source, expected) in cases {
+            let block = try XCTUnwrap(parser.parseDocument(source).first)
+            XCTAssertEqual(
+                MarkdownSourceEditor.inserting(
+                    "Inserted.\n",
+                    after: block,
+                    in: source
+                ),
+                expected
+            )
+        }
+    }
+
+    func testInsertingAfterCollapsesCommonMarkWhitespaceOnlyBlankLines() throws {
+        let source = "Alpha.\n \t \n\t\nBravo.\n"
+        let block = try XCTUnwrap(parser.parseDocument(source).first)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.inserting("Inserted.\n", after: block, in: source),
+            "Alpha.\n\nInserted.\n\nBravo.\n"
+        )
+    }
+
+    func testInsertingAfterABlockPreservesUnparsedSourceThatFollows() throws {
+        let source = "# Title\n\n<div>raw</div>\n\nTail.\n"
+        let block = try XCTUnwrap(parser.parseDocument(source).first)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.inserting("Inserted.\n", after: block, in: source),
+            "# Title\n\nInserted.\n\n<div>raw</div>\n\nTail.\n"
+        )
+    }
+
+    func testReplacingABlockPreservesUnparsedSourceThatFollows() {
+        let source = "# Old\n\n[ref]: /url\n\nTail.\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 0...0,
+                in: blocks,
+                with: "# New\n",
+                within: source
+            ),
+            "# New\n\n[ref]: /url\n\nTail.\n"
+        )
+    }
+
+    func testUnicodeWhitespaceAndSeparatorsRemainRealBlocks() throws {
+        let characters = [
+            "\u{00A0}", "\u{2003}", "\u{3000}",
+            "\u{000B}", "\u{000C}", "\u{0085}", "\u{2028}", "\u{2029}",
+        ]
+
+        for character in characters {
+            let source = "Alpha.\n\n\(character)\n\nBravo.\n"
+            let blocks = parser.parseDocument(source)
+            XCTAssertEqual(blocks.count, 3, character.debugDescription)
+
+            XCTAssertEqual(
+                MarkdownSourceEditor.replacing(
+                    blocks: 0...0,
+                    in: blocks,
+                    with: "",
+                    within: source
+                ),
+                "\(character)\n\nBravo.\n",
+                character.debugDescription
+            )
+
+            let first = try XCTUnwrap(blocks.first)
+            XCTAssertEqual(
+                MarkdownSourceEditor.inserting(
+                    "Inserted.\n",
+                    after: first,
+                    in: source
+                ),
+                "Alpha.\n\nInserted.\n\n\(character)\n\nBravo.\n",
+                character.debugDescription
+            )
+        }
+    }
+
+    func testRemovalRefusesToAbsorbIndentedCodeIntoAPrecedingList() {
+        let source = "* alpha\n* bravo\n\n> quoted\n\n    indented code\n"
+        let blocks = parser.parseDocument(source)
+
+        let result = MarkdownSourceEditor.replacing(
+            blocks: 1...1,
+            in: blocks,
+            with: "",
+            within: source
+        )
+        XCTAssertNil(result)
+    }
+
+    func testReplacementCannotSpendALeadingMergeAtTheTrailingBoundary() {
+        let source = "* alpha\n\n> quoted\n\n    indented code\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertNil(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "* c",
+                within: source
+            )
+        )
+    }
+
+    func testRemovalAllowsTwoListsToBecomeAdjacent() {
+        let source = "* a\n\nMiddle.\n\n* b\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "",
+                within: source
+            ),
+            "* a\n\n* b\n"
+        )
+    }
+
+    func testRemovalAllowsTwoIndentedCodeBlocksToJoin() {
+        let source = "    code\n\nMiddle.\n\n    more\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "",
+                within: source
+            ),
+            "    code\n\n    more\n"
+        )
+    }
 }

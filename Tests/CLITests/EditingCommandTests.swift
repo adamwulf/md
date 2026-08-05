@@ -75,13 +75,13 @@ final class EditingCommandTests: XCTestCase {
         XCTAssertEqual(output, "")
     }
 
-    func testRemoveRenormalizesTheBlocksItKeeps() async throws {
+    func testRemoveLeavesUntouchedBlocksByteForByte() async throws {
         let output = try await run(
             RemoveCommand.self,
             ["1"],
             on: "# One\n\n#    Loosely   spaced\n"
         )
-        XCTAssertEqual(output, "# Loosely   spaced\n")
+        XCTAssertEqual(output, "#    Loosely   spaced\n")
     }
 
     func testRemoveInPlaceRewritesTheFile() async throws {
@@ -399,12 +399,6 @@ final class EditingCommandTests: XCTestCase {
     }
 
     func testRemoveNumbersBlocksTheSameWayAsBlocksCommand() async {
-        XCTExpectFailure("""
-            md remove parses with MarkdownParser.parse instead of parseDocument, \
-            so it sees the YAML frontmatter as a thematic break plus a setext \
-            heading and counts 4 blocks where md blocks counts 2. Index 3 is \
-            accepted today; it should be rejected as out of range.
-            """)
         await XCTAssertThrowsErrorMessage("End index must be <= 2, got 3") {
             _ = try await self.run(
                 RemoveCommand.self, ["3"], on: self.frontmatterDocument
@@ -413,11 +407,6 @@ final class EditingCommandTests: XCTestCase {
     }
 
     func testReplaceNumbersBlocksTheSameWayAsBlocksCommand() async {
-        XCTExpectFailure("""
-            md replace parses with MarkdownParser.parse instead of parseDocument, \
-            so it counts the YAML frontmatter as two extra blocks. Index 3 is \
-            accepted today; it should be rejected as out of range.
-            """)
         await XCTAssertThrowsErrorMessage("End index must be <= 2, got 3") {
             _ = try await self.run(
                 ReplaceCommand.self, ["3", "# New"], on: self.frontmatterDocument
@@ -426,12 +415,6 @@ final class EditingCommandTests: XCTestCase {
     }
 
     func testInsertAfterNumbersBlocksTheSameWayAsBlocksCommand() async {
-        XCTExpectFailure("""
-            md insert-after parses with MarkdownParser.parse instead of \
-            parseDocument, so it counts the YAML frontmatter as two extra \
-            blocks. Index 3 is accepted today; it should be rejected as out of \
-            range.
-            """)
         await XCTAssertThrowsErrorMessage(
             "Block index must be in range 1...2, got 3"
         ) {
@@ -454,13 +437,6 @@ final class EditingCommandTests: XCTestCase {
     // MARK: - Frontmatter must survive an edit
 
     func testRemoveKeepsFrontmatterOutOfTheReformattedBody() async throws {
-        XCTExpectFailure("""
-            Because md remove parses the frontmatter as markdown, removing the \
-            first body block instead removes the opening --- and rewrites the \
-            frontmatter as a level-2 heading, producing \
-            "---\\n\\n## title: A\\n\\n# Heading\\n". The frontmatter should be \
-            passed through untouched, as md format does.
-            """)
         let output = try await run(
             RemoveCommand.self, ["1"], on: frontmatterDocument
         )

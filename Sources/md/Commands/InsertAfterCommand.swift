@@ -45,7 +45,7 @@ struct InsertAfterCommand: AsyncParsableCommand {
         let parser = MarkdownParser()
         let source = try input.readSource()
         let fileContent = source.content
-        let blocks = parser.parse(fileContent)
+        let blocks = parser.parseDocument(fileContent)
 
         guard blockIndex >= 1, blockIndex <= blocks.count else {
             throw ValidationError("Block index must be in range 1...\(blocks.count), got \(blockIndex)")
@@ -55,17 +55,15 @@ struct InsertAfterCommand: AsyncParsableCommand {
         let newBlocks = parser.parse(content)
         let formattedNew = BlockFormatter.format(newBlocks)
 
-        // Build output: blocks before + target block + new content + blocks after
-        var result = ""
-        for (i, block) in blocks.enumerated() {
-            if i > 0 {
-                result += "\n"
-            }
-            result += BlockFormatter.format(block)
-
-            if i + 1 == blockIndex {
-                result += "\n" + formattedNew
-            }
+        let result = MarkdownSourceEditor.inserting(
+            formattedNew,
+            after: blocks[blockIndex - 1],
+            in: fileContent
+        )
+        guard let result else {
+            throw ValidationError(
+                "Inserting after block \(blockIndex) would change surrounding block structure"
+            )
         }
 
         if inPlace {
