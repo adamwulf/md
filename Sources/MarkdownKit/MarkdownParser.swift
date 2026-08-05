@@ -9,12 +9,10 @@ import Foundation
 import cmark_gfm
 import cmark_gfm_extensions
 
-/// The checkbox that opens a task list item.
+/// The checkbox that opens a task list item, such as `- [ ]` or `- [x]`.
 ///
-/// A task list item is an ordinary list item that begins with `[ ]` or `[x]`.
-/// The box is a MARKER and not text: it is written back as a box rather than
-/// as escaped brackets, and it stands inside the item content, so it shifts
-/// nothing that follows it.
+/// The box is a marker on the item rather than part of its text, so it never
+/// appears in `ListItem.text`.
 public enum TaskState: Sendable, Equatable {
     case unchecked
     case checked
@@ -22,17 +20,27 @@ public enum TaskState: Sendable, Equatable {
 
 /// Represents a single item in a markdown list, with support for nested lists via indent levels
 public struct ListItem: Sendable, Equatable {
+    /// The markdown of the item, without its marker or checkbox.
+    ///
+    /// An item may hold more than one paragraph. Paragraphs are separated by a
+    /// blank line, so `"a\n\nb"` is two paragraphs while `"a\nb"` is one
+    /// paragraph that was soft wrapped.
     public let text: String
     public let indentLevel: Int
     public let ordered: Bool
     /// The checkbox this item opens with, or `nil` for an item that has none.
     public let task: TaskState?
+    /// Whether the list holding this item is tight, meaning its items are not
+    /// separated by blank lines. Like `ordered`, this describes the list the
+    /// item belongs to, so a nested list can differ from its parent.
+    public let tight: Bool
 
-    public init(text: String, indentLevel: Int, ordered: Bool, task: TaskState? = nil) {
+    public init(text: String, indentLevel: Int, ordered: Bool, task: TaskState? = nil, tight: Bool = true) {
         self.text = text
         self.indentLevel = indentLevel
         self.ordered = ordered
         self.task = task
+        self.tight = tight
     }
 }
 
@@ -219,7 +227,7 @@ public struct MarkdownParser {
 
         case CMARK_NODE_LIST:
             let ordered = cmark_node_get_list_type(node) == CMARK_ORDERED_LIST
-            let items = collectListItems(from: node, indentLevel: 0, ordered: ordered)
+            let items = collectListItems(from: node, indentLevel: 0, ordered: ordered, lineTable: lineTable)
             return .list(items: items, ordered: ordered, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_BLOCK_QUOTE:
@@ -264,73 +272,114 @@ public struct MarkdownParser {
 
     /// The checkbox an item opens with, or `nil` for an item that has none.
     ///
-    /// The tasklist extension marks the ITEM node rather than its text, and
-    /// reports itself through the node's type string. An item the extension
-    /// never touched keeps the ordinary type and has no box.
-    private func taskState(of itemNode: UnsafeMutablePointer<cmark_node>) -> TaskState? {
+    /// Whether the item HAS a box comes from cmark: the tasklist extension
+    /// marks the item node and reports itself through the node type string,
+    /// so a bracket that is merely text is never mistaken for a box.
+    ///
+    /// Whether the box is CHECKED is read from the source instead, because
+    /// cmark gets it wrong. Upstream `tasklist.c` sets the flag with
+    /// `strstr(input, "[x]")` over the whole line, so `- [ ] Ship it [x]
+    /// today` is reported as checked and a task nobody finished comes back
+    /// finished. The box opens the item content, so the first bracket pair on
+    /// the item's own line is the box and anything later is text.
+    private func taskState(of itemNode: UnsafeMutablePointer<cmark_node>, lineTable: [LineInfo]) -> TaskState? {
         guard let typeString = cmark_node_get_type_string(itemNode) else { return nil }
         guard String(cString: typeString) == "tasklist" else { return nil }
+
+        let startLine = Int(cmark_node_get_start_line(itemNode))
+        if startLine > 0, startLine <= lineTable.count,
+           let box = firstCheckbox(in: lineTable[startLine - 1].content) {
+            return box
+        }
+        // No line to read: keep cmark's answer rather than drop the box.
         return cmark_gfm_extensions_get_tasklist_item_checked(itemNode) ? .checked : .unchecked
+    }
+
+    /// The first `[ ]`, `[x]` or `[X]` on a line. Brackets holding anything
+    /// else are ordinary text and are stepped over.
+    private func firstCheckbox(in line: String) -> TaskState? {
+        let characters = Array(line)
+        guard characters.count >= 3 else { return nil }
+        for index in 0...(characters.count - 3) where characters[index] == "[" && characters[index + 2] == "]" {
+            switch characters[index + 1] {
+            case " ": return .unchecked
+            case "x", "X": return .checked
+            default: continue
+            }
+        }
+        return nil
     }
 
     private func collectListItems(
         from listNode: UnsafeMutablePointer<cmark_node>,
         indentLevel: Int,
-        ordered: Bool
+        ordered: Bool,
+        lineTable: [LineInfo]
     ) -> [ListItem] {
         var items: [ListItem] = []
+        // cmark decides tightness for the whole list, counting both blank
+        // lines between items and blank lines inside one item.
+        let tight = cmark_node_get_list_tight(listNode) != 0
         var itemNode = cmark_node_first_child(listNode)
 
         while itemNode != nil {
             // A nested list splits its item into the piece before it and the
             // piece after it. The checkbox belongs to the piece holding the
-            // item's FIRST paragraph and to no other, or a plain tail
-            // paragraph comes back claiming a task nobody wrote.
-            var pendingTask = itemNode.flatMap { taskState(of: $0) }
+            // item's first paragraph and to no other.
+            var pendingTask = itemNode.flatMap { taskState(of: $0, lineTable: lineTable) }
             var paragraphs: [String] = []
             var child = cmark_node_first_child(itemNode)
 
             /// Emit everything gathered since the last nested list as one item.
-            /// The checkbox is spent whether or not a piece was emitted: once
-            /// the first content position has passed, the box has had its turn.
             func flushGatheredText() {
-                defer {
-                    paragraphs = []
-                    pendingTask = nil
-                }
-                // Each child of an item is its own paragraph, so they are
-                // joined by a blank line. Running them together would weld the
-                // last word of one onto the first word of the next.
+                // Each child is its own paragraph, so they are joined by a
+                // blank line. Running them together would weld the last word
+                // of one onto the first word of the next.
                 let text = paragraphs.joined(separator: "\n\n")
-                guard !text.isEmpty else { return }
+                let task = pendingTask
+                // The box is spent here whether or not this piece emits: once
+                // the first content position has passed it has had its turn.
+                paragraphs = []
+                pendingTask = nil
+                // An empty piece is dropped, but a checkbox is state and is
+                // content in its own right, so an item that is nothing but a
+                // box still has to survive. Dropping it loses the box, and it
+                // orphans any nested list at an indent that reads back as a
+                // code block.
+                guard !text.isEmpty || task != nil else { return }
                 items.append(ListItem(
                     text: text,
                     indentLevel: indentLevel,
                     ordered: ordered,
-                    task: pendingTask
+                    task: task,
+                    tight: tight
                 ))
             }
 
-            while child != nil {
-                let childType = cmark_node_get_type(child)
+            while let currentChild = child {
+                let childType = cmark_node_get_type(currentChild)
 
                 if childType == CMARK_NODE_LIST {
-                    let nestedOrdered = cmark_node_get_list_type(child) == CMARK_ORDERED_LIST
-                    guard let child = child else { continue }
-                    let nestedItems = collectListItems(from: child, indentLevel: indentLevel + 1, ordered: nestedOrdered)
+                    let nestedOrdered = cmark_node_get_list_type(currentChild) == CMARK_ORDERED_LIST
+                    let nestedItems = collectListItems(
+                        from: currentChild,
+                        indentLevel: indentLevel + 1,
+                        ordered: nestedOrdered,
+                        lineTable: lineTable
+                    )
                     flushGatheredText()
                     items.append(contentsOf: nestedItems)
                 } else {
                     // The children of a list item are whole blocks, thus each one
                     // comes back through the CommonMark writer with its backslashes.
-                    let text = getNodeText(child, context: .paragraph)
+                    let text = getNodeText(currentChild, context: .paragraph)
                         .trimmingCharacters(in: .whitespacesAndNewlines)
                     if !text.isEmpty {
                         paragraphs.append(text)
                     }
                 }
 
-                child = cmark_node_next(child)
+                child = cmark_node_next(currentChild)
             }
 
             flushGatheredText()

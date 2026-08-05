@@ -31,23 +31,23 @@ enum BlockFormatter {
             output += "```\n"
 
         case .list(let items, _, _, _, _):
-            // An item holding more than one paragraph makes the whole list
-            // loose, and a loose list puts a blank line between every item.
-            // Writing them back to back would close the gap the author left.
-            let loose = items.contains { $0.text.contains("\n\n") }
             for (index, item) in items.enumerated() {
-                if loose && index > 0 {
+                // A loose list has a blank line between its items. Tightness
+                // travels on the item, so a loose sublist does not loosen the
+                // parent it sits in.
+                if !item.tight && index > 0 {
                     output += "\n"
                 }
-                let indent = String(repeating: "    ", count: item.indentLevel)
+                // `String(repeating:count:)` traps on a negative count, so a
+                // malformed item must not be able to bring the process down.
+                let indent = String(repeating: "    ", count: max(0, item.indentLevel))
                 let marker = item.ordered ? "1." : "-"
-                let checkbox = Self.checkbox(for: item.task)
-                // Continuation lines line up under the item CONTENT, which
-                // begins after the marker and the one space that follows it.
-                // The checkbox stands INSIDE that content, so it moves
-                // nothing: counting its width too would push a continuation
-                // four columns past the content start, where it stops being a
-                // paragraph and becomes an indented code block.
+                let checkbox = Self.checkboxPrefix(for: item.task)
+                // Continuation lines line up under the item content, which
+                // begins after the marker and its one space. The checkbox
+                // stands inside that content and so moves nothing: counting
+                // its width would put a continuation four columns past the
+                // content start, where it becomes an indented code block.
                 let continuation = String(repeating: " ", count: indent.count + marker.count + 1)
                 let lines = item.text.split(separator: "\n", omittingEmptySubsequences: false)
                 for (lineIndex, line) in lines.enumerated() {
@@ -86,10 +86,14 @@ enum BlockFormatter {
         return output
     }
 
-    /// The checkbox that opens a task list item, written so that it reads back
-    /// as the same checkbox. An item with no checkbox contributes nothing, so
-    /// a plain item is untouched by task list support.
-    private static func checkbox(for task: TaskState?) -> String {
+    /// The checkbox that opens a task list item, followed by the space that
+    /// separates it from the item text. An item with no checkbox contributes
+    /// the empty string, so nothing is written and no separator is added.
+    ///
+    /// The trailing space is part of the box as cmark reads it: `- [ ]` with
+    /// nothing after it is not a task item at all, so an item that is only a
+    /// box needs the space to survive a round trip.
+    private static func checkboxPrefix(for task: TaskState?) -> String {
         switch task {
         case .none: return ""
         case .unchecked: return "[ ] "

@@ -72,9 +72,14 @@ final class TaskListFormattingTests: XCTestCase {
         assertStable(source, source)
     }
 
-    /// The continuation must stay a paragraph, not become a code block. Read
-    /// the output back and check the block kinds rather than the bytes.
-    func testAContinuationParagraphNeverBecomesACodeBlock() {
+    /// The continuation sits at the content column and stays there. Four
+    /// columns further is an indented code block, and every further pass adds
+    /// four more.
+    ///
+    /// This asserts the column directly. Reading the blocks back and looking
+    /// for a `.codeBlock` cannot work: `parse` returns only top level blocks,
+    /// and a code block inside a list item is not one of them.
+    func testTheContinuationColumnDoesNotDriftAcrossPasses() {
         let source = """
         - [ ] Ship the release
 
@@ -84,13 +89,12 @@ final class TaskListFormattingTests: XCTestCase {
         var text = source
         for pass in 1...4 {
             text = BlockFormatter.format(parser.parse(text))
-            let blocks = parser.parse(text)
-            for block in blocks {
-                if case .codeBlock = block {
-                    XCTFail("the continuation became a code block on pass \(pass):\n\(text)")
-                    return
-                }
+            let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+            guard let line = lines.first(where: { $0.contains("Wait for the sign off") }) else {
+                return XCTFail("the continuation vanished on pass \(pass):\n\(text)")
             }
+            let leadingSpaces = line.prefix { $0 == " " }.count
+            XCTAssertEqual(leadingSpaces, 2, "pass \(pass) put the continuation at column \(leadingSpaces)")
         }
     }
 
@@ -171,6 +175,111 @@ final class TaskListFormattingTests: XCTestCase {
             output.contains("[x] A plain tail paragraph"),
             "a checkbox was invented on a plain paragraph:\n\(output)"
         )
+    }
+
+    // MARK: - An item that is nothing but a box
+
+    /// A checkbox is state, so an item that holds only a box is content and
+    /// has to survive. Dropping it loses the box outright.
+    func testAnItemThatIsOnlyABoxSurvives() {
+        let source = "- [ ] Filled task\n- [ ] \n- [x] Another task\n"
+        assertStable(source, source)
+    }
+
+    /// Worse than losing one line: dropping the parent leaves the child at an
+    /// indent that reads back as an indented code block, which destroys the
+    /// whole list.
+    func testAnEmptyBoxKeepsItsSublistAttached() {
+        let source = "- [ ] \n    - [x] Child task\n"
+        let output = BlockFormatter.format(parser.parse(source))
+        XCTAssertTrue(output.hasPrefix("- [ ] "), "the parent was dropped:\n\(output)")
+        let second = BlockFormatter.format(parser.parse(output))
+        XCTAssertEqual(second, output, "second pass changed the document")
+    }
+
+    // MARK: - The box means what the source said
+
+    /// An unfinished task must not come back finished because the prose after
+    /// it happens to hold a `[x]`.
+    func testALaterBoxInTheTextDoesNotCheckTheItem() {
+        let output = BlockFormatter.format(parser.parse("- [ ] Ship it [x] today\n"))
+        XCTAssertTrue(output.hasPrefix("- [ ] "), "the box was flipped to checked:\n\(output)")
+        let second = BlockFormatter.format(parser.parse(output))
+        XCTAssertEqual(second, output, "second pass changed the document")
+    }
+
+    // MARK: - Normalization
+
+    /// An uppercase box is written back lowercase. The round trip is not byte
+    /// stable for `[X]`, and that is deliberate.
+    func testAnUppercaseBoxIsWrittenBackLowercase() {
+        let output = BlockFormatter.format(parser.parse("- [X] Ship it\n"))
+        XCTAssertEqual(output, "- [x] Ship it\n")
+        let second = BlockFormatter.format(parser.parse(output))
+        XCTAssertEqual(second, output)
+    }
+
+    // MARK: - Plain lists
+
+    // The continuation rule and the loose rule are not task list features.
+    // They change every list, so they are tested without a checkbox too.
+
+    func testAPlainItemKeepsItsContinuationParagraph() {
+        let source = """
+        - Ship the release
+
+          Wait for the sign off first.
+
+        """
+        assertStable(source, source)
+    }
+
+    func testAPlainOrderedItemLinesUpUnderItsContent() {
+        let source = """
+        1. Ship the release
+
+           Wait for the sign off first.
+
+        """
+        assertStable(source, source)
+    }
+
+    func testATightPlainListKeepsNoBlankLines() {
+        assertStable("- A\n- B\n- C\n", "- A\n- B\n- C\n")
+    }
+
+    /// A list whose items are separated by blank lines is loose even when no
+    /// item holds two paragraphs. This is why tightness is read from cmark
+    /// rather than guessed from the item text.
+    func testALooseListOfSingleParagraphItemsKeepsItsBlankLines() {
+        assertStable("- A\n\n- B\n", "- A\n\n- B\n")
+    }
+
+    /// A blank line inside the child also makes the PARENT list loose, which
+    /// is cmark's rule and not a shortcut here: the blank line falls inside
+    /// the parent's first item. So a blank line appears between the parent and
+    /// its own child, and the output is not byte identical to the input.
+    func testALooseSublistLoosensItsParent() {
+        let source = """
+        - Parent one
+            - Child with
+
+              a second paragraph
+
+        - Parent two
+
+        """
+        let expected = """
+        - Parent one
+
+            - Child with
+
+              a second paragraph
+
+        - Parent two
+
+        """
+        assertStable(source, expected)
     }
 
     // MARK: - The whole document

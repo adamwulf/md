@@ -58,9 +58,51 @@ final class TaskListParsingTests: XCTestCase {
 
     /// A bracket that is text stays text. Only a box at the head of an item is
     /// a checkbox.
+    /// The brackets come back escaped, because a bare `[x]` in running text
+    /// would read as a link reference on the next pass. The escape is what
+    /// keeps the brackets literal, so it belongs in the text.
     func testABracketInTheMiddleOfAnItemIsNotABox() {
         let items = items("- Ship it [x] today\n")
         XCTAssertNil(items.first?.task)
+        XCTAssertEqual(items.first?.text, "Ship it \\[x\\] today")
+    }
+
+    /// Upstream `tasklist.c` decides "checked" with `strstr` over the whole
+    /// line, so a later `[x]` in the prose flips the box and a task nobody
+    /// finished comes back finished. The box is read from the source instead.
+    func testALaterBoxInTheTextDoesNotCheckTheItem() {
+        let items = items("- [ ] Ship it [x] today\n")
+        XCTAssertEqual(items.first?.task, .unchecked)
+    }
+
+    func testALaterUppercaseBoxInTheTextDoesNotCheckTheItem() {
+        let items = items("- [ ] Ship it [X] today\n")
+        XCTAssertEqual(items.first?.task, .unchecked)
+    }
+
+    /// The reverse must hold too: a real checked box stays checked even when
+    /// an unchecked looking pair follows it.
+    func testALaterEmptyBoxInTheTextDoesNotUncheckTheItem() {
+        let items = items("- [x] Ship it [ ] today\n")
+        XCTAssertEqual(items.first?.task, .checked)
+    }
+
+    /// A checkbox is state, so an item that holds only a box still reaches the
+    /// model. Dropping it would lose the box and orphan any nested list.
+    func testAnItemThatIsOnlyABoxReachesTheModel() {
+        let items = items("- [ ] \n- [x] Another task\n")
+        XCTAssertEqual(items.count, 2)
+        XCTAssertEqual(items[0].task, .unchecked)
+        XCTAssertEqual(items[0].text, "")
+        XCTAssertEqual(items[1].task, .checked)
+    }
+
+    func testAnEmptyBoxKeepsItsSublistAttached() {
+        let items = items("- [ ] \n    - [x] Child task\n")
+        XCTAssertEqual(items.count, 2)
+        XCTAssertEqual(items[0].indentLevel, 0)
+        XCTAssertEqual(items[0].task, .unchecked)
+        XCTAssertEqual(items[1].indentLevel, 1)
     }
 
     func testATaskItemAndAPlainItemKeepTheirOwnState() {
