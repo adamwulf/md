@@ -486,6 +486,20 @@ public struct MarkdownParser {
             return "\n"
         }
 
+        // A hard break is a break that a reader SHOWS, and a soft break is one that a
+        // reader turns into a space. Thus a bare newline here would lose what the break
+        // means, the same way a lost backslash loses what a marker means.
+        //
+        // Of the two spellings of a hard break, this writes the backslash. Two spaces at
+        // the end of a line are invisible, and any tool that takes off trailing space
+        // takes the break away with it.
+        //
+        // A heading is one line, and no spelling of a hard break lives inside an ATX
+        // heading. Thus a heading takes the space that its lines join with.
+        if type == CMARK_NODE_LINEBREAK {
+            return context == .heading ? " " : "\\\n"
+        }
+
         // Every other kind of node comes back through the CommonMark writer, thus it
         // is markdown source already, with the backslashes that it needs.
         let rendered = cmark_render_commonmark(node, 0, 0)

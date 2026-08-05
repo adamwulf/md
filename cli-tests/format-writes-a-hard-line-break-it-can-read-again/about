@@ -1,0 +1,6 @@
+`md format` runs twice here: once on the file, then once on its own
+output. The two results are the same bytes, thus the break that the first
+pass writes reads back as a hard break and not as a soft one.
+
+A spelling that changed on each pass would make `md format` unsafe to run
+more than once. The input holds two invisible trailing spaces, 20 bytes.

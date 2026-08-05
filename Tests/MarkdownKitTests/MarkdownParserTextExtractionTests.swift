@@ -269,16 +269,32 @@ final class MarkdownParserTextExtractionTests: XCTestCase {
         )
     }
 
+    /// The block text is markdown source, thus the break keeps the spelling that says
+    /// it is HARD. A bare newline is the spelling of a SOFT break, which a reader shows
+    /// as a space, thus it would say something the source does not say.
+    ///
+    /// Of the two spellings the parser writes the backslash, because two spaces at the
+    /// end of a line are invisible and easy for another tool to take off.
     func testAHardLineBreakKeepsTheBreakBetweenItsLines() throws {
-        XCTExpectFailure("""
-            A hard line break (two trailing spaces) renders as its own inline \
-            node, which getNodeText trims away entirely, so "hard break  \\nsecond" \
-            becomes "hard breaksecond". The break should survive as a newline.
-            """)
         XCTAssertEqual(
             try paragraphText("hard break  \nsecond\n"),
-            "hard break\nsecond"
+            "hard break\\\nsecond"
         )
+    }
+
+    /// The backslash spelling of the same break gives the same block text.
+    func testTheBackslashSpellingOfAHardBreakGivesTheSameText() throws {
+        XCTAssertEqual(
+            try paragraphText("hard break\\\nsecond\n"),
+            "hard break\\\nsecond"
+        )
+    }
+
+    /// A hard break stays hard through a round trip: what the parser writes back reads
+    /// as a hard break again, and not as a soft one.
+    func testAHardLineBreakSurvivesASecondParse() throws {
+        let once = try paragraphText("hard break  \nsecond\n")
+        XCTAssertEqual(try paragraphText(once + "\n"), once)
     }
 
     func testABlockquoteKeepsTheBreakBetweenItsParagraphs() {

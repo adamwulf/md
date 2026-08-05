@@ -1,0 +1,10 @@
+A hard line break is two or more spaces at the end of a line. A reader
+SHOWS that break, thus it is not the same as a soft break, which a reader
+turns into a space.
+
+The input holds the two spaces, and they are invisible. `wc -c` says 20
+bytes. Do not retype that line.
+
+`md format` writes the break back with a backslash. Both spellings mean
+the same break, and the backslash is the one that lives through a tool
+that takes off trailing space.
