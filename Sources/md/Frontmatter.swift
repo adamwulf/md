@@ -214,7 +214,7 @@ struct Frontmatter {
     private func serializeYAML() throws -> String {
         guard !data.isEmpty else { return "" }
         let normalized = Frontmatter.normalizeForYAML(data)
-        let yaml = try Yams.dump(object: normalized, sortKeys: true)
+        let yaml = try Yams.dump(object: normalized, allowUnicode: true, sortKeys: true)
         return yaml
     }
 
