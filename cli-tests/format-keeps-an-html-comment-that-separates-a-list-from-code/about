@@ -1,0 +1,4 @@
+`<!-- -->` between a list and an indented code block is the CommonMark
+idiom that keeps them apart. The comment is content the author wrote, and
+format must keep it. The code block below it is written back with a fence,
+which is the canonical spelling of md.

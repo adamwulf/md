@@ -1,0 +1,19 @@
+md deletes the comment, and the two lists then merge into one.
+
+This is defect 4 with a structural consequence, and it is worse than the
+other defect 4 cases. Those lose the HTML block alone. Here the loss also
+changes a block the user did not touch: md prints
+
+    - alpha
+    - bravo
+
+    - charlie
+    - delta
+
+and `md blocks` reads that back as a single "unordered list(4 items) L1-5".
+Two blocks became one, thus every block index below this point moves, and a
+later `md remove 2` deletes the wrong thing.
+
+The cause is defect 4: MarkdownBlock has no case for raw HTML, so parseNode
+returns nil for an html_block and format never writes it back. Fixing
+defect 4 fixes this case.

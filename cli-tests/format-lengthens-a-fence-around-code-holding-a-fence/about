@@ -1,0 +1,5 @@
+The indented code block on lines 3 to 5 holds a line of three backticks.
+A three backtick fence around it would close at that line, which splits
+one code block into an empty code block, a paragraph, and a second empty
+code block. The fence must therefore be four backticks, so that the
+output still reads as one paragraph and one code block.

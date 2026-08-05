@@ -1,0 +1,11 @@
+md deletes the comment. Everything else is already correct.
+
+This is defect 4: MarkdownBlock has no case for raw HTML, so parseNode
+returns nil for an html_block and format never writes it back.
+
+Here the structure survives the deletion, by luck. format writes the code
+block with a fence, and a fence at column 0 ends the list on its own, thus
+the separator is no longer needed. The author's comment is still lost.
+
+Compare format-keeps-an-html-comment-that-separates-two-lists, where the
+same deletion also merges two blocks. Both are fixed by defect 4.

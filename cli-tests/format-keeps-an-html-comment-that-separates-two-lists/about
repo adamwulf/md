@@ -1,0 +1,4 @@
+`<!-- -->` between two lists is the CommonMark idiom that keeps them apart.
+Without it the two lists join into one, because a blank line does not end a
+list. The comment is therefore content with a structural job, and format
+must keep it.
