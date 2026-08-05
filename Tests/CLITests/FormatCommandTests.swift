@@ -7,6 +7,7 @@
 
 import XCTest
 @testable import md
+@testable import MarkdownKit
 
 final class FormatCommandTests: XCTestCase {
 
@@ -200,6 +201,103 @@ final class FormatCommandTests: XCTestCase {
             let out = runFormat(input, frontmatter: fm)
             XCTAssertTrue(out.contains("# Hi"), "body not normalized for input=\(input) fm=\(String(describing: fm))")
             XCTAssertFalse(out.contains("#   Hi"), "body still has triple space for input=\(input) fm=\(String(describing: fm))")
+        }
+    }
+
+    // MARK: - Soft line breaks
+
+    func testFormatKeepsSoftLineBreaksInParagraph() {
+        let out = runFormat("line1\nline2\nline3\n")
+        XCTAssertEqual(out, "line1\nline2\nline3\n")
+    }
+
+    func testFormatOfMultilineParagraphKeepsTheBlockCount() {
+        // Every command that writes a file (`md format`, `md replace -i`,
+        // `md insert-after -i`) sends each block through BlockFormatter. If the
+        // number of blocks moves, block indices move with it and a later
+        // `md replace N` hits the wrong block.
+        let source = "line1\nline2\nline3\n\npara2\n"
+        let parser = MarkdownParser()
+        XCTAssertEqual(parser.parse(runFormat(source)).count, parser.parse(source).count)
+    }
+
+    /// REGRESSION cover for the soft-break change.
+    ///
+    /// The first form of that change let a setext heading written on two lines hold a
+    /// newline in its text, but BlockFormatter writes a heading as one ATX line. Thus
+    /// `md format` turned one heading into a heading plus a paragraph, the block count
+    /// moved from 2 to 3, and a second `md format` gave a different result again.
+    ///
+    /// `MarkdownParser` now holds heading text on one line. See
+    /// `MarkdownParserTests.testParseSetextHeadingKeepsTextOnOneLine`.
+    func testFormatKeepsMultilineSetextHeadingAsOneBlock() {
+        let source = "First part\nSecond part\n===\n\nnext para\n"
+        let parser = MarkdownParser()
+
+        let once = runFormat(source)
+        XCTAssertEqual(
+            parser.parse(once).count,
+            parser.parse(source).count,
+            "md format changed the number of blocks: \(once.debugDescription)"
+        )
+        XCTAssertEqual(once, runFormat(once), "md format is not idempotent")
+
+        let formattedBlocks = parser.parse(once)
+        if let first = formattedBlocks.first, case .heading(_, let text, _, _, _) = first {
+            XCTAssertEqual(text, "First part Second part")
+        } else {
+            XCTFail("Expected the first block to stay a heading, got: \(once.debugDescription)")
+        }
+    }
+
+    /// A soft break keeps its newline, thus the second line of a paragraph starts at
+    /// column 0 of the written file. A marker that the author escaped there would
+    /// become live markdown, and one paragraph would divide into two blocks.
+    ///
+    /// The escape work in `MarkdownEscaper` answers this: the backslash goes back on.
+    /// A character reference (`&#35;`) is inert text in the source in the same way,
+    /// and `getNodeText` loses it in the same way, thus it gets the same backslash.
+    func testFormatKeepsEscapedMarkdownOnContinuationLines() {
+        let parser = MarkdownParser()
+        let sources = [
+            "foo\n\\# bar\n",
+            "foo\n\\- bar\n",
+            "foo\n\\> bar\n",
+            "foo\n\\`\\`\\`js\n",
+            // A character reference is inert text in the source, the same as a
+            // backslash escape, and `getNodeText` loses it in the same way.
+            "foo\n&#35; bar\n",
+            "foo\n&gt; bar\n",
+            "foo\n&#96;&#96;&#96;js\n",
+        ]
+        for source in sources {
+            let once = runFormat(source)
+            XCTAssertEqual(
+                parser.parse(once).count,
+                parser.parse(source).count,
+                "md format changed the number of blocks for \(source.debugDescription): \(once.debugDescription)"
+            )
+        }
+    }
+
+    /// The same class of loss, but here the number of blocks does not move.
+    ///
+    /// `&#45;&#45;&#45;` is inert text in the source, thus the paragraph keeps it,
+    /// but the block text holds `---`. Written at column 0 below its paragraph line,
+    /// that would become a setext underline, and a second `md format` would make the
+    /// paragraph into a heading and lose the text of the second line. `MarkdownEscaper`
+    /// puts a backslash on it, thus the paragraph stays a paragraph.
+    func testFormatKeepsEscapedSetextUnderlineOnContinuationLine() {
+        let parser = MarkdownParser()
+        let source = "foo\n&#45;&#45;&#45;\n"
+        let once = runFormat(source)
+        XCTAssertEqual(runFormat(once), once, "md format is not idempotent: \(once.debugDescription)")
+
+        let blocks = parser.parse(once)
+        XCTAssertEqual(blocks.count, 1, "expected one block, got: \(once.debugDescription)")
+        guard case .paragraph = blocks[0] else {
+            XCTFail("Expected the block to stay a paragraph, got: \(once.debugDescription)")
+            return
         }
     }
 }

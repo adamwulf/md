@@ -263,14 +263,6 @@ final class MarkdownParserTextExtractionTests: XCTestCase {
     // MARK: - Line breaks inside a block
 
     func testAWrappedParagraphKeepsTheBreakBetweenItsLines() throws {
-        XCTExpectFailure("""
-            getChildrenText walks the inline children of a paragraph and appends \
-            each one's rendered text after trimming it. A soft line break renders \
-            as a newline, which trimming reduces to nothing, so the two source \
-            lines are welded into "line oneline two". The break should survive as \
-            a newline. md format writes this back out, so any wrapped prose loses \
-            a word boundary.
-            """)
         XCTAssertEqual(
             try paragraphText("line one\nline two\n"),
             "line one\nline two"

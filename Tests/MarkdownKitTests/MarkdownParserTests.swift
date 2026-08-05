@@ -38,6 +38,52 @@ final class MarkdownParserTests: XCTestCase {
         }
     }
 
+    /// A setext heading (a line of text with `===` or `---` below it) can be written
+    /// on more than one line, but a heading block is written back as one ATX line
+    /// (`# text`). Thus a newline in the text would divide one heading into a heading
+    /// plus a paragraph. A heading is one line, thus its lines join with a space. See
+    /// `FormatCommandTests.testFormatKeepsMultilineSetextHeadingAsOneBlock`.
+    func testParseSetextHeadingKeepsTextOnOneLine() {
+        for (markdown, expectedLevel) in [("First part\nSecond part\n===", 1), ("First part\nSecond part\n---", 2)] {
+            let blocks = parser.parse(markdown)
+            XCTAssertEqual(blocks.count, 1)
+            if case .heading(let level, let text, _, _, _) = blocks[0] {
+                XCTAssertEqual(level, expectedLevel)
+                XCTAssertFalse(text.contains("\n"), "Heading text has a newline: \(text.debugDescription)")
+                XCTAssertEqual(text, "First part Second part")
+            } else {
+                XCTFail("Expected heading block")
+            }
+        }
+    }
+
+    /// An inline node that spans two source lines of a setext heading also keeps its
+    /// newline, because `getNodeText` renders such a node to commonmark. The heading
+    /// text must stay on one line for every such node, not only for a soft break that
+    /// is a direct child of the heading.
+    ///
+    /// A code span and a link are of interest, because a space in them is content.
+    /// cmark makes the newline in them a space itself, thus the join at the heading
+    /// finds no newline there and cannot double that space.
+    func testParseSetextHeadingWithMultilineInlineNodeStaysOneLine() {
+        let cases = [
+            ("*Heading one\nHeading two*\n===========", "*Heading one Heading two*"),
+            ("Heading **one\ntwo**\n===========", "Heading **one two**"),
+            ("`code\nspan` tail\n===========", "`code span` tail"),
+            ("[link one\nlink two](/url)\n===========", "[link one link two](/url)"),
+        ]
+        for (markdown, expectedText) in cases {
+            let blocks = parser.parse(markdown)
+            XCTAssertEqual(blocks.count, 1)
+            guard case .heading(_, let text, _, _, _) = blocks[0] else {
+                XCTFail("Expected heading block")
+                continue
+            }
+            XCTAssertFalse(text.contains("\n"), "Heading holds a newline: \(text.debugDescription)")
+            XCTAssertEqual(text, expectedText)
+        }
+    }
+
     // MARK: - Paragraphs
 
     func testParseParagraph() {
@@ -63,6 +109,114 @@ final class MarkdownParserTests: XCTestCase {
             XCTAssertEqual(text, "Second paragraph.")
         } else {
             XCTFail("Expected paragraph")
+        }
+    }
+
+    func testParseParagraphKeepsSoftLineBreaks() {
+        let markdown = "First line\nSecond line\nThird line"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.count, 1)
+        if case .paragraph(let text, _, _, _) = blocks[0] {
+            XCTAssertEqual(text, "First line\nSecond line\nThird line")
+        } else {
+            XCTFail("Expected paragraph block")
+        }
+    }
+
+    func testParseParagraphKeepsSoftLineBreaksWithInlineStyles() {
+        let markdown = "First **bold** line\nSecond `code` line"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.count, 1)
+        if case .paragraph(let text, _, _, _) = blocks[0] {
+            XCTAssertEqual(text, "First **bold** line\nSecond `code` line")
+        } else {
+            XCTFail("Expected paragraph block")
+        }
+    }
+
+    func testParseParagraphSoftLineBreakDropsTrailingSpace() {
+        // One trailing space is not a hard break, thus the space goes away with the newline.
+        let blocks = parser.parse("First line \nSecond line")
+        XCTAssertEqual(blocks.count, 1)
+        if case .paragraph(let text, _, _, _) = blocks[0] {
+            XCTAssertEqual(text, "First line\nSecond line")
+        } else {
+            XCTFail("Expected paragraph block")
+        }
+    }
+
+    func testParseParagraphSoftLineBreakDropsLeadingIndent() {
+        let blocks = parser.parse("First line\n    Second line")
+        XCTAssertEqual(blocks.count, 1)
+        if case .paragraph(let text, _, _, _) = blocks[0] {
+            XCTAssertEqual(text, "First line\nSecond line")
+        } else {
+            XCTFail("Expected paragraph block")
+        }
+    }
+
+    func testParseMultilineParagraphsSeparatedByBlankLines() {
+        // More than one blank line still divides two paragraphs, and the blank lines
+        // are not part of either paragraph.
+        let blocks = parser.parse("line1\nline2\nline3\n\n\npara2")
+        XCTAssertEqual(blocks.count, 2)
+        if case .paragraph(let text, _, _, _) = blocks[0] {
+            XCTAssertEqual(text, "line1\nline2\nline3")
+        } else {
+            XCTFail("Expected paragraph block")
+        }
+        if case .paragraph(let text, _, _, _) = blocks[1] {
+            XCTAssertEqual(text, "para2")
+        } else {
+            XCTFail("Expected paragraph block")
+        }
+    }
+
+    /// KNOWN FAILURE, kept as documentation for a later fix.
+    ///
+    /// A hard line break (two or more spaces at the end of a line, or a backslash at
+    /// the end of a line) becomes a CMARK_NODE_LINEBREAK, which `getNodeText` still
+    /// throws away. Thus the two lines become one word.
+    ///
+    /// The fix must keep the two lines apart. How to write the hard break in the block
+    /// text is for that fix to decide, thus this test only asks for a line break.
+    /// Remove the `XCTExpectFailure` when the fix is in.
+    func testParseParagraphKeepsHardLineBreaks() {
+        for markdown in ["First line  \nSecond line", "First line\\\nSecond line"] {
+            let blocks = parser.parse(markdown)
+            XCTAssertEqual(blocks.count, 1)
+            guard case .paragraph(let text, _, _, _) = blocks[0] else {
+                XCTFail("Expected paragraph block")
+                continue
+            }
+            XCTExpectFailure("Hard line breaks are dropped by MarkdownParser.getNodeText") {
+                XCTAssertTrue(text.contains("\n"), "Hard break was dropped: \(text.debugDescription)")
+            }
+        }
+    }
+
+    func testParseParagraphKeepsSoftLineBreaksWithCRLFLineEndings() {
+        // cmark makes all line endings the same, thus CRLF and CR give "\n" in the
+        // block text. No "\r" is left behind.
+        for markdown in ["line1\r\nline2\r\nline3", "line1\rline2\rline3"] {
+            let blocks = parser.parse(markdown)
+            XCTAssertEqual(blocks.count, 1)
+            if case .paragraph(let text, _, _, _) = blocks[0] {
+                XCTAssertEqual(text, "line1\nline2\nline3")
+            } else {
+                XCTFail("Expected paragraph block")
+            }
+        }
+    }
+
+    func testParseParagraphKeepsSoftLineBreaksWithUnicode() {
+        let markdown = "héllo wörld\nsecond ünicode line\n🎉 emoji line"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.count, 1)
+        if case .paragraph(let text, _, _, _) = blocks[0] {
+            XCTAssertEqual(text, "héllo wörld\nsecond ünicode line\n🎉 emoji line")
+        } else {
+            XCTFail("Expected paragraph block")
         }
     }
 
@@ -240,6 +394,37 @@ final class MarkdownParserTests: XCTestCase {
         XCTAssertTrue(items.allSatisfy { !$0.continuation })
     }
 
+    func testParseNestedListItemsKeepSoftLineBreaks() {
+        let markdown = "- a\n  a2\n    - b\n      b2\n        - c\n          c2"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.count, 1)
+        if case .list(let items, _, _, _, _) = blocks[0] {
+            XCTAssertEqual(items.count, 3)
+            XCTAssertEqual(items[0].text, "a\na2")
+            XCTAssertEqual(items[0].indentLevel, 0)
+            XCTAssertEqual(items[1].text, "b\nb2")
+            XCTAssertEqual(items[1].indentLevel, 1)
+            XCTAssertEqual(items[2].text, "c\nc2")
+            XCTAssertEqual(items[2].indentLevel, 2)
+        } else {
+            XCTFail("Expected list block")
+        }
+    }
+
+    /// A list item can hold more than one paragraph, and the two must not run together
+    /// as one word. A blockquote has the same shape and still loses its paragraph
+    /// break: see `testParseBlockquoteWithTwoParagraphsKeepsThemApart`.
+    func testParseListItemWithTwoParagraphsKeepsThemApart() {
+        let blocks = parser.parse("- para one\n\n  para two")
+        XCTAssertEqual(blocks.count, 1)
+        guard case .list(let items, _, _, _, _) = blocks[0] else {
+            XCTFail("Expected list block")
+            return
+        }
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items[0].text, "para one\n\npara two")
+    }
+
     // MARK: - Blockquotes
 
     func testParseBlockquote() {
@@ -249,6 +434,52 @@ final class MarkdownParserTests: XCTestCase {
             XCTAssertEqual(text, "This is a quote")
         } else {
             XCTFail("Expected blockquote")
+        }
+    }
+
+    /// A lazy continuation line (a line with no `>` below a quoted line) is part of
+    /// the same paragraph of the blockquote, thus it keeps its soft line break.
+    func testParseBlockquoteKeepsSoftLineBreaks() {
+        let blocks = parser.parse("> First line\n> Second line")
+        XCTAssertEqual(blocks.count, 1)
+        if case .blockquote(let text, _, _, _) = blocks[0] {
+            XCTAssertEqual(text, "First line\nSecond line")
+        } else {
+            XCTFail("Expected blockquote block")
+        }
+    }
+
+    func testParseBlockquoteWithLazyContinuationKeepsSoftLineBreak() {
+        let blocks = parser.parse("> line1\nline2")
+        XCTAssertEqual(blocks.count, 1)
+        if case .blockquote(let text, _, _, _) = blocks[0] {
+            XCTAssertEqual(text, "line1\nline2")
+        } else {
+            XCTFail("Expected blockquote")
+        }
+    }
+
+    /// KNOWN FAILURE, kept as documentation for a later fix.
+    ///
+    /// A blockquote can hold more than one paragraph. `getChildrenText` puts the text
+    /// of each paragraph one after the other, and `getNodeText` trims the commonmark
+    /// that it renders for each one. Thus no separator stays between them and the last
+    /// word of the first paragraph touches the first word of the second.
+    ///
+    /// This is the same loss as the soft break bug, but between two blocks and not
+    /// inside one, thus the soft break fix does not correct it. The fix must keep the
+    /// two paragraphs apart. How many newlines to put between them is for that fix to
+    /// decide, thus this test only asks for a line break. Remove the
+    /// `XCTExpectFailure` when the fix is in.
+    func testParseBlockquoteWithTwoParagraphsKeepsThemApart() {
+        let blocks = parser.parse("> para one\n>\n> para two")
+        XCTAssertEqual(blocks.count, 1)
+        guard case .blockquote(let text, _, _, _) = blocks[0] else {
+            XCTFail("Expected blockquote")
+            return
+        }
+        XCTExpectFailure("Two paragraphs of a blockquote are joined with no separator") {
+            XCTAssertTrue(text.contains("\n"), "The two paragraphs ran together: \(text.debugDescription)")
         }
     }
 
@@ -303,6 +534,17 @@ final class MarkdownParserTests: XCTestCase {
         let blocks = parser.parse(markdown)
         XCTAssertEqual(blocks.count, 1)
         XCTAssertEqual(blocks[0].lineRange, 1...3)
+    }
+
+    /// A paragraph written on more than one line covers all of its lines. `md blocks`
+    /// prints this range as `paragraph L1-L3`, thus the range must not stop at the
+    /// first line.
+    func testMultiLineParagraphLineRange() {
+        let markdown = "line1\nline2\nline3\n\npara2"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.count, 2)
+        XCTAssertEqual(blocks[0].lineRange, 1...3)
+        XCTAssertEqual(blocks[1].lineRange, 5...5)
     }
 
     // MARK: - Byte and Char Ranges

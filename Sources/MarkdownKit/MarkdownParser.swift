@@ -245,7 +245,9 @@ public struct MarkdownParser {
         switch type {
         case CMARK_NODE_HEADING:
             let level = Int(cmark_node_get_heading_level(node))
-            let text = getChildrenText(node, context: .heading)
+            // A heading is always one line, but a setext heading can use more than one
+            // source line. Thus its lines join with a space.
+            let text = getChildrenText(node, context: .heading).replacingOccurrences(of: "\n", with: " ")
             return .heading(level: level, text: text, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_PARAGRAPH:
@@ -476,6 +478,12 @@ public struct MarkdownParser {
                 endsBlock: next == nil,
                 isFollowedByLink: cmark_node_get_type(next) == CMARK_NODE_LINK
             )
+        }
+
+        // A soft break is a single newline inside a block. Keep it, so a paragraph
+        // written on more than one line keeps its line structure.
+        if type == CMARK_NODE_SOFTBREAK {
+            return "\n"
         }
 
         // Every other kind of node comes back through the CommonMark writer, thus it

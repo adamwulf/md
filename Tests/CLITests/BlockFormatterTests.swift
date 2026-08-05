@@ -25,6 +25,98 @@ final class BlockFormatterTests: XCTestCase {
         XCTAssertEqual(output, "Hello world.\n")
     }
 
+    func testFormatMultilineSetextHeadingStaysOneBlock() {
+        let source = "Heading one\nHeading two\n==========="
+        let output = BlockFormatter.format(parser.parse(source))
+        XCTAssertEqual(output, "# Heading one Heading two\n")
+        // The formatted heading must parse again as one heading, not as a heading
+        // plus a stray paragraph, or an edit of a later block would move it.
+        XCTAssertEqual(parser.parse(output).count, 1)
+    }
+
+    func testFormatMultilineParagraphNormalizesBlankLinesBetweenParagraphs() {
+        // The last line of a paragraph does not get a blank line of its own. One blank
+        // line between two paragraphs is enough, thus "\n\n\n" becomes "\n\n".
+        let blocks = parser.parse("line1\nline2\nline3\n\n\npara2")
+        let output = BlockFormatter.format(blocks)
+        XCTAssertEqual(output, "line1\nline2\nline3\n\npara2\n")
+    }
+
+    func testFormatMultilineParagraphIsIdempotent() {
+        let source = "line1\nline2\nline3\n\n\npara2"
+        let firstPass = BlockFormatter.format(parser.parse(source))
+        let secondPass = BlockFormatter.format(parser.parse(firstPass))
+        XCTAssertEqual(secondPass, firstPass)
+    }
+
+    /// An indent of four or more spaces makes a markdown marker inert, thus the marker
+    /// stays part of the paragraph text. The formatter writes each line of that text
+    /// without the indent, thus the marker would become live markdown and the one
+    /// paragraph would divide into more than one block, or become a heading.
+    ///
+    /// The escape work in `MarkdownEscaper` answers this: a marker that begins a line
+    /// of block text gets its backslash back.
+    func testFormatParagraphWithInertMarkerOnContinuationLine() {
+        for source in ["line1\n    ---", "line1\n    - x", "line1\n    1) x"] {
+            XCTAssertEqual(parser.parse(source).count, 1, "Expected one paragraph: \(source.debugDescription)")
+            let firstPass = BlockFormatter.format(parser.parse(source))
+            let secondPass = BlockFormatter.format(parser.parse(firstPass))
+            XCTAssertEqual(secondPass, firstPass, "source: \(source.debugDescription)")
+        }
+    }
+
+    func testFormatMultilineBlockquote() {
+        let blocks = parser.parse("> line1\n> line2")
+        let output = BlockFormatter.format(blocks)
+        XCTAssertEqual(output, "> line1\n> line2\n")
+    }
+
+    func testFormatMultilineParagraphKeepsUnicodeAndNormalizesCRLF() {
+        // A file with CRLF endings gives LF in the written block, which agrees with
+        // every other line that BlockFormatter writes. No "\r" is left behind.
+        let blocks = parser.parse("héllo wörld\r\n🎉 second line\r\n")
+        let output = BlockFormatter.format(blocks)
+        XCTAssertEqual(output, "héllo wörld\n🎉 second line\n")
+        XCTAssertFalse(output.contains("\r"))
+    }
+
+    /// A continuation line that looks like markdown must not become a new block when
+    /// the paragraph is written back. These four cannot cut a paragraph in two, thus
+    /// they stay in the paragraph after a round trip.
+    func testFormatMultilineParagraphWithMarkdownLookalikeContinuationLines() {
+        for source in [
+            "foo\n2. not a list",
+            "foo\n| a | b |",
+            "foo\n[bar]: /url",
+            "foo\n<https://example.com>",
+        ] {
+            let blocks = parser.parse(source)
+            XCTAssertEqual(blocks.count, 1, "expected one block for \(source.debugDescription)")
+            let output = BlockFormatter.format(blocks)
+            XCTAssertEqual(
+                parser.parse(output).count,
+                1,
+                "block count moved for \(source.debugDescription): \(output.debugDescription)"
+            )
+            XCTAssertEqual(BlockFormatter.format(parser.parse(output)), output)
+        }
+    }
+
+    func testFormatNestedListWithMultilineItemsIsIdempotent() {
+        let source = "- a\n  a2\n    - b\n      b2\n        - c\n          c2"
+        let firstPass = BlockFormatter.format(parser.parse(source))
+        let secondPass = BlockFormatter.format(parser.parse(firstPass))
+        XCTAssertEqual(secondPass, firstPass)
+
+        // The items must survive the round trip with their nesting and their text.
+        if case .list(let items, _, _, _, _) = parser.parse(firstPass)[0] {
+            XCTAssertEqual(items.map { $0.text }, ["a\na2", "b\nb2", "c\nc2"])
+            XCTAssertEqual(items.map { $0.indentLevel }, [0, 1, 2])
+        } else {
+            XCTFail("Expected list block")
+        }
+    }
+
     func testFormatCodeBlock() {
         let blocks = parser.parse("```swift\nlet x = 1\n```")
         let output = BlockFormatter.format(blocks)
