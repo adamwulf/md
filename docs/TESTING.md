@@ -157,19 +157,41 @@ python3 scripts/coverage.py --show           # annotated source
 
 ### Why the script exists
 
-Measure the two suites together, or you understate the package badly.
+To measure the two suites together, and to let you see them apart.
 
-`swift test` never runs the binary, so argument parsing, exit codes, and
-everything a subcommand does with its parsed options stay dark. `cli-tests`
-reaches all of that. The two profiles have to be merged before the number
-means anything.
+Where the package stands today, on `Sources/` only:
 
-The difference is not small. Running only `swift test`,
-`Sources/md/Commands/BlocksCommand.swift` measured 0%. One CLI test case took
-it to 22%.
+| Measured by | Lines | Functions | Regions |
+| --- | --- | --- | --- |
+| `swift test` | 98.24% | 93.45% | 95.79% |
+| `cli-tests` | 88.73% | 83.84% | 82.97% |
+| Both together | 98.24% | 93.45% | 95.79% |
 
-Comparing `--swift-only` against `--cli-only` is useful in itself: it tells
-you which lines only one suite defends.
+Read the last row carefully. **The CLI suite adds no line coverage at all.**
+Every line it reaches, a Swift test already reaches, because the Swift tests
+call each command's `run()` in process rather than only testing helper types.
+
+That is worth stating plainly, because it is easy to draw the wrong
+conclusion from it. It does not mean the CLI suite is redundant. It means
+line coverage is the wrong measure of what that suite is for. What it defends
+is everything a coverage number cannot see:
+
+- the exact bytes on stdout, including a final newline, a CR, and a trailing
+  space
+- the exit code
+- what the file holds after `-i`
+- how ArgumentParser reads a real command line
+- **a crash.** `md format --frontmatter json` aborts with SIGABRT on a
+  frontmatter value of `.nan`. No Swift test can assert that, because the
+  abort takes the test process with it. In the CLI suite it is just an exit
+  code, and two cases pin it.
+
+A line can be covered and still be wrong. The CLI suite is what says whether
+it is right.
+
+So do not use these numbers to decide the CLI suite has enough cases. Use
+`--swift-only` against `--cli-only` for what it does tell you: which lines
+rest on one suite alone, and would go undefended if that suite were skipped.
 
 ### Two traps the script handles for you
 

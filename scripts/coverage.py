@@ -96,8 +96,17 @@ def clear_profiles(directory):
 
 
 def build(options):
+    """Build the binary AND the test bundle, both instrumented.
+
+    --build-tests is not optional here. Plain `swift build` leaves the test
+    targets alone, and run_swift_tests passes --skip-build, so without it the
+    run would silently measure whatever test bundle happened to be lying
+    around. A stale bundle still produces a plausible looking table, which is
+    the worst kind of wrong.
+    """
     print("Building with coverage instrumentation ...")
-    result = run([SWIFT, "build", "--enable-code-coverage"], cwd=REPO_ROOT)
+    result = run([SWIFT, "build", "--enable-code-coverage", "--build-tests"],
+                 cwd=REPO_ROOT)
     if result.returncode != 0:
         die("swift build failed with exit code %d" % result.returncode)
 
