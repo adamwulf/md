@@ -38,19 +38,6 @@ final class MarkdownParserTests: XCTestCase {
         }
     }
 
-    func testParseMultilineSetextHeadingJoinsLinesWithSpace() {
-        // A setext heading can use more than one source line, but a heading is always
-        // one line. Thus its lines join with a space, not with a newline.
-        let blocks = parser.parse("Heading one\nHeading two\n===========")
-        XCTAssertEqual(blocks.count, 1)
-        if case .heading(let level, let text, _, _, _) = blocks[0] {
-            XCTAssertEqual(level, 1)
-            XCTAssertEqual(text, "Heading one Heading two")
-        } else {
-            XCTFail("Expected heading block")
-        }
-    }
-
     // MARK: - Paragraphs
 
     func testParseParagraph() {
@@ -193,20 +180,17 @@ final class MarkdownParserTests: XCTestCase {
         }
     }
 
-    /// REGRESSION for the soft-break change.
-    ///
     /// A setext heading (a line of text with `===` or `---` below it) can be written
-    /// on more than one line. Its text now holds the soft break, but a heading block
-    /// is written back as one ATX line (`# text`), thus a newline in the text splits
-    /// one heading into a heading plus a paragraph. See
+    /// on more than one line, but a heading block is written back as one ATX line
+    /// (`# text`). Thus a newline in the text would divide one heading into a heading
+    /// plus a paragraph. A heading is one line, thus its lines join with a space. See
     /// `FormatCommandTests.testFormatKeepsMultilineSetextHeadingAsOneBlock`.
-    ///
-    /// A heading is one line, thus the soft break must become a space.
     func testParseSetextHeadingKeepsTextOnOneLine() {
-        for markdown in ["First part\nSecond part\n===", "First part\nSecond part\n---"] {
+        for (markdown, expectedLevel) in [("First part\nSecond part\n===", 1), ("First part\nSecond part\n---", 2)] {
             let blocks = parser.parse(markdown)
             XCTAssertEqual(blocks.count, 1)
-            if case .heading(_, let text, _, _, _) = blocks[0] {
+            if case .heading(let level, let text, _, _, _) = blocks[0] {
+                XCTAssertEqual(level, expectedLevel)
                 XCTAssertFalse(text.contains("\n"), "Heading text has a newline: \(text.debugDescription)")
                 XCTAssertEqual(text, "First part Second part")
             } else {

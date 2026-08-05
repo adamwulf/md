@@ -261,16 +261,16 @@ final class FormatCommandTests: XCTestCase {
     /// The fix is to put the escapes back in `getNodeText`, which is more than the
     /// soft-break change does. Remove the `XCTExpectFailure` when the fix is in.
     func testFormatKeepsEscapedMarkdownOnContinuationLines() {
-        XCTExpectFailure("Backslash escapes are dropped by MarkdownParser.getNodeText")
-
         let parser = MarkdownParser()
         for source in ["foo\n\\# bar\n", "foo\n\\- bar\n", "foo\n\\> bar\n", "foo\n\\`\\`\\`js\n"] {
             let once = runFormat(source)
-            XCTAssertEqual(
-                parser.parse(once).count,
-                parser.parse(source).count,
-                "md format changed the number of blocks for \(source.debugDescription): \(once.debugDescription)"
-            )
+            XCTExpectFailure("Backslash escapes are dropped by MarkdownParser.getNodeText") {
+                XCTAssertEqual(
+                    parser.parse(once).count,
+                    parser.parse(source).count,
+                    "md format changed the number of blocks for \(source.debugDescription): \(once.debugDescription)"
+                )
+            }
         }
     }
 }
