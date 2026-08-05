@@ -1,4 +1,0 @@
-* alpha
-* bravo
-
-    indented code

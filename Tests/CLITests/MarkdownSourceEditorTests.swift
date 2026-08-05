@@ -530,30 +530,41 @@ final class MarkdownSourceEditorTests: XCTestCase {
         }
     }
 
-    func testRemovalRefusesToAbsorbIndentedCodeIntoAPrecedingList() {
+    /// Blank lines cannot hold an indented code block apart from the list
+    /// above it, thus the plain splice would make the code a paragraph of the
+    /// last item. A fence at column 0 ends the list, so the editor re-spells
+    /// the code block it would otherwise lose. The code itself is unchanged.
+    func testRemovalFencesIndentedCodeRatherThanLetAListAbsorbIt() {
         let source = "* alpha\n* bravo\n\n> quoted\n\n    indented code\n"
         let blocks = parser.parseDocument(source)
 
-        let result = MarkdownSourceEditor.replacing(
-            blocks: 1...1,
-            in: blocks,
-            with: "",
-            within: source
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "",
+                within: source
+            ),
+            "* alpha\n* bravo\n\n```\nindented code\n```\n"
         )
-        XCTAssertNil(result)
     }
 
+    /// Two lists may join when an edit makes them adjacent, but that allowance
+    /// belongs to the leading boundary alone. It must never excuse the code
+    /// block at the trailing boundary, which is re-spelled to stay a block of
+    /// its own. A result of a single list would mean the merge was spent twice.
     func testReplacementCannotSpendALeadingMergeAtTheTrailingBoundary() {
         let source = "* alpha\n\n> quoted\n\n    indented code\n"
         let blocks = parser.parseDocument(source)
 
-        XCTAssertNil(
+        XCTAssertEqual(
             MarkdownSourceEditor.replacing(
                 blocks: 1...1,
                 in: blocks,
                 with: "* c",
                 within: source
-            )
+            ),
+            "* alpha\n\n* c\n\n```\nindented code\n```\n"
         )
     }
 
