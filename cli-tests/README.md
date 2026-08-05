@@ -54,6 +54,24 @@ Only `args` and `expected.md` are required. Everything else is optional.
 Any other file in the directory is treated as fixture data and copied to the
 scratch directory alongside `input.md`.
 
+A subdirectory is fixture data too, and is staged whole. That is how a case
+gives a command a tree to walk, which `md list` and `md list -r` need, because
+they take a directory rather than a file:
+
+```
+cli-tests/list-recurses-into-a-subdirectory/
+  args                   list -r notes
+  notes/one.md
+  notes/deeper/two.md
+  expected.md
+```
+
+Note that `md list` prints the path of each file it finds, and in a case that
+path is absolute and holds the scratch directory name, which changes on every
+run. Such a line cannot be pinned byte for byte. Assert a property of the
+output instead, with `then-args`: `blocks --count --stdin` or
+`lines --count --stdin` both work well.
+
 ### `args`
 
 One command line, without the leading `md`. It is parsed with `shlex.split`

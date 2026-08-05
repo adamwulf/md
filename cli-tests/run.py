@@ -241,12 +241,19 @@ def execute(directory, binary, scratch):
     the first one's stdout, and `argv` describes the whole chain.
     """
     for entry in sorted(directory.iterdir()):
-        if entry.is_file() and entry.name not in CONTROL_FILES:
-            try:
+        if entry.name in CONTROL_FILES:
+            continue
+        try:
+            if entry.is_dir():
+                # A subdirectory is staged whole, so that a case can give a
+                # command a tree to walk. `md list -r` cannot be tested any
+                # other way: it takes a directory, not a file.
+                shutil.copytree(str(entry), str(scratch / entry.name))
+            elif entry.is_file():
                 shutil.copyfile(str(entry), str(scratch / entry.name))
-            except OSError as error:
-                raise CaseError("cannot copy fixture %s: %s"
-                                % (entry.name, error))
+        except OSError as error:
+            raise CaseError("cannot copy fixture %s: %s"
+                            % (entry.name, error))
 
     stdin_path = directory / STDIN
     stdin_bytes = read_bytes(stdin_path) if stdin_path.is_file() else b""
