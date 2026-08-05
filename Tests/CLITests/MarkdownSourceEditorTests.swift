@@ -427,6 +427,39 @@ final class MarkdownSourceEditorTests: XCTestCase {
         )
     }
 
+    func testInsertingAfterPreservesATXHeadingTrailingSource() throws {
+        let cases = [
+            (
+                "# Title   \n\nBody.\n",
+                "# Title   \n\nInserted.\n\nBody.\n"
+            ),
+            (
+                "# Title\t\n\nBody.\n",
+                "# Title\t\n\nInserted.\n\nBody.\n"
+            ),
+            (
+                "# Title #\n\nBody.\n",
+                "# Title #\n\nInserted.\n\nBody.\n"
+            ),
+            (
+                "# Title   \r\n\r\nBody.\r\n",
+                "# Title   \r\n\r\nInserted.\r\n\r\nBody.\r\n"
+            ),
+        ]
+
+        for (source, expected) in cases {
+            let block = try XCTUnwrap(parser.parseDocument(source).first)
+            XCTAssertEqual(
+                MarkdownSourceEditor.inserting(
+                    "Inserted.\n",
+                    after: block,
+                    in: source
+                ),
+                expected
+            )
+        }
+    }
+
     func testInsertingAfterCollapsesCommonMarkWhitespaceOnlyBlankLines() throws {
         let source = "Alpha.\n \t \n\t\nBravo.\n"
         let block = try XCTUnwrap(parser.parseDocument(source).first)
@@ -508,5 +541,35 @@ final class MarkdownSourceEditorTests: XCTestCase {
             within: source
         )
         XCTAssertNil(result)
+    }
+
+    func testRemovalAllowsTwoListsToBecomeAdjacent() {
+        let source = "* a\n\nMiddle.\n\n* b\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "",
+                within: source
+            ),
+            "* a\n\n* b\n"
+        )
+    }
+
+    func testRemovalAllowsTwoIndentedCodeBlocksToJoin() {
+        let source = "    code\n\nMiddle.\n\n    more\n"
+        let blocks = parser.parseDocument(source)
+
+        XCTAssertEqual(
+            MarkdownSourceEditor.replacing(
+                blocks: 1...1,
+                in: blocks,
+                with: "",
+                within: source
+            ),
+            "    code\n\n    more\n"
+        )
     }
 }

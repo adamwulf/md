@@ -61,7 +61,9 @@ struct InsertAfterCommand: AsyncParsableCommand {
             in: fileContent
         )
         guard let result else {
-            throw ValidationError("Unable to locate block \(blockIndex) in the source")
+            throw ValidationError(
+                "Inserting after block \(blockIndex) would change surrounding block structure"
+            )
         }
 
         if inPlace {

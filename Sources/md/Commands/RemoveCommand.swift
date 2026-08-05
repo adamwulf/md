@@ -66,7 +66,9 @@ struct RemoveCommand: AsyncParsableCommand {
             with: "",
             within: content
         ) else {
-            throw ValidationError("Unable to locate blocks \(start)...\(end) in the source")
+            throw ValidationError(
+                "Removing blocks \(start)...\(end) would change surrounding block structure"
+            )
         }
         if inPlace {
             guard let file = input.file else {

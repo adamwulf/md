@@ -91,7 +91,9 @@ struct ReplaceCommand: AsyncParsableCommand {
             with: BlockFormatter.format(newBlocks),
             within: fileContent
         ) else {
-            throw ValidationError("Unable to locate blocks \(start)...\(end) in the source")
+            throw ValidationError(
+                "Replacing blocks \(start)...\(end) would change surrounding block structure"
+            )
         }
 
         if inPlace {

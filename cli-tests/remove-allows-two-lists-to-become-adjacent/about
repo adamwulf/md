@@ -1,0 +1,2 @@
+Removing the block between two lists is allowed even though CommonMark joins
+the adjacent list source into one parsed block.

@@ -92,17 +92,23 @@ enum MarkdownSourceEditor {
             }
         }
 
-        let replacementBlockCount = MarkdownParser().parse(
-            normalizedReplacement
-        ).count
+        let replacementBlocks = MarkdownParser().parse(normalizedReplacement)
         let expectedBlockCount = blocks.count
             - blockRange.count
-            + replacementBlockCount
+            + replacementBlocks.count
+        let followingBlock = blockRange.upperBound + 1 < blocks.endIndex
+            ? blocks[blockRange.upperBound + 1]
+            : nil
         return replacingSubrangeWithoutLosingBlocks(
             replacementStart..<replacementEnd,
             with: inserted,
             in: source,
             expectedBlockCount: expectedBlockCount,
+            allowedBlockMerges: allowedBoundaryMerges(
+                previous: previousBlock,
+                inserted: replacementBlocks,
+                following: followingBlock
+            ),
             lineEnding: lineEnding,
             canAddLeadingSeparator: previousBlock != nil,
             canAddTrailingSeparator: hasFollowingSource
@@ -187,13 +193,28 @@ enum MarkdownSourceEditor {
                 + (hadFinalLineEnding ? lineEnding : "")
         }
         let parser = MarkdownParser()
-        let expectedBlockCount = parser.parseDocument(source).count
-            + parser.parse(normalizedInsertion).count
+        let documentBlocks = parser.parseDocument(source)
+        let insertionBlocks = parser.parse(normalizedInsertion)
+        let selectedIndex = documentBlocks.firstIndex {
+            $0.byteRange == block.byteRange
+        }
+        let followingBlock = selectedIndex.flatMap { index in
+            let nextIndex = index + 1
+            return nextIndex < documentBlocks.endIndex
+                ? documentBlocks[nextIndex]
+                : nil
+        }
+        let expectedBlockCount = documentBlocks.count + insertionBlocks.count
         return replacingSubrangeWithoutLosingBlocks(
             insertionStart..<insertionEnd,
             with: inserted,
             in: source,
             expectedBlockCount: expectedBlockCount,
+            allowedBlockMerges: allowedBoundaryMerges(
+                previous: block,
+                inserted: insertionBlocks,
+                following: followingBlock
+            ),
             lineEnding: lineEnding,
             canAddLeadingSeparator: true,
             canAddTrailingSeparator: hasFollowingSource
@@ -235,10 +256,11 @@ enum MarkdownSourceEditor {
     }
 
     /// Returns the source index directly after the line ending that follows a
-    /// block. cmark ranges stop at the last content byte for most blocks, but
-    /// for a list may already stop at the beginning of the following blank
-    /// line. In the latter case the byte immediately before the range end is a
-    /// newline, so the index is already the boundary wanted here.
+    /// block. cmark ranges stop before trailing source syntax for some blocks,
+    /// including spaces and closing hashes on an ATX heading, so scan to the
+    /// physical end of the line before consuming its ending. For a list the
+    /// range may already stop at the following blank line; when the preceding
+    /// byte is a newline, the index is already the boundary wanted here.
     private static func indexAfterLineEnding(
         following byteRange: NSRange,
         in source: String
@@ -257,15 +279,18 @@ enum MarkdownSourceEditor {
             }
         }
 
-        if index < bytes.endIndex {
-            if bytes[index] == 0x0D {
-                index = bytes.index(after: index)
-                if index < bytes.endIndex && bytes[index] == 0x0A {
-                    index = bytes.index(after: index)
-                }
-            } else if bytes[index] == 0x0A {
+        while index < bytes.endIndex,
+              bytes[index] != 0x0D,
+              bytes[index] != 0x0A {
+            index = bytes.index(after: index)
+        }
+        if index < bytes.endIndex && bytes[index] == 0x0D {
+            index = bytes.index(after: index)
+            if index < bytes.endIndex && bytes[index] == 0x0A {
                 index = bytes.index(after: index)
             }
+        } else if index < bytes.endIndex && bytes[index] == 0x0A {
+            index = bytes.index(after: index)
         }
         return String.Index(index, within: source)
     }
@@ -349,6 +374,7 @@ enum MarkdownSourceEditor {
         with inserted: String,
         in source: String,
         expectedBlockCount: Int,
+        allowedBlockMerges: Int,
         lineEnding: String,
         canAddLeadingSeparator: Bool,
         canAddTrailingSeparator: Bool
@@ -368,11 +394,39 @@ enum MarkdownSourceEditor {
         for candidate in candidates {
             var result = source
             result.replaceSubrange(range, with: candidate)
-            if parser.parseDocument(result).count >= expectedBlockCount {
+            let resultBlockCount = parser.parseDocument(result).count
+            let minimumBlockCount = expectedBlockCount - allowedBlockMerges
+            if resultBlockCount >= minimumBlockCount,
+               resultBlockCount <= expectedBlockCount {
                 return result
             }
         }
         return nil
+    }
+
+    /// Deleting a separator can intentionally join two blocks of the same
+    /// kind (for example, two lists). Those joins are valid; absorption across
+    /// different block kinds is not.
+    private static func allowedBoundaryMerges(
+        previous: MarkdownBlock?,
+        inserted: [MarkdownBlock],
+        following: MarkdownBlock?
+    ) -> Int {
+        if inserted.isEmpty {
+            guard let previous, let following else {
+                return 0
+            }
+            return previous.kind == following.kind ? 1 : 0
+        }
+
+        var result = 0
+        if let previous, previous.kind == inserted.first?.kind {
+            result += 1
+        }
+        if let following, following.kind == inserted.last?.kind {
+            result += 1
+        }
+        return result
     }
 
     /// Finds a 1-based line start without relying on parser character offsets.
@@ -435,5 +489,36 @@ private extension Character {
 
     var isCommonMarkBlankWhitespace: Bool {
         self == " " || self == "\t"
+    }
+}
+
+private enum MarkdownBlockKind: Equatable {
+    case heading
+    case paragraph
+    case codeBlock
+    case list(ordered: Bool)
+    case blockquote
+    case thematicBreak
+    case table
+}
+
+private extension MarkdownBlock {
+    var kind: MarkdownBlockKind {
+        switch self {
+        case .heading:
+            return .heading
+        case .paragraph:
+            return .paragraph
+        case .codeBlock:
+            return .codeBlock
+        case .list(_, let ordered, _, _, _):
+            return .list(ordered: ordered)
+        case .blockquote:
+            return .blockquote
+        case .thematicBreak:
+            return .thematicBreak
+        case .table:
+            return .table
+        }
     }
 }
