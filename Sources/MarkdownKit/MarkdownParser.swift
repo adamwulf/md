@@ -536,6 +536,12 @@ public struct MarkdownParser {
         let level = Int(cmark_node_get_heading_level(node))
         let text = getChildrenText(node, context: .heading)
             .replacingOccurrences(of: "\n", with: " ")
+        // Setext headings require content. The preserved checkbox-only line
+        // already keeps this child on its own continuation line, where an
+        // empty ATX marker remains an empty heading on every parse.
+        if text.isEmpty {
+            return String(repeating: "#", count: level)
+        }
         let underline = level == 1 ? "===" : "-"
         return "\(text)\n\(underline)"
     }

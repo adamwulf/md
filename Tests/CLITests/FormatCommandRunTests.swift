@@ -279,7 +279,7 @@ final class FormatCommandRunTests: XCTestCase {
     }
 
     func testFormatKeepsEmptyATXHeadingsAfterACheckboxOnlyTaskItemStable() async throws {
-        for level in 1...2 {
+        for level in 1...6 {
             let source = "- [x] \n  \(String(repeating: "#", count: level))\n"
             let once = try await runFormat(on: source)
             let twice = try await runFormat(on: once)
