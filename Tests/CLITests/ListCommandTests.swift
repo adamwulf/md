@@ -110,10 +110,32 @@ final class ListCommandTests: XCTestCase {
         XCTAssertEqual(occurrences, 1)
     }
 
-    func testMissingDirectoryEmitsStderrAndContinues() throws {
+    func testMissingDirectoryEmitsStderrContinuesAndExitsFailure() async throws {
         try write("---\ntitle: A\n---\n", to: "a.md")
-        let out = try runList([], dirs: [tempRoot.path, "/does/not/exist"])
-        XCTAssertTrue(out.contains("/a.md =="))
+        let missing = tempRoot.appendingPathComponent("does-not-exist").path
+        let listedPath = try XCTUnwrap(
+            try ListCommand.parse([tempRoot.path]).collectEntries().first?.path
+        )
+        let command = try ListCommand.parse([tempRoot.path, missing])
+
+        let captured = try await StandardStream.capturingCommandRun {
+            try await command.run()
+        }
+
+        XCTAssertEqual(
+            captured.standardOutput,
+            "== \(listedPath) ==\ntitle: A\n"
+        )
+        XCTAssertEqual(
+            captured.standardError,
+            "md list: not a directory: \(missing)\n"
+        )
+        guard let exitCode = captured.error as? ExitCode else {
+            return XCTFail(
+                "Expected ExitCode.failure, got \(String(describing: captured.error))"
+            )
+        }
+        XCTAssertEqual(exitCode.rawValue, ExitCode.failure.rawValue)
     }
 
     func testEmptyDirectoryProducesEmptyOutput() throws {
@@ -210,6 +232,57 @@ final class ListCommandTests: XCTestCase {
         XCTAssertEqual(lines.count, 2)
         XCTAssertTrue(lines[0].hasSuffix("\tFirst"))
         XCTAssertTrue(lines[1].hasSuffix("\tSecond"))
+    }
+
+    func testPlainKeyEscapesEveryLineBreakInScalarValues() throws {
+        try write(
+            "---\nlf: \"first\\nsecond\"\ncr: \"first\\rsecond\"\n" +
+                "crlf: \"first\\r\\nsecond\"\n---\n",
+            to: "a.md"
+        )
+        let path = try XCTUnwrap(
+            try ListCommand.parse([tempRoot.path]).collectEntries().first?.path
+        )
+
+        XCTAssertEqual(
+            try runList(["--key", "lf"]),
+            "\(path)\tfirst\\nsecond\n"
+        )
+        XCTAssertEqual(
+            try runList(["--key", "cr"]),
+            "\(path)\tfirst\\rsecond\n"
+        )
+        XCTAssertEqual(
+            try runList(["--key", "crlf"]),
+            "\(path)\tfirst\\r\\nsecond\n"
+        )
+    }
+
+    func testPlainKeyKeepsCollectionsWithLineBreaksOnOneLine() throws {
+        try write(
+            "---\narray: [\"first\\rsecond\", \"third\\nfourth\"]\n" +
+                "mapping: {cr: \"first\\rsecond\", lf: \"third\\nfourth\"}\n---\n",
+            to: "a.md"
+        )
+        let path = try XCTUnwrap(
+            try ListCommand.parse([tempRoot.path]).collectEntries().first?.path
+        )
+
+        let array = try runList(["--key", "array"])
+        XCTAssertEqual(
+            array,
+            "\(path)\tfirst\\rsecond,third\\nfourth\n"
+        )
+
+        let mapping = try runList(["--key", "mapping"])
+        XCTAssertTrue(
+            mapping.hasPrefix("\(path)\t{"),
+            "got: \(mapping.debugDescription)"
+        )
+        XCTAssertTrue(mapping.contains("\\r"), "got: \(mapping.debugDescription)")
+        XCTAssertTrue(mapping.contains("\\n"), "got: \(mapping.debugDescription)")
+        XCTAssertFalse(mapping.dropLast().contains("\r"))
+        XCTAssertFalse(mapping.dropLast().contains("\n"))
     }
 
     func testPlainKeyOnNestedDict() throws {

@@ -42,7 +42,9 @@ struct ListCommand: AsyncParsableCommand {
 
             Frontmatter is converted to the format given by --format (yaml by \
             default). Use --key or --keys to project a single value or subset \
-            of keys. --missing controls files without frontmatter.
+            of keys. In --key output, line breaks inside values are escaped as \
+            literal \\r and \\n sequences. --missing controls files without \
+            frontmatter.
 
               $ md list ./notes
               $ md list -r ./notes --format json
@@ -87,10 +89,11 @@ struct ListCommand: AsyncParsableCommand {
     // MARK: - Run
 
     func run() async throws {
-        let prepared = prepareEntriesForRendering(collectEntries())
+        let collected = collectEntriesWithStatus()
+        let prepared = prepareEntriesForRendering(collected.entries)
         let text = try render(prepared.entries)
         print(text, terminator: "")
-        if prepared.hadErrors {
+        if collected.hadErrors || prepared.hadErrors {
             throw ExitCode.failure
         }
     }
@@ -117,11 +120,17 @@ struct ListCommand: AsyncParsableCommand {
     // MARK: - Entry collection
 
     func collectEntries() -> [Entry] {
+        collectEntriesWithStatus().entries
+    }
+
+    private func collectEntriesWithStatus() -> (entries: [Entry], hadErrors: Bool) {
         var seen = Set<String>()
         var entries: [Entry] = []
+        var hadErrors = false
         for dir in directories {
-            let files = walkDirectory(dir)
-            for file in files where seen.insert(file).inserted {
+            let walked = walkDirectory(dir)
+            hadErrors = hadErrors || walked.hadErrors
+            for file in walked.files where seen.insert(file).inserted {
                 entries.append(loadEntry(path: file))
             }
         }
@@ -141,11 +150,11 @@ struct ListCommand: AsyncParsableCommand {
 
         switch missing {
         case .include:
-            return entries
+            return (entries, hadErrors)
         case .skip:
-            return entries.filter { $0.frontmatter != nil }
+            return (entries.filter { $0.frontmatter != nil }, hadErrors)
         case .only:
-            return entries.filter { $0.frontmatter == nil }
+            return (entries.filter { $0.frontmatter == nil }, hadErrors)
         }
     }
 
@@ -206,11 +215,11 @@ struct ListCommand: AsyncParsableCommand {
 
     // MARK: - Directory walking
 
-    private func walkDirectory(_ path: String) -> [String] {
+    private func walkDirectory(_ path: String) -> (files: [String], hadErrors: Bool) {
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue else {
             writeStderr("md list: not a directory: \(path)")
-            return []
+            return ([], true)
         }
 
         let root = URL(fileURLWithPath: path)
@@ -221,16 +230,18 @@ struct ListCommand: AsyncParsableCommand {
         }
 
         let resourceKeys: [URLResourceKey] = [.isRegularFileKey, .isSymbolicLinkKey]
+        var hadErrors = false
         guard let enumerator = FileManager.default.enumerator(
             at: root,
             includingPropertiesForKeys: resourceKeys,
             options: options,
             errorHandler: { url, error in
                 self.writeStderr("md list: \(url.path): \(error.localizedDescription)")
+                hadErrors = true
                 return true
             }
         ) else {
-            return []
+            return ([], true)
         }
 
         var results: [String] = []
@@ -241,7 +252,7 @@ struct ListCommand: AsyncParsableCommand {
             guard url.pathExtension.lowercased() == "md" else { continue }
             results.append(url.path)
         }
-        return results
+        return (results, hadErrors)
     }
 
     // MARK: - Emitters
@@ -252,7 +263,7 @@ struct ListCommand: AsyncParsableCommand {
             for entry in entries {
                 guard let fm = entry.frontmatter, let value = fm.get(key) else { continue }
                 let formatted = try formatScalarValue(value, format: fm.format)
-                out += "\(entry.path)\t\(formatted)\n"
+                out += "\(entry.path)\t\(escapePlainKeyValue(formatted))\n"
             }
             return out
         }
@@ -288,6 +299,7 @@ struct ListCommand: AsyncParsableCommand {
     }
 
     private func renderJSON(_ entries: [Entry]) throws -> String {
+        guard !entries.isEmpty else { return "[]" }
         let array = entries.map { jsonRecord(for: $0) }
         let data = try JSONSerialization.data(withJSONObject: array, options: [.prettyPrinted, .sortedKeys])
         return String(data: data, encoding: .utf8) ?? ""
@@ -382,6 +394,12 @@ struct ListCommand: AsyncParsableCommand {
             return "null"
         }
         return "\(normalized)"
+    }
+
+    private func escapePlainKeyValue(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\r", with: "\\r")
+            .replacingOccurrences(of: "\n", with: "\\n")
     }
 
     private func normalizeForPlainScalar(_ value: Any) -> Any {

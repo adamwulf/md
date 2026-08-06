@@ -134,6 +134,8 @@ md list ./notes --missing only                        # list only files without 
 ```
 
 Files with no frontmatter appear with `(no frontmatter)` in plain output (or `null` in JSON). Parse errors for individual files are reported to stderr and the run continues.
+In `--key` output, carriage returns and line feeds inside values are written as
+the literal escape sequences `\r` and `\n`, keeping each file on one output line.
 
 ## Testing
 

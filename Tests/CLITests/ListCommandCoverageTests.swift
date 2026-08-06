@@ -7,6 +7,7 @@
 //  each emitter produces for frontmatter that projects down to nothing.
 //
 
+import ArgumentParser
 import XCTest
 @testable import md
 
@@ -72,6 +73,11 @@ final class ListCommandCoverageTests: XCTestCase {
         XCTAssertEqual(output, "")
     }
 
+    func testRunWritesCompactJSONForAnEmptyDirectory() async throws {
+        let output = try await runList(["--output", "json"])
+        XCTAssertEqual(output, "[]\n")
+    }
+
     func testRunAddsNoTrailingNewlineOfItsOwn() async throws {
         try write("---\ntitle: A\n---\n", to: "a.md")
         let output = try await runList(["--output", "ndjson"])
@@ -127,15 +133,31 @@ final class ListCommandCoverageTests: XCTestCase {
         XCTAssertEqual(output, "== \(unreadable.path) ==\n(no frontmatter)\n")
     }
 
-    func testAnUnreadableSubdirectoryDoesNotStopTheWalk() async throws {
+    func testAnUnreadableSubdirectoryContinuesTheWalkAndExitsFailure() async throws {
         let readable = try write("---\ntitle: Readable\n---\n", to: "readable.md")
         try write("---\ntitle: Hidden\n---\n", to: "locked/hidden.md")
         let locked = scratch.url.appendingPathComponent("locked")
         XCTAssertEqual(chmod(locked.path, 0o000), 0)
         defer { chmod(locked.path, 0o700) }
+        let command = try ListCommand.parse([
+            "-r", "--key", "title", scratch.url.path,
+        ])
 
-        let output = try await runList(["-r", "--key", "title"])
-        XCTAssertEqual(output, "\(readable.path)\tReadable\n")
+        let captured = try await StandardStream.capturingCommandRun {
+            try await command.run()
+        }
+
+        XCTAssertEqual(captured.standardOutput, "\(readable.path)\tReadable\n")
+        XCTAssertTrue(
+            captured.standardError.contains(locked.path),
+            "got: \(captured.standardError.debugDescription)"
+        )
+        guard let exitCode = captured.error as? ExitCode else {
+            return XCTFail(
+                "Expected ExitCode.failure, got \(String(describing: captured.error))"
+            )
+        }
+        XCTAssertEqual(exitCode.rawValue, ExitCode.failure.rawValue)
     }
 
     // MARK: - Frontmatter that projects down to nothing
@@ -234,12 +256,24 @@ final class ListCommandCoverageTests: XCTestCase {
         }
     }
 
-    func testAFileGivenInPlaceOfADirectoryYieldsNoEntries() async throws {
+    func testAFileGivenInPlaceOfADirectoryExitsFailure() async throws {
         let file = try write("---\ntitle: A\n---\n", to: "a.md")
         let command = try ListCommand.parse([file.path])
-        let output = try await StandardStream.capturingStandardOutput {
+
+        let captured = try await StandardStream.capturingCommandRun {
             try await command.run()
         }
-        XCTAssertEqual(output, "")
+
+        XCTAssertEqual(captured.standardOutput, "")
+        XCTAssertEqual(
+            captured.standardError,
+            "md list: not a directory: \(file.path)\n"
+        )
+        guard let exitCode = captured.error as? ExitCode else {
+            return XCTFail(
+                "Expected ExitCode.failure, got \(String(describing: captured.error))"
+            )
+        }
+        XCTAssertEqual(exitCode.rawValue, ExitCode.failure.rawValue)
     }
 }

@@ -7,4 +7,5 @@ That is also why this case counts lines rather than reading them. Every line
 --key prints starts with a path, so counting them is the only way to assert the
 one-line-per-file shape from inside the harness.
 
-See known-fail.
+`ListCommandTests.testPlainKeyEscapesEveryLineBreakInScalarValues` pins the
+literal `\\r` and `\\n` bytes after the dynamic path.
