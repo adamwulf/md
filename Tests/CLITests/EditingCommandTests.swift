@@ -51,6 +51,94 @@ final class EditingCommandTests: XCTestCase {
         return try scratch.read("document.md")
     }
 
+    func testEditingCommandsCanTargetAnExistingHtmlBlock() async throws {
+        let source = "Before.\n\n<!--  raw HTML  -->\n\nAfter.\n"
+
+        let removed = try await run(RemoveCommand.self, ["2"], on: source)
+        XCTAssertEqual(removed, "Before.\n\nAfter.\n")
+
+        let replaced = try await run(
+            ReplaceCommand.self,
+            ["2", "Replacement."],
+            on: source
+        )
+        XCTAssertEqual(replaced, "Before.\n\nReplacement.\n\nAfter.\n")
+
+        let insertedBefore = try await run(
+            InsertBeforeCommand.self,
+            ["2", "Inserted."],
+            on: source
+        )
+        XCTAssertEqual(
+            insertedBefore,
+            "Before.\n\nInserted.\n\n<!--  raw HTML  -->\n\nAfter.\n"
+        )
+
+        let insertedAfter = try await run(
+            InsertAfterCommand.self,
+            ["2", "Inserted."],
+            on: source
+        )
+        XCTAssertEqual(
+            insertedAfter,
+            "Before.\n\n<!--  raw HTML  -->\n\nInserted.\n\nAfter.\n"
+        )
+    }
+
+    func testEditingCommandsUseTheWholeMultilineDelimiterTerminatedHtmlRange() async throws {
+        let htmlBlocks = [
+            "<script>\nscript body\n</script>",
+            "<!--\ncomment body\n-->",
+            "<?target\nprocessing body\n?>",
+            "<!DOCTYPE\ndeclaration body>",
+            "<![CDATA[\ncdata body\n]]>"
+        ]
+
+        for html in htmlBlocks {
+            let source = "Before.\n\n\(html)\n\nAfter.\n"
+
+            let removed = try await run(RemoveCommand.self, ["2"], on: source)
+            XCTAssertEqual(removed, "Before.\n\nAfter.\n", "remove \(html)")
+
+            let replaced = try await run(
+                ReplaceCommand.self,
+                ["2", "Replacement."],
+                on: source
+            )
+            XCTAssertEqual(
+                replaced,
+                "Before.\n\nReplacement.\n\nAfter.\n",
+                "replace \(html)"
+            )
+
+            let insertedAfter = try await run(
+                InsertAfterCommand.self,
+                ["2", "Inserted."],
+                on: source
+            )
+            XCTAssertEqual(
+                insertedAfter,
+                "Before.\n\n\(html)\n\nInserted.\n\nAfter.\n",
+                "insert after \(html)"
+            )
+        }
+    }
+
+    func testEditingAnHtmlBlockDoesNotConsumeTheParagraphAfterAUnicodeLineSeparator() async throws {
+        let html = "<!-- alpha\u{2028}omega -->"
+        let source = "\(html)\nAfter.\n"
+
+        let removed = try await run(RemoveCommand.self, ["1"], on: source)
+        XCTAssertEqual(removed, "After.\n")
+
+        let insertedAfter = try await run(
+            InsertAfterCommand.self,
+            ["1", "Inserted."],
+            on: source
+        )
+        XCTAssertEqual(insertedAfter, "\(html)\n\nInserted.\n\nAfter.\n")
+    }
+
     // MARK: - remove: happy paths
 
     func testRemoveDropsTheNamedBlock() async throws {

@@ -140,6 +140,51 @@ final class BlocksCommandTests: XCTestCase {
         )
     }
 
+    func testListingSummarizesHTMLWithItsLineRange() async throws {
+        let output = try await runBlocks([], on: "<div>\nraw\n</div>\n")
+        XCTAssertEqual(output, "[1] html L1-3\n")
+    }
+
+    func testSlicesIncludeTheClosingLineOfEveryDelimiterTerminatedHtmlForm() async throws {
+        let htmlBlocks = [
+            "<script>\nscript body\n</script>",
+            "<!--\ncomment body\n-->",
+            "<?target\nprocessing body\n?>",
+            "<!DOCTYPE\ndeclaration body>",
+            "<![CDATA[\ncdata body\n]]>"
+        ]
+
+        for html in htmlBlocks {
+            let output = try await runBlocks(
+                ["2"],
+                on: "Before.\n\n\(html)\n\nAfter.\n"
+            )
+            XCTAssertEqual(output, "\(html)\n", "for \(html)")
+        }
+    }
+
+    func testSliceStopsAtAUnicodeLineSeparatorInsideHtml() async throws {
+        let html = "<!-- alpha\u{2028}omega -->"
+        let output = try await runBlocks(["1"], on: "\(html)\nAfter.\n")
+        XCTAssertEqual(output, "\(html)\n")
+    }
+
+    func testSlicesKeepLegalLeadingIndentationOnHtmlAndLists() async throws {
+        let html = "   <script>\nx\n</script>"
+        let htmlOutput = try await runBlocks(
+            ["1"],
+            on: "\(html)\n\nAfter.\n"
+        )
+        XCTAssertEqual(htmlOutput, "\(html)\n")
+
+        let list = "   - alpha\n   - beta"
+        let listOutput = try await runBlocks(
+            ["1"],
+            on: "\(list)\n\nAfter.\n"
+        )
+        XCTAssertEqual(listOutput, "\(list)\n")
+    }
+
     func testListingSummarizesTableWithRowCount() async throws {
         let output = try await runBlocks(
             [],

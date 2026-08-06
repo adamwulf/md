@@ -87,6 +87,7 @@ public enum MarkdownBlock: Sendable {
     case blockquote(text: String, charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
     case thematicBreak(charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
     case table(rows: [[String]], charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
+    case htmlBlock(literal: String, charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
 
     /// Character offset range (for text extraction and display)
     public var charRange: NSRange {
@@ -98,6 +99,7 @@ public enum MarkdownBlock: Sendable {
         case .blockquote(_, let charRange, _, _): return charRange
         case .thematicBreak(let charRange, _, _): return charRange
         case .table(_, let charRange, _, _): return charRange
+        case .htmlBlock(_, let charRange, _, _): return charRange
         }
     }
 
@@ -111,6 +113,7 @@ public enum MarkdownBlock: Sendable {
         case .blockquote(_, _, let byteRange, _): return byteRange
         case .thematicBreak(_, let byteRange, _): return byteRange
         case .table(_, _, let byteRange, _): return byteRange
+        case .htmlBlock(_, _, let byteRange, _): return byteRange
         }
     }
 
@@ -124,6 +127,7 @@ public enum MarkdownBlock: Sendable {
         case .blockquote(_, _, _, let lineRange): return lineRange
         case .thematicBreak(_, _, let lineRange): return lineRange
         case .table(_, _, _, let lineRange): return lineRange
+        case .htmlBlock(_, _, _, let lineRange): return lineRange
         }
     }
 }
@@ -134,6 +138,8 @@ public struct MarkdownParser {
     // MARK: - ASCII byte constants
     private static let newlineByte = UInt8(ascii: "\n")
     private static let crByte = UInt8(ascii: "\r")
+    private static let spaceByte = UInt8(ascii: " ")
+    private static let tabByte = UInt8(ascii: "\t")
 
     /// Pre-computed line information for efficient range calculations
     private struct LineInfo {
@@ -240,7 +246,17 @@ public struct MarkdownParser {
         guard let node = node else { return nil }
 
         let type = cmark_node_get_type(node)
-        let ranges = calculateRanges(for: node, lineTable: lineTable)
+        let htmlLiteral: String? = if type == CMARK_NODE_HTML_BLOCK {
+            cmark_node_get_literal(node).map { String(cString: $0) } ?? ""
+        } else {
+            nil
+        }
+        let ranges = calculateRanges(
+            for: node,
+            lineTable: lineTable,
+            trimTrailingBlankLines: type == CMARK_NODE_LIST,
+            sourceLineCount: htmlLiteral.map(sourceLineCount)
+        )
 
         switch type {
         case CMARK_NODE_HEADING:
@@ -267,13 +283,22 @@ public struct MarkdownParser {
             return .list(items: items, ordered: ordered, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_BLOCK_QUOTE:
-            // The children of a block quote are whole blocks, thus each one comes back
-            // through the CommonMark writer and needs no work here.
-            let text = getChildrenText(node, context: .paragraph)
+            let text = getBlockquoteText(
+                lineRange: ranges.lineRange,
+                lineTable: lineTable
+            )
             return .blockquote(text: text, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_THEMATIC_BREAK:
             return .thematicBreak(charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
+
+        case CMARK_NODE_HTML_BLOCK:
+            return .htmlBlock(
+                literal: htmlLiteral ?? "",
+                charRange: ranges.charRange,
+                byteRange: ranges.byteRange,
+                lineRange: ranges.lineRange
+            )
 
         default:
             let typeName = String(cString: cmark_node_get_type_string(node))
@@ -358,7 +383,8 @@ public struct MarkdownParser {
         var items: [ListItem] = []
         // cmark decides tightness for the whole list, counting both blank
         // lines between items and blank lines inside one item.
-        let tight = cmark_node_get_list_tight(listNode) != 0
+        let tight = cmark_node_get_list_tight(listNode) != 0 &&
+            !formattingRequiresLooseList(listNode)
         var itemNode = cmark_node_first_child(listNode)
 
         while itemNode != nil {
@@ -366,6 +392,7 @@ public struct MarkdownParser {
             // piece after it. The checkbox belongs to the piece holding the
             // item's first paragraph and to no other.
             var pendingTask = itemNode.flatMap { taskState(of: $0, lineTable: lineTable) }
+            let itemStartLine = itemNode.map { Int(cmark_node_get_start_line($0)) } ?? 0
             var paragraphs: [String] = []
             var child = cmark_node_first_child(itemNode)
             // The author wrote ONE marker for this item, and the first piece
@@ -383,8 +410,20 @@ public struct MarkdownParser {
             func flushGatheredText() {
                 // Each child is its own paragraph, so they are joined by a
                 // blank line. Running them together would weld the last word
-                // of one onto the first word of the next.
-                let text = paragraphs.joined(separator: "\n\n")
+                // of one onto the first word of the next. The one exception is
+                // a checkbox-only paragraph followed immediately by another
+                // block. cmark removes the checkbox from that empty paragraph,
+                // but its line still has to survive so the following block is
+                // not pulled onto the checkbox line.
+                let text: String
+                if pendingTask != nil, paragraphs.first?.isEmpty == true {
+                    let followingBlocks = paragraphs.dropFirst()
+                    text = followingBlocks.isEmpty
+                        ? ""
+                        : "\n" + followingBlocks.joined(separator: "\n\n")
+                } else {
+                    text = paragraphs.joined(separator: "\n\n")
+                }
                 let task = pendingTask
                 // The box is spent here whether or not this piece emits: once
                 // the first content position has passed it has had its turn.
@@ -431,10 +470,54 @@ public struct MarkdownParser {
                 } else {
                     // The children of a list item are whole blocks, thus each one
                     // comes back through the CommonMark writer with its backslashes.
-                    let text = getNodeText(currentChild, context: .paragraph)
+                    // Blockquotes are the exception: cmark's writer loses blank
+                    // quote lines and invents separators before raw HTML. Recover
+                    // their authored structure the same way as a top-level quote,
+                    // then put back the one marker that belongs inside the list.
+                    if pendingTask != nil,
+                       paragraphs.isEmpty,
+                       Int(cmark_node_get_start_line(currentChild)) > itemStartLine {
+                        paragraphs.append("")
+                    }
+                    let text: String
+                    if childType == CMARK_NODE_BLOCK_QUOTE {
+                        let quoteRanges = calculateRanges(
+                            for: currentChild,
+                            lineTable: lineTable
+                        )
+                        let innerText = getBlockquoteText(
+                            lineRange: quoteRanges.lineRange,
+                            lineTable: lineTable,
+                            nestedInList: true
+                        )
+                        text = blockquoteSource(from: innerText)
+                    } else if childType == CMARK_NODE_THEMATIC_BREAK {
+                        // cmark renders this as five dashes. Once the list
+                        // formatter adds its own dash marker, `- -----`
+                        // reparses as one outer thematic break instead of a
+                        // list item containing a break. Asterisks retain the
+                        // child block unambiguously at every list depth.
+                        text = "***"
+                    } else if childType == CMARK_NODE_HEADING,
+                              pendingTask != nil,
+                              cmark_node_get_heading_level(currentChild) <= 2 {
+                        // An ATX marker placed after a task checkbox is ordinary
+                        // item text (`- [x] # title`), not a heading. A level-one
+                        // or level-two task-item heading can round-trip in setext
+                        // form while leaving the checkbox where the task-list
+                        // extension requires it.
+                        text = taskListHeadingSource(currentChild)
+                    } else {
+                        text = getNodeText(currentChild, context: .paragraph)
+                    }
+                    let trimmedText = text
                         .trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !text.isEmpty {
-                        paragraphs.append(text)
+                    if !trimmedText.isEmpty {
+                        paragraphs.append(trimmedText)
+                    } else if childType == CMARK_NODE_PARAGRAPH,
+                              pendingTask != nil,
+                              paragraphs.isEmpty {
+                        paragraphs.append("")
                     }
                 }
 
@@ -449,6 +532,53 @@ public struct MarkdownParser {
         return items
     }
 
+    private func taskListHeadingSource(_ node: UnsafeMutablePointer<cmark_node>) -> String {
+        let level = Int(cmark_node_get_heading_level(node))
+        let text = getChildrenText(node, context: .heading)
+            .replacingOccurrences(of: "\n", with: " ")
+        // Setext headings require content. The preserved checkbox-only line
+        // already keeps this child on its own continuation line, where an
+        // empty ATX marker remains an empty heading on every parse.
+        if text.isEmpty {
+            return String(repeating: "#", count: level)
+        }
+        let underline = level == 1 ? "===" : "-"
+        return "\(text)\n\(underline)"
+    }
+
+    /// Formatting two adjacent non-list child blocks, or a continuation block
+    /// after a nested list, requires a blank line so the blocks do not merge.
+    /// That blank makes the containing list loose on the next parse, even when
+    /// the original source omitted it. Mark the list loose now so the first
+    /// format pass already emits the same inter-item gaps as later passes.
+    private func formattingRequiresLooseList(
+        _ listNode: UnsafeMutablePointer<cmark_node>
+    ) -> Bool {
+        var itemNode = cmark_node_first_child(listNode)
+        while let item = itemNode {
+            var consecutiveNonListBlocks = 0
+            var sawNestedList = false
+            var child = cmark_node_first_child(item)
+            while let currentChild = child {
+                if cmark_node_get_type(currentChild) == CMARK_NODE_LIST {
+                    sawNestedList = true
+                    consecutiveNonListBlocks = 0
+                } else {
+                    if sawNestedList {
+                        return true
+                    }
+                    consecutiveNonListBlocks += 1
+                    if consecutiveNonListBlocks > 1 {
+                        return true
+                    }
+                }
+                child = cmark_node_next(currentChild)
+            }
+            itemNode = cmark_node_next(item)
+        }
+        return false
+    }
+
     private func getChildrenText(_ node: UnsafeMutablePointer<cmark_node>?, context: InlineTextContext) -> String {
         guard let node = node else { return "" }
         var text = ""
@@ -458,6 +588,118 @@ public struct MarkdownParser {
             child = cmark_node_next(child)
         }
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Recover a blockquote's authored inner Markdown by removing exactly one
+    /// outer marker from each marked source line. Rendering the AST back to
+    /// CommonMark is not safe here: nested list items beginning with raw HTML or
+    /// thematic breaks acquire ambiguous indentation, and renderer-only blank
+    /// markers appear before some first-child blocks. Source text already has the
+    /// sibling structure and escaping needed to parse the same way again.
+    private func getBlockquoteText(
+        lineRange: ClosedRange<Int>,
+        lineTable: [LineInfo],
+        nestedInList: Bool = false
+    ) -> String {
+        guard lineRange.lowerBound > 0,
+              lineRange.upperBound <= lineTable.count else { return "" }
+
+        let lines = lineRange.map { lineTable[$0 - 1].content }
+        let firstMarker = nestedInList
+            ? firstBlockquoteMarker(in: lines[0])
+            : nil
+        let maximumMarkerColumn = nestedInList
+            ? (firstMarker?.visualColumn ?? 0) + 3
+            : 3
+
+        return lines.enumerated().map { offset, line in
+            stripOuterBlockquoteMarker(
+                from: line,
+                exactMarker: offset == 0 ? firstMarker : nil,
+                maximumMarkerColumn: maximumMarkerColumn
+            )
+        }
+        .joined(separator: "\n")
+    }
+
+    private func blockquoteSource(from innerText: String) -> String {
+        innerText
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { $0.isEmpty ? ">" : "> \($0)" }
+            .joined(separator: "\n")
+    }
+
+    private typealias BlockquoteMarker = (byteIndex: Int, visualColumn: Int)
+
+    /// The first line of a quote nested in a list can still contain the list
+    /// marker (`- > quote`). The quote marker is the first `>` on that node's
+    /// first source line; everything before it is enclosing container syntax.
+    private func firstBlockquoteMarker(in line: String) -> BlockquoteMarker? {
+        let bytes = Array(line.utf8)
+        guard let byteIndex = bytes.firstIndex(of: 0x3E) else { return nil }
+        return (byteIndex, visualColumn(in: bytes, before: byteIndex))
+    }
+
+    /// A CommonMark blockquote marker may have leading container indentation,
+    /// then `>`, then one optional padding column. A following tab expands to
+    /// the next four-column stop; only its first column is marker padding, so
+    /// the residual columns remain authored indentation. Lazy continuation
+    /// lines have no marker and therefore pass through byte-for-byte.
+    private func stripOuterBlockquoteMarker(
+        from line: String,
+        exactMarker: BlockquoteMarker?,
+        maximumMarkerColumn: Int
+    ) -> String {
+        let bytes = Array(line.utf8)
+        let marker: BlockquoteMarker
+        if let exactMarker {
+            marker = exactMarker
+        } else {
+            var index = 0
+            var column = 0
+            while index < bytes.count {
+                if bytes[index] == Self.spaceByte {
+                    column += 1
+                    index += 1
+                } else if bytes[index] == Self.tabByte {
+                    column += 4 - (column % 4)
+                    index += 1
+                } else {
+                    break
+                }
+            }
+            guard index < bytes.count,
+                  bytes[index] == 0x3E,
+                  column <= maximumMarkerColumn else { return line }
+            marker = (index, column)
+        }
+
+        var index = marker.byteIndex + 1
+        var columnAfterMarker = marker.visualColumn + 1
+
+        var residualTabIndent = 0
+        if index < bytes.count && bytes[index] == Self.spaceByte {
+            index += 1
+            columnAfterMarker += 1
+        } else if index < bytes.count && bytes[index] == Self.tabByte {
+            let tabWidth = 4 - (columnAfterMarker % 4)
+            residualTabIndent = Swift.max(0, tabWidth - 1)
+            index += 1
+        }
+        return String(repeating: " ", count: residualTabIndent) +
+            String(decoding: bytes[index...], as: UTF8.self)
+    }
+
+    private func visualColumn(in bytes: [UInt8], before endIndex: Int) -> Int {
+        var column = 0
+        for byte in bytes[..<endIndex] {
+            if byte == Self.tabByte {
+                column += 4 - (column % 4)
+            } else {
+                column += 1
+            }
+        }
+        return column
     }
 
     private func getNodeText(_ node: UnsafeMutablePointer<cmark_node>?, context: InlineTextContext) -> String {
@@ -520,22 +762,58 @@ public struct MarkdownParser {
         return previousType == CMARK_NODE_SOFTBREAK || previousType == CMARK_NODE_LINEBREAK
     }
 
-    private func calculateRanges(for node: UnsafeMutablePointer<cmark_node>, lineTable: [LineInfo]) -> RangePair {
+    private func calculateRanges(
+        for node: UnsafeMutablePointer<cmark_node>,
+        lineTable: [LineInfo],
+        trimTrailingBlankLines: Bool = false,
+        sourceLineCount: Int? = nil
+    ) -> RangePair {
         let startLine = Int(cmark_node_get_start_line(node))
-        let startColumn = Int(cmark_node_get_start_column(node))
-        let endLine = Int(cmark_node_get_end_line(node))
-        let endColumn = Int(cmark_node_get_end_column(node))
+        var endLine = Int(cmark_node_get_end_line(node))
+        var endColumn = Int(cmark_node_get_end_column(node))
+
+        // cmark reports the end position of delimiter-terminated raw HTML
+        // forms 1-5 before their closing delimiter line. Its literal contains
+        // the complete block, so use that line count to reach the real source
+        // end. The final line ending in the literal terminates the block but is
+        // not an additional content line.
+        if let sourceLineCount {
+            let literalEndLine = startLine + Swift.max(1, sourceLineCount) - 1
+            if literalEndLine > endLine {
+                endLine = literalEndLine
+                if endLine <= lineTable.count {
+                    endColumn = lineTable[endLine - 1].content.utf8.count
+                }
+            }
+        }
 
         guard startLine > 0 && startLine <= lineTable.count &&
               endLine > 0 && endLine <= lineTable.count else {
             return RangePair(charRange: NSRange(location: 0, length: 0), byteRange: NSRange(location: 0, length: 0), lineRange: 1...1)
         }
 
+        // cmark extends a list through every blank line immediately below it.
+        // Those lines separate the list from the next block and belong to no block,
+        // so keep all three public ranges on the list's last content line instead.
+        if trimTrailingBlankLines {
+            var trimmed = false
+            while endLine > startLine,
+                  isCommonMarkBlankLine(lineTable[endLine - 1].content) {
+                endLine -= 1
+                trimmed = true
+            }
+            if trimmed {
+                endColumn = lineTable[endLine - 1].content.utf8.count
+            }
+        }
+
         let startLineInfo = lineTable[startLine - 1]
-        let startByteColumnOffset = startColumn - 1
-        let startUTF16ColumnOffset = byteToUTF16Offset(startByteColumnOffset, in: startLineInfo)
-        let startUTF16Index = startLineInfo.utf16Offset + startUTF16ColumnOffset
-        let startByteIndex = startLineInfo.byteOffset + startByteColumnOffset
+        // cmark's start column points at the marker after up to three legal
+        // indentation spaces. Public block ranges address authored source, so
+        // those leading bytes belong to the block and must survive slicing and
+        // editing along with its marker.
+        let startUTF16Index = startLineInfo.utf16Offset
+        let startByteIndex = startLineInfo.byteOffset
 
         let endLineInfo = lineTable[endLine - 1]
         let endByteColumnOffset = endColumn
@@ -547,6 +825,42 @@ public struct MarkdownParser {
         let byteRange = NSRange(location: startByteIndex, length: Swift.max(0, endByteIndex - startByteIndex))
 
         return RangePair(charRange: charRange, byteRange: byteRange, lineRange: startLine...endLine)
+    }
+
+    /// Counts the same source line endings as `buildLineTable`: LF, CR, and
+    /// CRLF as one ending. Other Unicode newline scalars are literal content
+    /// to cmark and must not move a block onto the following source line.
+    private func sourceLineCount(_ source: String) -> Int {
+        let bytes = Array(source.utf8)
+        var count = 1
+        var index = 0
+        while index < bytes.count {
+            if bytes[index] == Self.crByte {
+                count += 1
+                index += 1
+                if index < bytes.count && bytes[index] == Self.newlineByte {
+                    index += 1
+                }
+            } else if bytes[index] == Self.newlineByte {
+                count += 1
+                index += 1
+            } else {
+                index += 1
+            }
+        }
+        if bytes.last == Self.crByte || bytes.last == Self.newlineByte {
+            count -= 1
+        }
+        return Swift.max(1, count)
+    }
+
+    /// CommonMark blank lines contain only ASCII spaces and tabs. Foundation's
+    /// `.whitespaces` also includes NBSP, EM SPACE, and other authored Unicode
+    /// content that cmark keeps inside the list's reported source range.
+    private func isCommonMarkBlankLine(_ line: String) -> Bool {
+        line.utf8.allSatisfy { byte in
+            byte == Self.spaceByte || byte == Self.tabByte
+        }
     }
 
     private func byteToUTF16Offset(_ byteOffset: Int, in lineInfo: LineInfo) -> Int {

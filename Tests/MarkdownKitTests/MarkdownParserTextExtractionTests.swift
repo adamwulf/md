@@ -243,21 +243,61 @@ final class MarkdownParserTextExtractionTests: XCTestCase {
         )
     }
 
-    // MARK: - Blocks the parser deliberately skips
+    // MARK: - Raw HTML blocks
 
-    func testHtmlBlocksProduceNoBlockAtAll() {
-        XCTAssertEqual(parser.parse("<div>\nhi\n</div>\n").count, 0)
+    func testHtmlBlocksKeepTheirLiteralText() {
+        let blocks = parser.parse("<div>\nhi\n</div>\n")
+        XCTAssertEqual(blocks.count, 1)
+        guard case .htmlBlock(let literal, _, _, _) = blocks[0] else {
+            return XCTFail("Expected an HTML block, got \(blocks[0])")
+        }
+        XCTAssertEqual(literal, "<div>\nhi\n</div>\n")
     }
 
-    func testAnHtmlBlockBetweenTwoParagraphsIsSilentlyDropped() {
+    func testAnHtmlBlockBetweenTwoParagraphsIsKeptInSourceOrder() {
         let blocks = parser.parse("Before.\n\n<div>x</div>\n\nAfter.\n")
-        XCTAssertEqual(blocks.count, 2)
+        XCTAssertEqual(blocks.count, 3)
         guard case .paragraph(let first, _, _, _) = blocks[0],
-              case .paragraph(let second, _, _, _) = blocks[1] else {
-            return XCTFail("Expected two paragraphs, got \(blocks)")
+              case .htmlBlock(let literal, _, _, _) = blocks[1],
+              case .paragraph(let second, _, _, _) = blocks[2] else {
+            return XCTFail("Expected paragraph, HTML, paragraph; got \(blocks)")
         }
         XCTAssertEqual(first, "Before.")
+        XCTAssertEqual(literal, "<div>x</div>\n")
         XCTAssertEqual(second, "After.")
+    }
+
+    func testEveryCommonMarkHtmlBlockKindKeepsItsLiteralText() {
+        let cases: [(input: String, literal: String)] = [
+            ("<script>\nraw & text\n</script>\n", "<script>\nraw & text\n</script>\n"),
+            ("<!-- open\nraw -- body\n-->\n", "<!-- open\nraw -- body\n-->\n"),
+            ("<?target data?>\n", "<?target data?>\n"),
+            ("<!DOCTYPE html>\n", "<!DOCTYPE html>\n"),
+            ("<![CDATA[\n<x>&y\n]]>\n", "<![CDATA[\n<x>&y\n]]>\n"),
+            ("<table>\n<tr><td>x</td></tr>\n</table>\n", "<table>\n<tr><td>x</td></tr>\n</table>\n"),
+            ("<x-custom data-x=\"1\">\nraw\n\n", "<x-custom data-x=\"1\">\nraw\n")
+        ]
+
+        for testCase in cases {
+            let blocks = parser.parse(testCase.input)
+            XCTAssertEqual(blocks.count, 1, "input: \(testCase.input.debugDescription)")
+            guard let block = blocks.first,
+                  case .htmlBlock(let literal, _, _, _) = block else {
+                XCTFail("Expected an HTML block for \(testCase.input.debugDescription)")
+                continue
+            }
+            XCTAssertEqual(literal, testCase.literal)
+        }
+    }
+
+    func testHtmlBlockLiteralKeepsIndentationTabsTrailingSpacesAndUnicode() {
+        let source = "   <div data-x=\"é\">  \n\tbody 漢字\t \n   </div>   \n"
+        let blocks = parser.parse(source)
+        guard blocks.count == 1,
+              case .htmlBlock(let literal, _, _, _) = blocks[0] else {
+            return XCTFail("Expected one HTML block, got \(blocks)")
+        }
+        XCTAssertEqual(literal, source)
     }
 
     // MARK: - Line breaks inside a block
@@ -298,18 +338,48 @@ final class MarkdownParserTextExtractionTests: XCTestCase {
     }
 
     func testABlockquoteKeepsTheBreakBetweenItsParagraphs() {
-        XCTExpectFailure("""
-            getChildrenText concatenates the rendered child blocks of a container \
-            with no separator, so a blockquote holding two paragraphs collapses to \
-            "AB". The paragraphs should stay separated by a blank line. md format \
-            writes this back out as "> AB", running the two paragraphs together.
-            """)
         let blocks = parser.parse("> A\n>\n> B\n")
         XCTAssertEqual(blocks.count, 1)
         guard case .blockquote(let text, _, _, _) = blocks[0] else {
             return XCTFail("Expected a blockquote, got \(blocks[0])")
         }
         XCTAssertEqual(text, "A\n\nB")
+    }
+
+    func testABlockquoteKeepsAHeadingApartFromTheParagraphBelowIt() {
+        let blocks = parser.parse("> # Heading\n>\n> Paragraph.\n")
+        XCTAssertEqual(blocks.count, 1)
+        guard case .blockquote(let text, _, _, _) = blocks[0] else {
+            return XCTFail("Expected a blockquote, got \(blocks[0])")
+        }
+        XCTAssertEqual(text, "# Heading\n\nParagraph.")
+    }
+
+    func testABlockquoteKeepsSiblingListItemsAtTheSameLevel() {
+        let blocks = parser.parse("> - one\n> - two\n")
+        XCTAssertEqual(blocks.count, 1)
+        guard case .blockquote(let text, _, _, _) = blocks[0] else {
+            return XCTFail("Expected a blockquote, got \(blocks[0])")
+        }
+        XCTAssertEqual(text, "- one\n- two")
+    }
+
+    func testABlockquoteKeepsNestedListItemsThatBeginWithBlockMarkers() {
+        let source = """
+        > - outer
+        >   - <!-- x -->
+        >   - ---
+        >   - sibling
+        """
+        let blocks = parser.parse(source)
+        XCTAssertEqual(blocks.count, 1)
+        guard case .blockquote(let text, _, _, _) = blocks[0] else {
+            return XCTFail("Expected a blockquote, got \(blocks[0])")
+        }
+        XCTAssertEqual(
+            text,
+            "- outer\n  - <!-- x -->\n  - ---\n  - sibling"
+        )
     }
 
     func testABlockquoteKeepsSoftBreaksWithinOneParagraph() {
@@ -328,5 +398,34 @@ final class MarkdownParserTextExtractionTests: XCTestCase {
             return XCTFail("Expected a blockquote, got \(blocks[0])")
         }
         XCTAssertEqual(text, "> inner")
+    }
+
+    func testANestedBlockquoteDoesNotGainRendererOnlyBlankLines() {
+        let blocks = parser.parse("> > <!-- x -->\n")
+        XCTAssertEqual(blocks.count, 1)
+        guard case .blockquote(let text, _, _, _) = blocks[0] else {
+            return XCTFail("Expected a blockquote, got \(blocks[0])")
+        }
+        XCTAssertEqual(text, "> <!-- x -->")
+    }
+
+    func testABlockquoteTabKeepsIndentationBeyondItsMarkerPaddingColumn() {
+        let cases = [
+            (source: ">\t  ---\n", expected: "    ---"),
+            (source: " >\t   <div>\n", expected: "    <div>"),
+            (source: "  >\t    - item\n", expected: "    - item"),
+            (source: "   >\t code\n", expected: "    code"),
+            (source: ">\t    code\n", expected: "      code")
+        ]
+
+        for testCase in cases {
+            let blocks = parser.parse(testCase.source)
+            XCTAssertEqual(blocks.count, 1, "for \(testCase.source.debugDescription)")
+            guard case .blockquote(let text, _, _, _) = blocks[0] else {
+                XCTFail("Expected a blockquote for \(testCase.source.debugDescription)")
+                continue
+            }
+            XCTAssertEqual(text, testCase.expected, "for \(testCase.source.debugDescription)")
+        }
     }
 }

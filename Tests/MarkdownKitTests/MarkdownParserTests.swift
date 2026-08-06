@@ -451,18 +451,6 @@ final class MarkdownParserTests: XCTestCase {
         }
     }
 
-    /// KNOWN FAILURE, kept as documentation for a later fix.
-    ///
-    /// A blockquote can hold more than one paragraph. `getChildrenText` puts the text
-    /// of each paragraph one after the other, and `getNodeText` trims the commonmark
-    /// that it renders for each one. Thus no separator stays between them and the last
-    /// word of the first paragraph touches the first word of the second.
-    ///
-    /// This is the same loss as the soft break bug, but between two blocks and not
-    /// inside one, thus the soft break fix does not correct it. The fix must keep the
-    /// two paragraphs apart. How many newlines to put between them is for that fix to
-    /// decide, thus this test only asks for a line break. Remove the
-    /// `XCTExpectFailure` when the fix is in.
     func testParseBlockquoteWithTwoParagraphsKeepsThemApart() {
         let blocks = parser.parse("> para one\n>\n> para two")
         XCTAssertEqual(blocks.count, 1)
@@ -470,9 +458,7 @@ final class MarkdownParserTests: XCTestCase {
             XCTFail("Expected blockquote")
             return
         }
-        XCTExpectFailure("Two paragraphs of a blockquote are joined with no separator") {
-            XCTAssertTrue(text.contains("\n"), "The two paragraphs ran together: \(text.debugDescription)")
-        }
+        XCTAssertEqual(text, "para one\n\npara two")
     }
 
     // MARK: - Thematic Breaks

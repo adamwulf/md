@@ -7,9 +7,21 @@
 //
 
 import XCTest
+import MarkdownKit
 @testable import md
 
 final class FormatCommandRunTests: XCTestCase {
+
+    private enum BlockSemantics: Equatable {
+        case heading(Int, String)
+        case paragraph(String)
+        case code(String?, String)
+        case list([ListItem], Bool)
+        case blockquote(String)
+        case thematicBreak
+        case table([[String]])
+        case html(String)
+    }
 
     private var scratch: ScratchDirectory!
 
@@ -30,6 +42,50 @@ final class FormatCommandRunTests: XCTestCase {
         return try await StandardStream.capturingStandardOutput {
             try await command.run()
         }
+    }
+
+    private func semantics(of source: String) -> [BlockSemantics] {
+        func normalizedLineEndings(_ text: String) -> String {
+            text.replacingOccurrences(of: "\r\n", with: "\n")
+                .replacingOccurrences(of: "\r", with: "\n")
+        }
+
+        return MarkdownParser().parse(source).map { block in
+            switch block {
+            case .heading(let level, let text, _, _, _):
+                return .heading(level, text)
+            case .paragraph(let text, _, _, _):
+                return .paragraph(normalizedLineEndings(text))
+            case .codeBlock(let language, let code, _, _, _):
+                return .code(language, normalizedLineEndings(code))
+            case .list(let items, let ordered, _, _, _):
+                return .list(items, ordered)
+            case .blockquote(let text, _, _, _):
+                return .blockquote(normalizedLineEndings(text))
+            case .thematicBreak:
+                return .thematicBreak
+            case .table(let rows, _, _, _):
+                return .table(rows)
+            case .htmlBlock(let literal, _, _, _):
+                return .html(normalizedLineEndings(literal))
+            }
+        }
+    }
+
+    private func assertThreePassSemanticIdempotence(
+        _ source: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async throws {
+        let expectedSemantics = semantics(of: source)
+        let once = try await runFormat(on: source)
+        let twice = try await runFormat(on: once)
+        let threeTimes = try await runFormat(on: twice)
+        XCTAssertEqual(semantics(of: once), expectedSemantics, "first pass for \(source.debugDescription)", file: file, line: line)
+        XCTAssertEqual(semantics(of: twice), expectedSemantics, "second pass for \(source.debugDescription)", file: file, line: line)
+        XCTAssertEqual(semantics(of: threeTimes), expectedSemantics, "third pass for \(source.debugDescription)", file: file, line: line)
+        XCTAssertEqual(twice, once, "second-pass bytes for \(source.debugDescription)", file: file, line: line)
+        XCTAssertEqual(threeTimes, twice, "third-pass bytes for \(source.debugDescription)", file: file, line: line)
     }
 
     // MARK: - run()
@@ -212,13 +268,241 @@ final class FormatCommandRunTests: XCTestCase {
     }
 
     func testFormatKeepsABlockquoteParagraphBreak() async throws {
-        XCTExpectFailure("""
-            A blockquote holding two paragraphs is flattened to a single run of \
-            text, so md format writes "> AB". The two paragraphs should stay \
-            apart. Same root cause as the parser-level blockquote test.
-            """)
         let output = try await runFormat(on: "> A\n>\n> B\n")
-        XCTAssertEqual(output, "> A\n> \n> B\n")
+        XCTAssertEqual(output, "> A\n>\n> B\n")
+    }
+
+    func testFormatKeepsAListInsideABlockquoteStable() async throws {
+        let source = "> Intro.\n>\n> - one\n> - two\n"
+        let once = try await runFormat(on: source)
+        let twice = try await runFormat(on: once)
+        let threeTimes = try await runFormat(on: twice)
+        XCTAssertEqual(once, source)
+        XCTAssertEqual(twice, once)
+        XCTAssertEqual(threeTimes, once)
+    }
+
+    func testFormatKeepsNestedListItemsBeginningWithHtmlOrThematicBreaksStable() async throws {
+        let sources = [
+            "> - outer\n>   - <!-- x -->\n>   - sibling\n",
+            "> - outer\n>   - ---\n>   - sibling\n"
+        ]
+
+        for source in sources {
+            let once = try await runFormat(on: source)
+            let twice = try await runFormat(on: once)
+            let threeTimes = try await runFormat(on: twice)
+            XCTAssertEqual(once, source, "first pass for \(source)")
+            XCTAssertEqual(twice, once, "second pass for \(source)")
+            XCTAssertEqual(threeTimes, once, "third pass for \(source)")
+        }
+    }
+
+    func testFormatKeepsListItemsContainingThematicBreaksStable() async throws {
+        let sources = [
+            "- ***\n",
+            "- outer\n    - ***\n"
+        ]
+
+        for source in sources {
+            let once = try await runFormat(on: source)
+            let twice = try await runFormat(on: once)
+            XCTAssertEqual(once, source, "first pass for \(source.debugDescription)")
+            XCTAssertEqual(twice, once, "second pass for \(source.debugDescription)")
+        }
+    }
+
+    func testFormatKeepsSetextHeadingsInsideTaskItemsStable() async throws {
+        let cases = [
+            (source: "- [x] done\n  -\n", expected: "- [x] done\n  -\n"),
+            (source: "1. [ ] done\n    ===\n", expected: "1. [ ] done\n   ===\n")
+        ]
+
+        for testCase in cases {
+            let once = try await runFormat(on: testCase.source)
+            let twice = try await runFormat(on: once)
+            XCTAssertEqual(once, testCase.expected, "first pass for \(testCase.source.debugDescription)")
+            XCTAssertEqual(twice, once, "second pass for \(testCase.source.debugDescription)")
+        }
+    }
+
+    func testFormatKeepsAThematicBreakAfterACheckboxOnlyTaskItemParagraph() async throws {
+        let source = "- [x] \n  ***\n"
+        let once = try await runFormat(on: source)
+        let twice = try await runFormat(on: once)
+        XCTAssertEqual(once, source)
+        XCTAssertEqual(twice, once)
+    }
+
+    func testFormatKeepsEmptyATXHeadingsAfterACheckboxOnlyTaskItemStable() async throws {
+        for level in 1...6 {
+            let source = "- [x] \n  \(String(repeating: "#", count: level))\n"
+            let once = try await runFormat(on: source)
+            let twice = try await runFormat(on: once)
+            let threeTimes = try await runFormat(on: twice)
+            XCTAssertEqual(once, source, "first pass for level \(level)")
+            XCTAssertEqual(twice, once, "second pass for level \(level)")
+            XCTAssertEqual(threeTimes, twice, "third pass for level \(level)")
+        }
+    }
+
+    func testCheckboxOnlyTaskBoundariesPreserveFollowingBlockSemantics() async throws {
+        var sources: [String] = []
+        for level in 1...6 {
+            let marker = String(repeating: "#", count: level)
+            sources.append("- [x] \n  \(marker)\n")
+            sources.append("- [ ] \n  \(marker) Hé😀 \(level)\n")
+        }
+        sources += [
+            "- [ ] \n  Setext one\n  ===\n",
+            "- [x] \n  Setext two\n  ---\n",
+            "- [x] \n  ---\n",
+            "- [ ] \n  > quoted\n",
+            "- [x] \n  ```swift\n  let café = 1\n  ```\n",
+            "- [ ] \n  <div>\n  Hé😀\n  </div>\n",
+            "- [x] \n  | A | B |\n  | - | - |\n  | α | β |\n",
+            "- [ ] \n  - child\n",
+            "- [x] \n  ### heading\n- sibling\n- [ ] \n  #### next\n",
+            "- [x] \n  # heading\n\n  > adjacent quote\n\n  ```\n  adjacent code\n  ```\n- sibling\n",
+            "- [ ] \n  <div>adjacent HTML</div>\n\n  | A |\n  | - |\n  | β |\n- sibling\n",
+            "1. [x] \n    # ordered\n2. sibling\n",
+            "- outer\n    1. [ ] \n       ### deep\n    2. sibling\n",
+            "- [ ] \n  - [x] \n    #### deep task\n",
+            "-\t[x] \n\t##\tTabbed\n",
+            "- [x] \r\n  ### Hé😀\r\n",
+            "- [ ] \r  #### lone CR\r",
+            "- [x] \n  ##### no final newline"
+        ]
+
+        for source in sources {
+            try await assertThreePassSemanticIdempotence(source)
+        }
+    }
+
+    func testFormatDoesNotAddBlankLinesInsideNestedQuotes() async throws {
+        let sources = [
+            "> > <!-- x -->\n",
+            "> > ```\n> > code\n> > ```\n",
+            "> > ---\n"
+        ]
+
+        for source in sources {
+            let once = try await runFormat(on: source)
+            let twice = try await runFormat(on: once)
+            XCTAssertEqual(once, source, "first pass for \(source)")
+            XCTAssertEqual(twice, once, "second pass for \(source)")
+        }
+    }
+
+    func testFormatPreservesTabExpandedCodeIndentationAfterBlockquoteMarkers() async throws {
+        let markerLookalikes = ["---", "<div>", "- item"]
+        let prefixes = [">\t  ", " >\t   ", "  >\t    ", "   >\t "]
+
+        for marker in markerLookalikes {
+            for prefix in prefixes {
+                let source = "\(prefix)\(marker)\n"
+                let expected = ">     \(marker)\n"
+                let once = try await runFormat(on: source)
+                let twice = try await runFormat(on: once)
+                XCTAssertEqual(once, expected, "first pass for \(source.debugDescription)")
+                XCTAssertEqual(twice, once, "second pass for \(source.debugDescription)")
+            }
+        }
+
+        let spacedCode = try await runFormat(on: ">\t    code\n")
+        XCTAssertEqual(spacedCode, ">       code\n")
+    }
+
+    func testFormatKeepsBlockquotesInsideListItemsStable() async throws {
+        let cases = [
+            (
+                source: "- before\n  > A\n  >\n  > B\n- after\n",
+                expected: "- before\n\n  > A\n  >\n  > B\n\n- after\n"
+            ),
+            (
+                source: "- before\n  > <!-- x -->\n- after\n",
+                expected: "- before\n\n  > <!-- x -->\n\n- after\n"
+            )
+        ]
+
+        for testCase in cases {
+            let once = try await runFormat(on: testCase.source)
+            let twice = try await runFormat(on: once)
+            let threeTimes = try await runFormat(on: twice)
+            XCTAssertEqual(once, testCase.expected, "first pass for \(testCase.source)")
+            XCTAssertEqual(twice, once, "second pass for \(testCase.source)")
+            XCTAssertEqual(threeTimes, once, "third pass for \(testCase.source)")
+        }
+    }
+
+    func testFormatConsumesListContainerPrefixesBeforeNestedBlockquoteMarkers() async throws {
+        let cases = [
+            (source: "- > quote\n", expected: "- > quote\n"),
+            (source: "1. > quote\n", expected: "1. > quote\n"),
+            (source: "- outer\n  - > quote\n", expected: "- outer\n    - > quote\n"),
+            (source: "-\t> quote\n", expected: "- > quote\n"),
+            (source: "- item\n\t> quote\n", expected: "- item\n\n  > quote\n"),
+            (source: "- before\n  > A\n    > B\n", expected: "- before\n\n  > A\n  > B\n"),
+            (source: "- > <!-- x -->\n", expected: "- > <!-- x -->\n"),
+            (source: "- > ---\n", expected: "- > ---\n"),
+            (source: "- >     code\n", expected: "- >     code\n")
+        ]
+
+        for testCase in cases {
+            let once = try await runFormat(on: testCase.source)
+            let twice = try await runFormat(on: once)
+            let threeTimes = try await runFormat(on: twice)
+            XCTAssertEqual(once, testCase.expected, "first pass for \(testCase.source.debugDescription)")
+            XCTAssertEqual(twice, once, "second pass for \(testCase.source.debugDescription)")
+            XCTAssertEqual(threeTimes, once, "third pass for \(testCase.source.debugDescription)")
+        }
+    }
+
+    func testFormatIsStableWhenABlockquoteFollowsANestedListInTheSameItem() async throws {
+        let cases = [
+            (
+                source: "- alpha\n  - beta\n  > gamma\n",
+                expected: "- alpha\n\n    - beta\n\n  > gamma\n"
+            ),
+            (
+                source: "1. alpha\n    - beta\n    > gamma\n",
+                expected: "1. alpha\n\n    - beta\n\n   > gamma\n"
+            ),
+            (
+                source: "- [ ] alpha\n  - [x] beta\n  > gamma\n",
+                expected: "- [ ] alpha\n\n    - [x] beta\n\n  > gamma\n"
+            )
+        ]
+
+        for testCase in cases {
+            let once = try await runFormat(on: testCase.source)
+            let twice = try await runFormat(on: once)
+            let threeTimes = try await runFormat(on: twice)
+            XCTAssertEqual(once, testCase.expected, "first pass for \(testCase.source)")
+            XCTAssertEqual(twice, once, "second pass for \(testCase.source)")
+            XCTAssertEqual(threeTimes, once, "third pass for \(testCase.source)")
+        }
+    }
+
+    func testFormatDoesNotAddLeadingQuoteLinesBeforeFirstChildBlocks() async throws {
+        let sources = [
+            "> ```\n> code\n> ```\n",
+            "> ---\n",
+            "> <script>\n> script body\n> </script>\n",
+            "> <!--\n> comment body\n> -->\n",
+            "> <?target\n> processing body\n> ?>\n",
+            "> <!DOCTYPE\n> declaration body>\n",
+            "> <![CDATA[\n> cdata body\n> ]]>\n",
+            "> <table>\n> <tr><td>cell</td></tr>\n> </table>\n",
+            "> <custom>\n> custom body\n"
+        ]
+
+        for source in sources {
+            let once = try await runFormat(on: source)
+            let twice = try await runFormat(on: once)
+            XCTAssertFalse(once.hasPrefix(">\n"), "for \(source)")
+            XCTAssertEqual(twice, once, "for \(source)")
+        }
     }
 
     /// Fixed by `MarkdownEscaper`. See `EscapedMarkdownRoundTripTests` for the whole
@@ -238,12 +522,7 @@ final class FormatCommandRunTests: XCTestCase {
         XCTAssertEqual(secondPass, output)
     }
 
-    func testFormatDropsHtmlBlocksEntirely() async throws {
-        XCTExpectFailure("""
-            MarkdownBlock has no case for raw HTML, so parseNode returns nil for \
-            an html_block and md format deletes it. The <div> below should \
-            survive the round trip.
-            """)
+    func testFormatKeepsHtmlBlocks() async throws {
         let output = try await runFormat(on: "Before.\n\n<div>x</div>\n\nAfter.\n")
         XCTAssertEqual(output, "Before.\n\n<div>x</div>\n\nAfter.\n")
     }

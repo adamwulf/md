@@ -27,7 +27,8 @@ final class MarkdownBlockRangeTests: XCTestCase {
             .list(items: [], ordered: false, charRange: charRange, byteRange: byteRange, lineRange: lineRange),
             .blockquote(text: "q", charRange: charRange, byteRange: byteRange, lineRange: lineRange),
             .thematicBreak(charRange: charRange, byteRange: byteRange, lineRange: lineRange),
-            .table(rows: [], charRange: charRange, byteRange: byteRange, lineRange: lineRange)
+            .table(rows: [], charRange: charRange, byteRange: byteRange, lineRange: lineRange),
+            .htmlBlock(literal: "<div></div>", charRange: charRange, byteRange: byteRange, lineRange: lineRange)
         ]
     }
 
@@ -52,7 +53,7 @@ final class MarkdownBlockRangeTests: XCTestCase {
     }
 
     func testEveryCaseIsRepresentedExactlyOnce() {
-        XCTAssertEqual(everyCase.count, 7)
+        XCTAssertEqual(everyCase.count, 8)
     }
 
     // MARK: - ListItem
@@ -113,6 +114,56 @@ final class MarkdownBlockRangeTests: XCTestCase {
         assertByteRanges("# One\n\n# Two\n", cover: ["# One", "# Two"])
     }
 
+    func testListRangesStopBeforeTheBlankLineBelowThem() {
+        let markdown = "- a\n- b\n\nAfter.\n"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.first?.lineRange, 1...2)
+        assertByteRanges(markdown, cover: ["- a\n- b", "After."])
+        assertCharRanges(markdown, cover: ["- a\n- b", "After."])
+    }
+
+    func testListRangesDropEveryTrailingBlankLine() {
+        let blocks = parser.parse("- a\n- b\n\n\nAfter.\n")
+        XCTAssertEqual(blocks.first?.lineRange, 1...2)
+    }
+
+    func testListRangesStopBeforeACarriageReturnLineFeedBlankLine() {
+        let markdown = "- a\r\n- b\r\n\r\nAfter.\r\n"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.first?.lineRange, 1...2)
+        assertByteRanges(markdown, cover: ["- a\r\n- b", "After."])
+        assertCharRanges(markdown, cover: ["- a\r\n- b", "After."])
+    }
+
+    func testListRangesTreatWhitespaceOnlyLinesAsBlank() {
+        let blocks = parser.parse("- a\n- b\n \t \nAfter.\n")
+        XCTAssertEqual(blocks.first?.lineRange, 1...2)
+    }
+
+    func testListRangesKeepNonBreakingSpaceContent() {
+        let markdown = "- a\n\u{00A0}\n\nAfter.\n"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.first?.lineRange, 1...2)
+        assertByteRanges(markdown, cover: ["- a\n\u{00A0}", "After."])
+        assertCharRanges(markdown, cover: ["- a\n\u{00A0}", "After."])
+    }
+
+    func testListRangesKeepEmSpaceContentWithCarriageReturnLineFeeds() {
+        let markdown = "- a\r\n\u{2003}\r\n\r\nAfter.\r\n"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.first?.lineRange, 1...2)
+        assertByteRanges(markdown, cover: ["- a\r\n\u{2003}", "After."])
+        assertCharRanges(markdown, cover: ["- a\r\n\u{2003}", "After."])
+    }
+
+    func testListRangesAddressMultibyteFinalItemsWithCarriageReturnLineFeeds() {
+        let markdown = "- alpha\r\n- 🌍\r\n\r\nAfter.\r\n"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.first?.lineRange, 1...2)
+        assertByteRanges(markdown, cover: ["- alpha\r\n- 🌍", "After."])
+        assertCharRanges(markdown, cover: ["- alpha\r\n- 🌍", "After."])
+    }
+
     func testByteRangesAddressLoneCarriageReturnSource() {
         assertByteRanges("# One\r\r# Two\r", cover: ["# One", "# Two"])
     }
@@ -148,6 +199,81 @@ final class MarkdownBlockRangeTests: XCTestCase {
 
     func testCharRangesAddressCarriageReturnLineFeedSource() {
         assertCharRanges("# One\r\n\r\n# Two\r\n", cover: ["# One", "# Two"])
+    }
+
+    func testMultilineDelimiterTerminatedHtmlRangesCoverTheirClosingLines() {
+        let htmlBlocks = [
+            "<script>\nconst café = 1\n</script>",
+            "<!--\ncomment 🌍\n-->",
+            "<?target\nvalue 🌍\n?>",
+            "<!DOCTYPE\nhtml 🌍>",
+            "<![CDATA[\n<raw 🌍>\n]]>"
+        ]
+
+        for html in htmlBlocks {
+            let crlfHTML = html.replacingOccurrences(of: "\n", with: "\r\n")
+            let markdown = "Before 🌍.\r\n\r\n\(crlfHTML)\r\n\r\nAfter.\r\n"
+            let blocks = parser.parse(markdown)
+            let htmlLineCount = html.split(separator: "\n").count
+
+            XCTAssertEqual(blocks.count, 3, "for \(html)")
+            XCTAssertEqual(blocks[1].lineRange, 3...(2 + htmlLineCount), "for \(html)")
+            assertByteRanges(
+                markdown,
+                cover: ["Before 🌍.", crlfHTML, "After."]
+            )
+            assertCharRanges(
+                markdown,
+                cover: ["Before 🌍.", crlfHTML, "After."]
+            )
+        }
+    }
+
+    func testUnicodeLineSeparatorInsideHtmlDoesNotExtendItsSourceRange() {
+        let markdown = "<!-- alpha\u{2028}omega -->\nAfter.\n"
+        let blocks = parser.parse(markdown)
+
+        XCTAssertEqual(blocks.count, 2)
+        XCTAssertEqual(blocks[0].lineRange, 1...1)
+        XCTAssertEqual(blocks[1].lineRange, 2...2)
+        assertByteRanges(
+            markdown,
+            cover: ["<!-- alpha\u{2028}omega -->", "After."]
+        )
+        assertCharRanges(
+            markdown,
+            cover: ["<!-- alpha\u{2028}omega -->", "After."]
+        )
+    }
+
+    func testHtmlRangesIncludeLegalLeadingSourceIndentation() {
+        let markdown = "   <script>\nx\n</script>\n\nAfter.\n"
+        let blocks = parser.parse(markdown)
+
+        XCTAssertEqual(blocks.first?.lineRange, 1...3)
+        assertByteRanges(
+            markdown,
+            cover: ["   <script>\nx\n</script>", "After."]
+        )
+        assertCharRanges(
+            markdown,
+            cover: ["   <script>\nx\n</script>", "After."]
+        )
+    }
+
+    func testListRangesIncludeLegalLeadingSourceIndentation() {
+        let markdown = "   - alpha\n   - beta\n\nAfter.\n"
+        let blocks = parser.parse(markdown)
+
+        XCTAssertEqual(blocks.first?.lineRange, 1...2)
+        assertByteRanges(
+            markdown,
+            cover: ["   - alpha\n   - beta", "After."]
+        )
+        assertCharRanges(
+            markdown,
+            cover: ["   - alpha\n   - beta", "After."]
+        )
     }
 
     // MARK: - Line ranges

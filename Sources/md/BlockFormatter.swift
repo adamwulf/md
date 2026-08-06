@@ -105,7 +105,7 @@ enum BlockFormatter {
         case .blockquote(let text, _, _, _):
             let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
             for line in lines {
-                output += "> \(line)\n"
+                output += line.isEmpty ? ">\n" : "> \(line)\n"
             }
 
         case .thematicBreak(_, _, _):
@@ -119,6 +119,12 @@ enum BlockFormatter {
             output += "| \(colWidths.map { String(repeating: "-", count: max($0, 3)) }.joined(separator: " | ")) |\n"
             for row in rows.dropFirst() {
                 output += "| \(row.joined(separator: " | ")) |\n"
+            }
+
+        case .htmlBlock(let literal, _, _, _):
+            output += literal
+            if !literal.hasSuffix("\n") {
+                output += "\n"
             }
         }
 

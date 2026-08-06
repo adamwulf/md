@@ -23,7 +23,7 @@ struct BlocksCommand: AsyncParsableCommand {
             (inclusive). END defaults to START.
 
             Block types: heading, paragraph, code block, ordered list, unordered \
-            list, blockquote, table, and thematic break.
+            list, blockquote, table, thematic break, and raw HTML.
 
               $ md blocks --file README.md
               $ md blocks --count --file README.md
@@ -106,6 +106,8 @@ struct BlocksCommand: AsyncParsableCommand {
             return "thematic_break L\(lineRange.lowerBound)"
         case .table(let rows, _, _, let lineRange):
             return "table(\(rows.count) rows) L\(lineRange.lowerBound)-\(lineRange.upperBound)"
+        case .htmlBlock(_, _, _, let lineRange):
+            return "html L\(lineRange.lowerBound)-\(lineRange.upperBound)"
         }
     }
 }

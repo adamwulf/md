@@ -17,8 +17,8 @@ struct MD: AsyncParsableCommand {
         abstract: "A CLI tool for parsing and operating on Markdown files",
         discussion: """
             Blocks are structural markdown elements: headings, paragraphs, code \
-            blocks, lists (ordered and unordered), blockquotes, tables, and \
-            thematic breaks. All block indices are 1-based.
+            blocks, lists (ordered and unordered), blockquotes, tables, raw HTML, \
+            and thematic breaks. All block indices are 1-based.
 
             Every command requires input via --file <path> or --stdin (but not both).
             """,
