@@ -133,15 +133,31 @@ final class ListCommandCoverageTests: XCTestCase {
         XCTAssertEqual(output, "== \(unreadable.path) ==\n(no frontmatter)\n")
     }
 
-    func testAnUnreadableSubdirectoryDoesNotStopTheWalk() async throws {
+    func testAnUnreadableSubdirectoryContinuesTheWalkAndExitsFailure() async throws {
         let readable = try write("---\ntitle: Readable\n---\n", to: "readable.md")
         try write("---\ntitle: Hidden\n---\n", to: "locked/hidden.md")
         let locked = scratch.url.appendingPathComponent("locked")
         XCTAssertEqual(chmod(locked.path, 0o000), 0)
         defer { chmod(locked.path, 0o700) }
+        let command = try ListCommand.parse([
+            "-r", "--key", "title", scratch.url.path,
+        ])
 
-        let output = try await runList(["-r", "--key", "title"])
-        XCTAssertEqual(output, "\(readable.path)\tReadable\n")
+        let captured = try await StandardStream.capturingCommandRun {
+            try await command.run()
+        }
+
+        XCTAssertEqual(captured.standardOutput, "\(readable.path)\tReadable\n")
+        XCTAssertTrue(
+            captured.standardError.contains(locked.path),
+            "got: \(captured.standardError.debugDescription)"
+        )
+        guard let exitCode = captured.error as? ExitCode else {
+            return XCTFail(
+                "Expected ExitCode.failure, got \(String(describing: captured.error))"
+            )
+        }
+        XCTAssertEqual(exitCode.rawValue, ExitCode.failure.rawValue)
     }
 
     // MARK: - Frontmatter that projects down to nothing

@@ -230,12 +230,14 @@ struct ListCommand: AsyncParsableCommand {
         }
 
         let resourceKeys: [URLResourceKey] = [.isRegularFileKey, .isSymbolicLinkKey]
+        var hadErrors = false
         guard let enumerator = FileManager.default.enumerator(
             at: root,
             includingPropertiesForKeys: resourceKeys,
             options: options,
             errorHandler: { url, error in
                 self.writeStderr("md list: \(url.path): \(error.localizedDescription)")
+                hadErrors = true
                 return true
             }
         ) else {
@@ -250,7 +252,7 @@ struct ListCommand: AsyncParsableCommand {
             guard url.pathExtension.lowercased() == "md" else { continue }
             results.append(url.path)
         }
-        return (results, false)
+        return (results, hadErrors)
     }
 
     // MARK: - Emitters
