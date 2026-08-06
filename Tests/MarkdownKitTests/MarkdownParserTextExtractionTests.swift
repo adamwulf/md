@@ -361,7 +361,25 @@ final class MarkdownParserTextExtractionTests: XCTestCase {
         guard case .blockquote(let text, _, _, _) = blocks[0] else {
             return XCTFail("Expected a blockquote, got \(blocks[0])")
         }
-        XCTAssertEqual(text, "  - one\n  - two")
+        XCTAssertEqual(text, "- one\n- two")
+    }
+
+    func testABlockquoteKeepsNestedListItemsThatBeginWithBlockMarkers() {
+        let source = """
+        > - outer
+        >   - <!-- x -->
+        >   - ---
+        >   - sibling
+        """
+        let blocks = parser.parse(source)
+        XCTAssertEqual(blocks.count, 1)
+        guard case .blockquote(let text, _, _, _) = blocks[0] else {
+            return XCTFail("Expected a blockquote, got \(blocks[0])")
+        }
+        XCTAssertEqual(
+            text,
+            "- outer\n  - <!-- x -->\n  - ---\n  - sibling"
+        )
     }
 
     func testABlockquoteKeepsSoftBreaksWithinOneParagraph() {
@@ -380,5 +398,14 @@ final class MarkdownParserTextExtractionTests: XCTestCase {
             return XCTFail("Expected a blockquote, got \(blocks[0])")
         }
         XCTAssertEqual(text, "> inner")
+    }
+
+    func testANestedBlockquoteDoesNotGainRendererOnlyBlankLines() {
+        let blocks = parser.parse("> > <!-- x -->\n")
+        XCTAssertEqual(blocks.count, 1)
+        guard case .blockquote(let text, _, _, _) = blocks[0] else {
+            return XCTFail("Expected a blockquote, got \(blocks[0])")
+        }
+        XCTAssertEqual(text, "> <!-- x -->")
     }
 }

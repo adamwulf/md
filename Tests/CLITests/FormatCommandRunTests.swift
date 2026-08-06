@@ -221,9 +221,40 @@ final class FormatCommandRunTests: XCTestCase {
         let once = try await runFormat(on: source)
         let twice = try await runFormat(on: once)
         let threeTimes = try await runFormat(on: twice)
-        XCTAssertEqual(once, "> Intro.\n>\n>   - one\n>   - two\n")
+        XCTAssertEqual(once, source)
         XCTAssertEqual(twice, once)
         XCTAssertEqual(threeTimes, once)
+    }
+
+    func testFormatKeepsNestedListItemsBeginningWithHtmlOrThematicBreaksStable() async throws {
+        let sources = [
+            "> - outer\n>   - <!-- x -->\n>   - sibling\n",
+            "> - outer\n>   - ---\n>   - sibling\n"
+        ]
+
+        for source in sources {
+            let once = try await runFormat(on: source)
+            let twice = try await runFormat(on: once)
+            let threeTimes = try await runFormat(on: twice)
+            XCTAssertEqual(once, source, "first pass for \(source)")
+            XCTAssertEqual(twice, once, "second pass for \(source)")
+            XCTAssertEqual(threeTimes, once, "third pass for \(source)")
+        }
+    }
+
+    func testFormatDoesNotAddBlankLinesInsideNestedQuotes() async throws {
+        let sources = [
+            "> > <!-- x -->\n",
+            "> > ```\n> > code\n> > ```\n",
+            "> > ---\n"
+        ]
+
+        for source in sources {
+            let once = try await runFormat(on: source)
+            let twice = try await runFormat(on: once)
+            XCTAssertEqual(once, source, "first pass for \(source)")
+            XCTAssertEqual(twice, once, "second pass for \(source)")
+        }
     }
 
     func testFormatDoesNotAddLeadingQuoteLinesBeforeFirstChildBlocks() async throws {

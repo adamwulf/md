@@ -283,7 +283,10 @@ public struct MarkdownParser {
             return .list(items: items, ordered: ordered, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_BLOCK_QUOTE:
-            let text = getBlockquoteText(node)
+            let text = getBlockquoteText(
+                lineRange: ranges.lineRange,
+                lineTable: lineTable
+            )
             return .blockquote(text: text, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_THEMATIC_BREAK:
@@ -482,46 +485,41 @@ public struct MarkdownParser {
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Render a blockquote as a complete container, then remove its outer marker.
-    ///
-    /// Rendering child blocks independently loses their container context. In
-    /// particular, cmark indents every list item after the first when handed an
-    /// attached list node on its own, and the indent grows on every format pass.
-    /// Rendering the quote keeps sibling items siblings and preserves the blank lines
-    /// between complete child blocks. Removing exactly one quote marker leaves nested
-    /// quotes and every other inner block marker intact.
-    private func getBlockquoteText(_ node: UnsafeMutablePointer<cmark_node>?) -> String {
-        guard let node else { return "" }
-        let rendered = cmark_render_commonmark(node, 0, 0)
-        defer { free(rendered) }
-        guard let rendered else { return "" }
+    /// Recover a blockquote's authored inner Markdown by removing exactly one
+    /// outer marker from each marked source line. Rendering the AST back to
+    /// CommonMark is not safe here: nested list items beginning with raw HTML or
+    /// thematic breaks acquire ambiguous indentation, and renderer-only blank
+    /// markers appear before some first-child blocks. Source text already has the
+    /// sibling structure and escaping needed to parse the same way again.
+    private func getBlockquoteText(
+        lineRange: ClosedRange<Int>,
+        lineTable: [LineInfo]
+    ) -> String {
+        guard lineRange.lowerBound > 0,
+              lineRange.upperBound <= lineTable.count else { return "" }
 
-        var lines = String(cString: rendered)
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .map { line -> String in
-                guard line.first == ">" else { return String(line) }
-                var content = line.dropFirst()
-                if content.first == " " {
-                    content = content.dropFirst()
-                }
-                return String(content)
-            }
-
-        // cmark's writer terminates its output with a newline. The model stores the
-        // block content rather than that terminator; BlockFormatter supplies it later.
-        if lines.last?.isEmpty == true {
-            lines.removeLast()
+        return lineRange.map { lineNumber in
+            stripOuterBlockquoteMarker(from: lineTable[lineNumber - 1].content)
         }
+        .joined(separator: "\n")
+    }
 
-        // For block types that require blank separation in CommonMark output
-        // (raw HTML, fenced code, thematic breaks), cmark's container renderer
-        // puts marker-only lines before the first child. They are writer syntax,
-        // not authored quote content. Keeping them makes every format pass invent
-        // two leading quoted lines, so discard them before storing the content.
-        while lines.first?.isEmpty == true {
-            lines.removeFirst()
+    /// A CommonMark blockquote marker may have up to three leading ASCII spaces,
+    /// then `>`, then one optional ASCII space or tab. Lazy continuation lines
+    /// have no marker and therefore pass through byte-for-byte.
+    private func stripOuterBlockquoteMarker(from line: String) -> String {
+        let bytes = Array(line.utf8)
+        var index = 0
+        while index < bytes.count && index < 3 && bytes[index] == Self.spaceByte {
+            index += 1
         }
-        return lines.joined(separator: "\n")
+        guard index < bytes.count && bytes[index] == 0x3E else { return line }
+        index += 1
+        if index < bytes.count &&
+            (bytes[index] == Self.spaceByte || bytes[index] == Self.tabByte) {
+            index += 1
+        }
+        return String(decoding: bytes[index...], as: UTF8.self)
     }
 
     private func getNodeText(_ node: UnsafeMutablePointer<cmark_node>?, context: InlineTextContext) -> String {
