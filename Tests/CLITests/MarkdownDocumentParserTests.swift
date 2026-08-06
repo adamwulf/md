@@ -61,13 +61,13 @@ final class MarkdownDocumentParserTests: XCTestCase {
 
         """
 
-    /// cmark ends a list and a thematic break on the blank line that follows
-    /// them, so those two ranges take in the trailing newline as well.
+    /// A thematic break currently ends on the blank line below it. List ranges
+    /// stop at their last content line so a separator is not attributed to them.
     private let allBlockKindSources = [
         "# Heading",
         "A paragraph.",
         "```swift\nlet x = 1\n```",
-        "- one\n- two\n",
+        "- one\n- two",
         "> quoted",
         "---\n",
         "| A | B |\n| --- | --- |\n| 1 | 2 |"
@@ -90,7 +90,7 @@ final class MarkdownDocumentParserTests: XCTestCase {
         let blocks = parser.parseDocument(document)
         XCTAssertEqual(
             blocks.map(\.lineRange),
-            [5...5, 7...7, 9...11, 13...15, 16...16, 18...19, 20...22]
+            [5...5, 7...7, 9...11, 13...14, 16...16, 18...19, 20...22]
         )
     }
 

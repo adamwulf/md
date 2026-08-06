@@ -60,7 +60,7 @@ and the instrumented subprocess hits that limit writing its own profile.
 reported 88.73% where the truth was 98.24%, which were the figures of that
 day. `--build-tests` fixes it.
 
-## Defects: 26 found, 17 fixed, 8 open, 1 withdrawn
+## Defects: 26 found, 18 fixed, 7 open, 1 withdrawn
 
 Each open defect is pinned by tests holding the CORRECT expectation, marked as
 known failures, so it turns green by itself when it is fixed. **The `known-fail`
@@ -74,7 +74,6 @@ Numbers are stable. A fixed defect keeps its number, because commit messages and
 | --- | --- | --- |
 | 4 | An HTML block is deleted. No `MarkdownBlock` case | 6 CLI, 1 Swift |
 | 7 | An unused link reference definition is deleted | 3 CLI |
-| 11 | A list block absorbs the blank line below it | 2 CLI |
 | 13 | An unparseable frontmatter fence reads as no frontmatter, exit 0 | 3 CLI |
 | 17 | `format` rewrites CRLF as LF | 1 CLI |
 | 20 | An ordered list is renumbered from 1 | 2 CLI |
@@ -84,7 +83,8 @@ Numbers are stable. A fixed defect keeps its number, because commit messages and
 Fixed: **1** non-finite JSON number abort, **2** soft line break dropped, **3**
 hard line break dropped, **5** backslash escapes resolved away, **6** two
 blockquote paragraphs flattened into one run, **9** non-ASCII
-YAML values escaped, **10** phantom final line counted, **12** editing commands
+YAML values escaped, **10** phantom final line counted, **11** a list block
+absorbed the blank line below it, **12** editing commands
 counted frontmatter as blocks, **14** `list` reported success for invalid paths,
 **15** `--key` mapping printed as a Swift dictionary, **16** null value serialized
 as `<null>`, **18** editing commands invented a final newline, **19** editing
@@ -142,13 +142,12 @@ asterisk bullet, or thematic break remains byte-for-byte unchanged.
 Ordered by tests turned green for code changed:
 
 1. **13**, **21** — small, but each touches its callers.
-2. **11** — a localized parser range fix.
-3. **4**, **7**, **17**, **20** need the parsed document model to grow: cases
+2. **4**, **7**, **17**, **20** need the parsed document model to grow: cases
    for raw HTML and link reference definitions, plus memory of the line ending
    and ordered-list start number. These touch every `switch` over the enum.
    Take **4** first of the four. `<!-- -->` is the CommonMark idiom for
    holding two blocks apart, and deleting it does not only lose the comment:
    `format-keeps-an-html-comment-that-separates-two-lists` shows two lists
    merging into one, which moves every block index below that point.
-4. **22** only after **4**, **7**, **17**, and **20**, so in-place
+3. **22** only after **4**, **7**, **17**, and **20**, so in-place
    formatting cannot write any of those losses into the user's file.

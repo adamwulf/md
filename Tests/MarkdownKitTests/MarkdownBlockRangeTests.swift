@@ -113,6 +113,32 @@ final class MarkdownBlockRangeTests: XCTestCase {
         assertByteRanges("# One\n\n# Two\n", cover: ["# One", "# Two"])
     }
 
+    func testListRangesStopBeforeTheBlankLineBelowThem() {
+        let markdown = "- a\n- b\n\nAfter.\n"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.first?.lineRange, 1...2)
+        assertByteRanges(markdown, cover: ["- a\n- b", "After."])
+        assertCharRanges(markdown, cover: ["- a\n- b", "After."])
+    }
+
+    func testListRangesDropEveryTrailingBlankLine() {
+        let blocks = parser.parse("- a\n- b\n\n\nAfter.\n")
+        XCTAssertEqual(blocks.first?.lineRange, 1...2)
+    }
+
+    func testListRangesStopBeforeACarriageReturnLineFeedBlankLine() {
+        let markdown = "- a\r\n- b\r\n\r\nAfter.\r\n"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.first?.lineRange, 1...2)
+        assertByteRanges(markdown, cover: ["- a\r\n- b", "After."])
+        assertCharRanges(markdown, cover: ["- a\r\n- b", "After."])
+    }
+
+    func testListRangesTreatWhitespaceOnlyLinesAsBlank() {
+        let blocks = parser.parse("- a\n- b\n \t \nAfter.\n")
+        XCTAssertEqual(blocks.first?.lineRange, 1...2)
+    }
+
     func testByteRangesAddressLoneCarriageReturnSource() {
         assertByteRanges("# One\r\r# Two\r", cover: ["# One", "# Two"])
     }

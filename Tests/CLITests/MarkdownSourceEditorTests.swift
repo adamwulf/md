@@ -319,9 +319,9 @@ final class MarkdownSourceEditorTests: XCTestCase {
         )
     }
 
-    /// cmark reports the blank line after a list as part of the list's range.
-    /// Removing the following final block must not therefore leave that blank
-    /// line at the end of the document.
+    /// The blank line after a list is a separator rather than part of the list.
+    /// Removing the following final block must not leave that separator at the
+    /// end of the document.
     func testRemovingTheBlockAfterAListLeavesNoTrailingBlankLine() {
         let source = "* alpha\n* bravo\n\nTail.\n"
         let blocks = parser.parseDocument(source)

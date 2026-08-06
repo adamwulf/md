@@ -240,7 +240,11 @@ public struct MarkdownParser {
         guard let node = node else { return nil }
 
         let type = cmark_node_get_type(node)
-        let ranges = calculateRanges(for: node, lineTable: lineTable)
+        let ranges = calculateRanges(
+            for: node,
+            lineTable: lineTable,
+            trimTrailingBlankLines: type == CMARK_NODE_LIST
+        )
 
         switch type {
         case CMARK_NODE_HEADING:
@@ -542,15 +546,34 @@ public struct MarkdownParser {
         return previousType == CMARK_NODE_SOFTBREAK || previousType == CMARK_NODE_LINEBREAK
     }
 
-    private func calculateRanges(for node: UnsafeMutablePointer<cmark_node>, lineTable: [LineInfo]) -> RangePair {
+    private func calculateRanges(
+        for node: UnsafeMutablePointer<cmark_node>,
+        lineTable: [LineInfo],
+        trimTrailingBlankLines: Bool = false
+    ) -> RangePair {
         let startLine = Int(cmark_node_get_start_line(node))
         let startColumn = Int(cmark_node_get_start_column(node))
-        let endLine = Int(cmark_node_get_end_line(node))
-        let endColumn = Int(cmark_node_get_end_column(node))
+        var endLine = Int(cmark_node_get_end_line(node))
+        var endColumn = Int(cmark_node_get_end_column(node))
 
         guard startLine > 0 && startLine <= lineTable.count &&
               endLine > 0 && endLine <= lineTable.count else {
             return RangePair(charRange: NSRange(location: 0, length: 0), byteRange: NSRange(location: 0, length: 0), lineRange: 1...1)
+        }
+
+        // cmark extends a list through every blank line immediately below it.
+        // Those lines separate the list from the next block and belong to no block,
+        // so keep all three public ranges on the list's last content line instead.
+        if trimTrailingBlankLines {
+            var trimmed = false
+            while endLine > startLine,
+                  lineTable[endLine - 1].content.trimmingCharacters(in: .whitespaces).isEmpty {
+                endLine -= 1
+                trimmed = true
+            }
+            if trimmed {
+                endColumn = lineTable[endLine - 1].content.utf8.count
+            }
         }
 
         let startLineInfo = lineTable[startLine - 1]
