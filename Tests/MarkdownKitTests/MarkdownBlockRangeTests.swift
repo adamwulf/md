@@ -201,6 +201,34 @@ final class MarkdownBlockRangeTests: XCTestCase {
         assertCharRanges("# One\r\n\r\n# Two\r\n", cover: ["# One", "# Two"])
     }
 
+    func testMultilineDelimiterTerminatedHtmlRangesCoverTheirClosingLines() {
+        let htmlBlocks = [
+            "<script>\nconst café = 1\n</script>",
+            "<!--\ncomment 🌍\n-->",
+            "<?target\nvalue 🌍\n?>",
+            "<!DOCTYPE\nhtml 🌍>",
+            "<![CDATA[\n<raw 🌍>\n]]>"
+        ]
+
+        for html in htmlBlocks {
+            let crlfHTML = html.replacingOccurrences(of: "\n", with: "\r\n")
+            let markdown = "Before 🌍.\r\n\r\n\(crlfHTML)\r\n\r\nAfter.\r\n"
+            let blocks = parser.parse(markdown)
+            let htmlLineCount = html.split(separator: "\n").count
+
+            XCTAssertEqual(blocks.count, 3, "for \(html)")
+            XCTAssertEqual(blocks[1].lineRange, 3...(2 + htmlLineCount), "for \(html)")
+            assertByteRanges(
+                markdown,
+                cover: ["Before 🌍.", crlfHTML, "After."]
+            )
+            assertCharRanges(
+                markdown,
+                cover: ["Before 🌍.", crlfHTML, "After."]
+            )
+        }
+    }
+
     // MARK: - Line ranges
 
     func testLineRangesCountCarriageReturnLineFeedPairsAsOneLine() {

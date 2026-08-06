@@ -145,6 +145,24 @@ final class BlocksCommandTests: XCTestCase {
         XCTAssertEqual(output, "[1] html L1-3\n")
     }
 
+    func testSlicesIncludeTheClosingLineOfEveryDelimiterTerminatedHtmlForm() async throws {
+        let htmlBlocks = [
+            "<script>\nscript body\n</script>",
+            "<!--\ncomment body\n-->",
+            "<?target\nprocessing body\n?>",
+            "<!DOCTYPE\ndeclaration body>",
+            "<![CDATA[\ncdata body\n]]>"
+        ]
+
+        for html in htmlBlocks {
+            let output = try await runBlocks(
+                ["2"],
+                on: "Before.\n\n\(html)\n\nAfter.\n"
+            )
+            XCTAssertEqual(output, "\(html)\n", "for \(html)")
+        }
+    }
+
     func testListingSummarizesTableWithRowCount() async throws {
         let output = try await runBlocks(
             [],

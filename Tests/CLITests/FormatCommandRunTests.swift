@@ -226,6 +226,27 @@ final class FormatCommandRunTests: XCTestCase {
         XCTAssertEqual(threeTimes, once)
     }
 
+    func testFormatDoesNotAddLeadingQuoteLinesBeforeFirstChildBlocks() async throws {
+        let sources = [
+            "> ```\n> code\n> ```\n",
+            "> ---\n",
+            "> <script>\n> script body\n> </script>\n",
+            "> <!--\n> comment body\n> -->\n",
+            "> <?target\n> processing body\n> ?>\n",
+            "> <!DOCTYPE\n> declaration body>\n",
+            "> <![CDATA[\n> cdata body\n> ]]>\n",
+            "> <table>\n> <tr><td>cell</td></tr>\n> </table>\n",
+            "> <custom>\n> custom body\n"
+        ]
+
+        for source in sources {
+            let once = try await runFormat(on: source)
+            let twice = try await runFormat(on: once)
+            XCTAssertFalse(once.hasPrefix(">\n"), "for \(source)")
+            XCTAssertEqual(twice, once, "for \(source)")
+        }
+    }
+
     /// Fixed by `MarkdownEscaper`. See `EscapedMarkdownRoundTripTests` for the whole
     /// set of cases that `md format` must not change.
     func testFormatKeepsAnEscapedAsteriskEscaped() async throws {

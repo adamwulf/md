@@ -85,6 +85,45 @@ final class EditingCommandTests: XCTestCase {
         )
     }
 
+    func testEditingCommandsUseTheWholeMultilineDelimiterTerminatedHtmlRange() async throws {
+        let htmlBlocks = [
+            "<script>\nscript body\n</script>",
+            "<!--\ncomment body\n-->",
+            "<?target\nprocessing body\n?>",
+            "<!DOCTYPE\ndeclaration body>",
+            "<![CDATA[\ncdata body\n]]>"
+        ]
+
+        for html in htmlBlocks {
+            let source = "Before.\n\n\(html)\n\nAfter.\n"
+
+            let removed = try await run(RemoveCommand.self, ["2"], on: source)
+            XCTAssertEqual(removed, "Before.\n\nAfter.\n", "remove \(html)")
+
+            let replaced = try await run(
+                ReplaceCommand.self,
+                ["2", "Replacement."],
+                on: source
+            )
+            XCTAssertEqual(
+                replaced,
+                "Before.\n\nReplacement.\n\nAfter.\n",
+                "replace \(html)"
+            )
+
+            let insertedAfter = try await run(
+                InsertAfterCommand.self,
+                ["2", "Inserted."],
+                on: source
+            )
+            XCTAssertEqual(
+                insertedAfter,
+                "Before.\n\n\(html)\n\nInserted.\n\nAfter.\n",
+                "insert after \(html)"
+            )
+        }
+    }
+
     // MARK: - remove: happy paths
 
     func testRemoveDropsTheNamedBlock() async throws {

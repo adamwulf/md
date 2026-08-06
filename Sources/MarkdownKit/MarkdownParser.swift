@@ -246,10 +246,16 @@ public struct MarkdownParser {
         guard let node = node else { return nil }
 
         let type = cmark_node_get_type(node)
+        let htmlLiteral: String? = if type == CMARK_NODE_HTML_BLOCK {
+            cmark_node_get_literal(node).map { String(cString: $0) } ?? ""
+        } else {
+            nil
+        }
         let ranges = calculateRanges(
             for: node,
             lineTable: lineTable,
-            trimTrailingBlankLines: type == CMARK_NODE_LIST
+            trimTrailingBlankLines: type == CMARK_NODE_LIST,
+            sourceLineCount: htmlLiteral.map(sourceLineCount)
         )
 
         switch type {
@@ -284,10 +290,8 @@ public struct MarkdownParser {
             return .thematicBreak(charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_HTML_BLOCK:
-            let literal = cmark_node_get_literal(node)
-                .map { String(cString: $0) } ?? ""
             return .htmlBlock(
-                literal: literal,
+                literal: htmlLiteral ?? "",
                 charRange: ranges.charRange,
                 byteRange: ranges.byteRange,
                 lineRange: ranges.lineRange
@@ -508,6 +512,15 @@ public struct MarkdownParser {
         if lines.last?.isEmpty == true {
             lines.removeLast()
         }
+
+        // For block types that require blank separation in CommonMark output
+        // (raw HTML, fenced code, thematic breaks), cmark's container renderer
+        // puts marker-only lines before the first child. They are writer syntax,
+        // not authored quote content. Keeping them makes every format pass invent
+        // two leading quoted lines, so discard them before storing the content.
+        while lines.first?.isEmpty == true {
+            lines.removeFirst()
+        }
         return lines.joined(separator: "\n")
     }
 
@@ -574,12 +587,28 @@ public struct MarkdownParser {
     private func calculateRanges(
         for node: UnsafeMutablePointer<cmark_node>,
         lineTable: [LineInfo],
-        trimTrailingBlankLines: Bool = false
+        trimTrailingBlankLines: Bool = false,
+        sourceLineCount: Int? = nil
     ) -> RangePair {
         let startLine = Int(cmark_node_get_start_line(node))
         let startColumn = Int(cmark_node_get_start_column(node))
         var endLine = Int(cmark_node_get_end_line(node))
         var endColumn = Int(cmark_node_get_end_column(node))
+
+        // cmark reports the end position of delimiter-terminated raw HTML
+        // forms 1-5 before their closing delimiter line. Its literal contains
+        // the complete block, so use that line count to reach the real source
+        // end. The final line ending in the literal terminates the block but is
+        // not an additional content line.
+        if let sourceLineCount {
+            let literalEndLine = startLine + Swift.max(1, sourceLineCount) - 1
+            if literalEndLine > endLine {
+                endLine = literalEndLine
+                if endLine <= lineTable.count {
+                    endColumn = lineTable[endLine - 1].content.utf8.count
+                }
+            }
+        }
 
         guard startLine > 0 && startLine <= lineTable.count &&
               endLine > 0 && endLine <= lineTable.count else {
@@ -617,6 +646,17 @@ public struct MarkdownParser {
         let byteRange = NSRange(location: startByteIndex, length: Swift.max(0, endByteIndex - startByteIndex))
 
         return RangePair(charRange: charRange, byteRange: byteRange, lineRange: startLine...endLine)
+    }
+
+    private func sourceLineCount(_ source: String) -> Int {
+        var count = 1
+        for character in source where character.isNewline {
+            count += 1
+        }
+        if source.last?.isNewline == true {
+            count -= 1
+        }
+        return Swift.max(1, count)
     }
 
     /// CommonMark blank lines contain only ASCII spaces and tabs. Foundation's
