@@ -1,3 +1,3 @@
 The stderr message is pinned here because it is md's own text and holds no path
-beyond the one the user typed, so it is stable. See known-fail for the exit
+beyond the one the user typed, so it is stable. `expected-exit` pins the failure
 status.
