@@ -278,6 +278,18 @@ final class FormatCommandRunTests: XCTestCase {
         XCTAssertEqual(twice, once)
     }
 
+    func testFormatKeepsEmptyATXHeadingsAfterACheckboxOnlyTaskItemStable() async throws {
+        for level in 1...2 {
+            let source = "- [x] \n  \(String(repeating: "#", count: level))\n"
+            let once = try await runFormat(on: source)
+            let twice = try await runFormat(on: once)
+            let threeTimes = try await runFormat(on: twice)
+            XCTAssertEqual(once, source, "first pass for level \(level)")
+            XCTAssertEqual(twice, once, "second pass for level \(level)")
+            XCTAssertEqual(threeTimes, twice, "third pass for level \(level)")
+        }
+    }
+
     func testFormatDoesNotAddBlankLinesInsideNestedQuotes() async throws {
         let sources = [
             "> > <!-- x -->\n",
