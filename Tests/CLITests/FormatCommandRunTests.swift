@@ -270,6 +270,14 @@ final class FormatCommandRunTests: XCTestCase {
         }
     }
 
+    func testFormatKeepsAThematicBreakAfterACheckboxOnlyTaskItemParagraph() async throws {
+        let source = "- [x] \n  ***\n"
+        let once = try await runFormat(on: source)
+        let twice = try await runFormat(on: once)
+        XCTAssertEqual(once, source)
+        XCTAssertEqual(twice, once)
+    }
+
     func testFormatDoesNotAddBlankLinesInsideNestedQuotes() async throws {
         let sources = [
             "> > <!-- x -->\n",
