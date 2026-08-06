@@ -74,6 +74,31 @@ final class FormatCommandTests: XCTestCase {
         XCTAssertFalse(withFlag.contains("---"))
     }
 
+    func testMalformedFrontmatterIsPreservedWithoutFormattingOrConversion() {
+        let inputs = [
+            "---\ntitle: [unclosed\n---\n#   Heading\n",
+            "+++\ntitle = \n+++\n#   Heading\n",
+            ";;;\n{not json}\n;;;\n#   Heading\n",
+        ]
+
+        for input in inputs {
+            XCTAssertEqual(runFormat(input), input)
+            XCTAssertEqual(runFormat(input, frontmatter: .json), input)
+        }
+    }
+
+    func testNonMappingFrontmatterIsPreservedInsteadOfTreatedAsEmpty() {
+        let inputs = [
+            "---\n- one\n- two\n---\n#   Heading\n",
+            ";;;\n[1, 2, 3]\n;;;\n#   Heading\n",
+        ]
+
+        for input in inputs {
+            XCTAssertEqual(runFormat(input), input)
+            XCTAssertEqual(runFormat(input, frontmatter: .yaml), input)
+        }
+    }
+
     /// Source format matches --frontmatter X → output should be byte-identical to running without --frontmatter.
     func testSameFormatProducesByteIdenticalOutput() {
         let input = """

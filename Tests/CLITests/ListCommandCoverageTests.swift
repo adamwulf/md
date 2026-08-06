@@ -160,6 +160,33 @@ final class ListCommandCoverageTests: XCTestCase {
         XCTAssertEqual(exitCode.rawValue, ExitCode.failure.rawValue)
     }
 
+    func testMalformedFrontmatterIsDiagnosedAndValidNeighborsStillRender() async throws {
+        let broken = try write(
+            "---\ntitle: [unclosed\n---\nBody\n",
+            to: "broken.md"
+        )
+        let valid = try write(
+            "---\ntitle: Valid\n---\nBody\n",
+            to: "valid.md"
+        )
+        let command = try ListCommand.parse([scratch.url.path])
+
+        let captured = try await StandardStream.capturingCommandRun {
+            try await command.run()
+        }
+
+        XCTAssertNil(captured.error)
+        XCTAssertEqual(
+            captured.standardOutput,
+            "== \(broken.path) ==\n(no frontmatter)\n\n"
+                + "== \(valid.path) ==\ntitle: Valid\n"
+        )
+        XCTAssertEqual(
+            captured.standardError,
+            "md list: \(broken.path): Malformed YAML frontmatter\n"
+        )
+    }
+
     // MARK: - Frontmatter that projects down to nothing
 
     func testAFileWithEmptyFrontmatterIsLabelledAsSuch() async throws {

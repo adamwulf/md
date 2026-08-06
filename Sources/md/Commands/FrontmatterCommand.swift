@@ -81,8 +81,14 @@ struct FrontmatterCommand: AsyncParsableCommand {
     /// bare frontmatter data — no delimiters, no body — so it can be piped into
     /// tools like `jq`.
     static func readModeOutput(content: String, format: FrontmatterFormat?) throws -> String {
-        guard var frontmatter = Frontmatter.parse(content) else {
+        var frontmatter: Frontmatter
+        switch Frontmatter.parseResult(content) {
+        case .absent:
             return ""
+        case .malformed(let error):
+            throw error
+        case .valid(let parsed):
+            frontmatter = parsed
         }
         if let format {
             frontmatter.format = format
@@ -94,7 +100,15 @@ struct FrontmatterCommand: AsyncParsableCommand {
         let source = try input.readSource()
         let content = source.content
 
-        guard var frontmatter = Frontmatter.parse(content) else {
+        var frontmatter: Frontmatter
+        switch Frontmatter.parseResult(content) {
+        case .malformed(let error):
+            // Refuse every operation before it can treat unreadable data as an
+            // empty mapping and accidentally replace the original fence.
+            throw error
+        case .valid(let parsed):
+            frontmatter = parsed
+        case .absent:
             if `set` != nil {
                 // Create new frontmatter if setting a value
                 let outputFormat = format ?? .yaml

@@ -37,7 +37,7 @@ struct FormatCommand: AsyncParsableCommand {
 
     func run() async throws {
         let source = try input.readSource()
-        if let parsed = Frontmatter.parse(source.content) {
+        if case .valid(let parsed) = Frontmatter.parseResult(source.content) {
             switch frontmatter {
             case .json:
                 try parsed.validateForJSON()
@@ -60,13 +60,22 @@ struct FormatCommand: AsyncParsableCommand {
     /// `targetFrontmatter` is supplied, the frontmatter is re-serialized to that
     /// format. Empty frontmatter is stripped, and content without frontmatter is
     /// emitted with only the body normalized — `targetFrontmatter` is ignored in
-    /// those cases.
+    /// those cases. A document with malformed or non-mapping frontmatter is
+    /// returned byte-for-byte unchanged so formatting cannot discard its data.
     static func format(content: String, targetFrontmatter: FrontmatterFormat? = nil) -> String {
         let parser = MarkdownParser()
 
-        guard let parsed = Frontmatter.parse(content) else {
+        let parsed: Frontmatter
+        switch Frontmatter.parseResult(content) {
+        case .absent:
             let blocks = parser.parse(content)
             return BlockFormatter.format(blocks)
+        case .malformed:
+            // Formatting or converting an unreadable fence risks silently
+            // deleting data. Preserve the complete document byte-for-byte.
+            return content
+        case .valid(let frontmatter):
+            parsed = frontmatter
         }
 
         let blocks = parser.parse(parsed.body)

@@ -13,6 +13,42 @@ enum FrontmatterFormat: String, Equatable, CaseIterable {
     case yaml
     case toml
     case json
+
+    var displayName: String {
+        rawValue.uppercased()
+    }
+}
+
+enum FrontmatterParseResult {
+    case absent
+    case valid(Frontmatter)
+    case malformed(FrontmatterParseError)
+}
+
+struct FrontmatterParseError: LocalizedError, CustomStringConvertible {
+    enum Kind: Equatable {
+        case invalidSyntax
+        case nonMapping
+    }
+
+    let format: FrontmatterFormat
+    let kind: Kind
+    let rawContent: String
+    let body: String
+    let originalContent: String
+
+    var errorDescription: String? {
+        switch kind {
+        case .invalidSyntax:
+            return "Malformed \(format.displayName) frontmatter"
+        case .nonMapping:
+            return "\(format.displayName) frontmatter must contain a mapping at the top level"
+        }
+    }
+
+    var description: String {
+        errorDescription ?? "Malformed frontmatter"
+    }
 }
 
 enum FrontmatterSerializationError: LocalizedError {
@@ -33,6 +69,10 @@ enum FrontmatterSerializationError: LocalizedError {
 }
 
 struct Frontmatter {
+    private enum PayloadError: Error {
+        case nonMapping
+    }
+
     private struct SourceLine {
         let contentRange: Range<String.Index>
         let fullRange: Range<String.Index>
@@ -50,9 +90,20 @@ struct Frontmatter {
 
     // MARK: - Extraction
 
-    /// Parse frontmatter from markdown content. Returns nil if no frontmatter found.
+    /// Parse valid frontmatter from markdown content. Returns nil if no valid
+    /// frontmatter was found. Call `parseResult(_:)` when absent and malformed
+    /// frontmatter must be distinguished.
     /// Auto-detects format by delimiter: `---` (YAML), `+++` (TOML), `;;;` (JSON).
     static func parse(_ content: String) -> Frontmatter? {
+        guard case .valid(let frontmatter) = parseResult(content) else {
+            return nil
+        }
+        return frontmatter
+    }
+
+    /// Inspect fenced frontmatter without collapsing malformed payloads into
+    /// either an absent fence or a valid empty mapping.
+    static func parseResult(_ content: String) -> FrontmatterParseResult {
         if let result = parseFenced(content, delimiter: "---", format: .yaml) {
             return result
         }
@@ -62,11 +113,15 @@ struct Frontmatter {
         if let result = parseFenced(content, delimiter: ";;;", format: .json) {
             return result
         }
-        return nil
+        return .absent
     }
 
     /// Generic fenced frontmatter parser. Splits on delimiter lines.
-    private static func parseFenced(_ content: String, delimiter: String, format: FrontmatterFormat) -> Frontmatter? {
+    private static func parseFenced(
+        _ content: String,
+        delimiter: String,
+        format: FrontmatterFormat
+    ) -> FrontmatterParseResult? {
         let lines = sourceLines(in: content)
         guard let firstLine = lines.first,
               content[firstLine.contentRange].trimmingCharacters(in: .whitespaces) == delimiter else {
@@ -94,26 +149,78 @@ struct Frontmatter {
         let bodyStart = lines[closer].fullRange.upperBound
         let body = String(content[bodyStart...])
 
-        let data: [String: Any]
-        switch format {
-        case .yaml:
-            data = (try? Yams.load(yaml: rawString) as? [String: Any]) ?? [:]
-        case .json:
-            if let jsonData = rawString.data(using: .utf8),
-               let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
-                data = (Frontmatter.unbridgeNSNumber(parsed) as? [String: Any]) ?? [:]
-            } else {
-                data = [:]
+        do {
+            let data = try parseData(rawString, format: format)
+            return .valid(
+                Frontmatter(
+                    format: format,
+                    data: data,
+                    rawContent: rawString,
+                    body: body,
+                    originalContent: content
+                )
+            )
+        } catch let error as PayloadError {
+            switch error {
+            case .nonMapping:
+                return .malformed(
+                    FrontmatterParseError(
+                        format: format,
+                        kind: .nonMapping,
+                        rawContent: rawString,
+                        body: body,
+                        originalContent: content
+                    )
+                )
             }
-        case .toml:
-            if let table = try? TOMLTable(string: rawString) {
-                data = Frontmatter.tomlTableToDict(table)
-            } else {
-                data = [:]
-            }
+        } catch {
+            return .malformed(
+                FrontmatterParseError(
+                    format: format,
+                    kind: .invalidSyntax,
+                    rawContent: rawString,
+                    body: body,
+                    originalContent: content
+                )
+            )
+        }
+    }
+
+    private static func parseData(
+        _ rawString: String,
+        format: FrontmatterFormat
+    ) throws -> [String: Any] {
+        if rawString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return [:]
         }
 
-        return Frontmatter(format: format, data: data, rawContent: rawString, body: body, originalContent: content)
+        switch format {
+        case .yaml:
+            guard let loaded = try Yams.load(yaml: rawString) else {
+                return [:]
+            }
+            guard let mapping = loaded as? [String: Any] else {
+                throw PayloadError.nonMapping
+            }
+            return mapping
+        case .json:
+            guard let jsonData = rawString.data(using: .utf8) else {
+                throw CocoaError(.fileReadInapplicableStringEncoding)
+            }
+            let parsed = try JSONSerialization.jsonObject(
+                with: jsonData,
+                options: [.fragmentsAllowed]
+            )
+            guard let mapping = parsed as? [String: Any] else {
+                throw PayloadError.nonMapping
+            }
+            return (Frontmatter.unbridgeNSNumber(mapping) as? [String: Any])
+                ?? mapping
+        case .toml:
+            return Frontmatter.tomlTableToDict(
+                try TOMLTable(string: rawString)
+            )
+        }
     }
 
     /// Splits source into logical lines while retaining each original line
