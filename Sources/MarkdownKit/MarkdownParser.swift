@@ -438,7 +438,7 @@ public struct MarkdownParser {
             let itemIsEmpty = cmark_node_first_child(itemNode) == nil
 
             /// Emit everything gathered since the last nested list as one item.
-            func flushGatheredText() {
+            func flushGatheredText(preservingEmptyParentMarker: Bool = false) {
                 // Each child is its own paragraph, so they are joined by a
                 // blank line. Running them together would weld the last word
                 // of one onto the first word of the next. The one exception is
@@ -460,7 +460,7 @@ public struct MarkdownParser {
                 // the first content position has passed it has had its turn.
                 paragraphs = []
                 pendingTask = nil
-                // An empty piece is dropped, with two exceptions.
+                // An empty piece is dropped, with three exceptions.
                 //
                 // A checkbox is state and is content in its own right, so an
                 // item that is nothing but a box still has to survive.
@@ -470,7 +470,16 @@ public struct MarkdownParser {
                 // An item the author wrote empty is still an item. Dropping it
                 // takes a bullet out of the list, and `format` writes the file,
                 // so the line is gone for good after one run.
-                guard !text.isEmpty || task != nil || itemIsEmpty else { return }
+                //
+                // A parent whose first child is itself a list also has no text
+                // to gather, but its marker owns that nested list. Preserve the
+                // empty parent before flattening its children or they are
+                // promoted one level and both list starts change meaning.
+                guard !text.isEmpty
+                    || task != nil
+                    || itemIsEmpty
+                    || preservingEmptyParentMarker
+                else { return }
                 items.append(ListItem(
                     text: text,
                     indentLevel: indentLevel,
@@ -497,7 +506,7 @@ public struct MarkdownParser {
                         ordered: nestedOrdered,
                         lineTable: lineTable
                     )
-                    flushGatheredText()
+                    flushGatheredText(preservingEmptyParentMarker: !markerIsSpent)
                     items.append(contentsOf: nestedItems)
                 } else {
                     // The children of a list item are whole blocks, thus each one

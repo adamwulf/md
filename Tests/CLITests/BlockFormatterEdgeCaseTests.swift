@@ -293,6 +293,14 @@ final class BlockFormatterEdgeCaseTests: XCTestCase {
         XCTAssertEqual(BlockFormatter.format(parser.parse(once)), once)
     }
 
+    func testFormatKeepsAnEmptyParentAroundItsNestedOrderedList() {
+        let source = "3.\n   7. Child\n4. Sibling\n"
+        let once = BlockFormatter.format(parser.parse(source))
+
+        XCTAssertEqual(once, "3.\n    7. Child\n4. Sibling\n")
+        XCTAssertEqual(BlockFormatter.format(parser.parse(once)), once)
+    }
+
     // MARK: - Blockquotes
 
     func testFormatBlockquotePrefixesEveryLine() {

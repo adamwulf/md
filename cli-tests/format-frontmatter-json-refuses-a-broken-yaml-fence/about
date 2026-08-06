@@ -1,0 +1,3 @@
+An explicit frontmatter conversion cannot honestly convert malformed YAML.
+Format must fail, write no document, and diagnose the broken fence instead
+of silently returning success with unchanged input.

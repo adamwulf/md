@@ -427,6 +427,22 @@ final class MarkdownParserTests: XCTestCase {
         XCTAssertTrue(items.allSatisfy { !$0.continuation })
     }
 
+    /// A marker followed immediately by a nested list is still the parent
+    /// item. Dropping its empty text promotes the child into the outer list
+    /// and loses both authored starts when the flat model is formatted.
+    func testAnEmptyParentOfANestedOrderedListSurvives() {
+        let blocks = parser.parse("3.\n   7. Child\n4. Sibling\n")
+        guard blocks.count == 1, case .list(let items, _, _, _, _) = blocks[0] else {
+            return XCTFail("Expected one list block, got \(blocks.count)")
+        }
+
+        XCTAssertEqual(items.map(\.text), ["", "Child", "Sibling"])
+        XCTAssertEqual(items.map(\.indentLevel), [0, 1, 0])
+        XCTAssertEqual(items.map(\.orderedListStart), [3, 7, nil])
+        XCTAssertEqual(items.authoredCount, 3)
+        XCTAssertTrue(items.allSatisfy { !$0.continuation })
+    }
+
     func testParseNestedListItemsKeepSoftLineBreaks() {
         let markdown = "- a\n  a2\n    - b\n      b2\n        - c\n          c2"
         let blocks = parser.parse(markdown)
