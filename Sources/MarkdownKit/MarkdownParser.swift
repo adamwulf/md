@@ -467,11 +467,10 @@ public struct MarkdownParser {
                             for: currentChild,
                             lineTable: lineTable
                         )
-                        let markerColumn = Int(cmark_node_get_start_column(currentChild))
                         let innerText = getBlockquoteText(
                             lineRange: quoteRanges.lineRange,
                             lineTable: lineTable,
-                            maximumLeadingSpaces: Swift.max(3, markerColumn - 1)
+                            nestedInList: true
                         )
                         text = blockquoteSource(from: innerText)
                     } else {
@@ -543,15 +542,24 @@ public struct MarkdownParser {
     private func getBlockquoteText(
         lineRange: ClosedRange<Int>,
         lineTable: [LineInfo],
-        maximumLeadingSpaces: Int = 3
+        nestedInList: Bool = false
     ) -> String {
         guard lineRange.lowerBound > 0,
               lineRange.upperBound <= lineTable.count else { return "" }
 
-        return lineRange.map { lineNumber in
+        let lines = lineRange.map { lineTable[$0 - 1].content }
+        let firstMarker = nestedInList
+            ? firstBlockquoteMarker(in: lines[0])
+            : nil
+        let maximumMarkerColumn = nestedInList
+            ? (firstMarker?.visualColumn ?? 0) + 3
+            : 3
+
+        return lines.enumerated().map { offset, line in
             stripOuterBlockquoteMarker(
-                from: lineTable[lineNumber - 1].content,
-                maximumLeadingSpaces: maximumLeadingSpaces
+                from: line,
+                exactMarker: offset == 0 ? firstMarker : nil,
+                maximumMarkerColumn: maximumMarkerColumn
             )
         }
         .joined(separator: "\n")
@@ -564,6 +572,17 @@ public struct MarkdownParser {
             .joined(separator: "\n")
     }
 
+    private typealias BlockquoteMarker = (byteIndex: Int, visualColumn: Int)
+
+    /// The first line of a quote nested in a list can still contain the list
+    /// marker (`- > quote`). The quote marker is the first `>` on that node's
+    /// first source line; everything before it is enclosing container syntax.
+    private func firstBlockquoteMarker(in line: String) -> BlockquoteMarker? {
+        let bytes = Array(line.utf8)
+        guard let byteIndex = bytes.firstIndex(of: 0x3E) else { return nil }
+        return (byteIndex, visualColumn(in: bytes, before: byteIndex))
+    }
+
     /// A CommonMark blockquote marker may have leading container indentation,
     /// then `>`, then one optional padding column. A following tab expands to
     /// the next four-column stop; only its first column is marker padding, so
@@ -571,28 +590,59 @@ public struct MarkdownParser {
     /// lines have no marker and therefore pass through byte-for-byte.
     private func stripOuterBlockquoteMarker(
         from line: String,
-        maximumLeadingSpaces: Int
+        exactMarker: BlockquoteMarker?,
+        maximumMarkerColumn: Int
     ) -> String {
         let bytes = Array(line.utf8)
-        var index = 0
-        while index < bytes.count &&
-            index < maximumLeadingSpaces &&
-            bytes[index] == Self.spaceByte {
-            index += 1
+        let marker: BlockquoteMarker
+        if let exactMarker {
+            marker = exactMarker
+        } else {
+            var index = 0
+            var column = 0
+            while index < bytes.count {
+                if bytes[index] == Self.spaceByte {
+                    column += 1
+                    index += 1
+                } else if bytes[index] == Self.tabByte {
+                    column += 4 - (column % 4)
+                    index += 1
+                } else {
+                    break
+                }
+            }
+            guard index < bytes.count,
+                  bytes[index] == 0x3E,
+                  column <= maximumMarkerColumn else { return line }
+            marker = (index, column)
         }
-        guard index < bytes.count && bytes[index] == 0x3E else { return line }
-        index += 1
+
+        var index = marker.byteIndex + 1
+        var columnAfterMarker = marker.visualColumn + 1
 
         var residualTabIndent = 0
         if index < bytes.count && bytes[index] == Self.spaceByte {
             index += 1
+            columnAfterMarker += 1
         } else if index < bytes.count && bytes[index] == Self.tabByte {
-            let tabWidth = 4 - (index % 4)
+            let tabWidth = 4 - (columnAfterMarker % 4)
             residualTabIndent = Swift.max(0, tabWidth - 1)
             index += 1
         }
         return String(repeating: " ", count: residualTabIndent) +
             String(decoding: bytes[index...], as: UTF8.self)
+    }
+
+    private func visualColumn(in bytes: [UInt8], before endIndex: Int) -> Int {
+        var column = 0
+        for byte in bytes[..<endIndex] {
+            if byte == Self.tabByte {
+                column += 4 - (column % 4)
+            } else {
+                column += 1
+            }
+        }
+        return column
     }
 
     private func getNodeText(_ node: UnsafeMutablePointer<cmark_node>?, context: InlineTextContext) -> String {

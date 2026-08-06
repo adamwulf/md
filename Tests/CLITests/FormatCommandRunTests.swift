@@ -298,6 +298,29 @@ final class FormatCommandRunTests: XCTestCase {
         }
     }
 
+    func testFormatConsumesListContainerPrefixesBeforeNestedBlockquoteMarkers() async throws {
+        let cases = [
+            (source: "- > quote\n", expected: "- > quote\n"),
+            (source: "1. > quote\n", expected: "1. > quote\n"),
+            (source: "- outer\n  - > quote\n", expected: "- outer\n    - > quote\n"),
+            (source: "-\t> quote\n", expected: "- > quote\n"),
+            (source: "- item\n\t> quote\n", expected: "- item\n\n  > quote\n"),
+            (source: "- before\n  > A\n    > B\n", expected: "- before\n\n  > A\n  > B\n"),
+            (source: "- > <!-- x -->\n", expected: "- > <!-- x -->\n"),
+            (source: "- > ---\n", expected: "- > ---\n"),
+            (source: "- >     code\n", expected: "- >     code\n")
+        ]
+
+        for testCase in cases {
+            let once = try await runFormat(on: testCase.source)
+            let twice = try await runFormat(on: once)
+            let threeTimes = try await runFormat(on: twice)
+            XCTAssertEqual(once, testCase.expected, "first pass for \(testCase.source.debugDescription)")
+            XCTAssertEqual(twice, once, "second pass for \(testCase.source.debugDescription)")
+            XCTAssertEqual(threeTimes, once, "third pass for \(testCase.source.debugDescription)")
+        }
+    }
+
     func testFormatDoesNotAddLeadingQuoteLinesBeforeFirstChildBlocks() async throws {
         let sources = [
             "> ```\n> code\n> ```\n",
