@@ -110,10 +110,32 @@ final class ListCommandTests: XCTestCase {
         XCTAssertEqual(occurrences, 1)
     }
 
-    func testMissingDirectoryEmitsStderrAndContinues() throws {
+    func testMissingDirectoryEmitsStderrContinuesAndExitsFailure() async throws {
         try write("---\ntitle: A\n---\n", to: "a.md")
-        let out = try runList([], dirs: [tempRoot.path, "/does/not/exist"])
-        XCTAssertTrue(out.contains("/a.md =="))
+        let missing = tempRoot.appendingPathComponent("does-not-exist").path
+        let listedPath = try XCTUnwrap(
+            try ListCommand.parse([tempRoot.path]).collectEntries().first?.path
+        )
+        let command = try ListCommand.parse([tempRoot.path, missing])
+
+        let captured = try await StandardStream.capturingCommandRun {
+            try await command.run()
+        }
+
+        XCTAssertEqual(
+            captured.standardOutput,
+            "== \(listedPath) ==\ntitle: A\n"
+        )
+        XCTAssertEqual(
+            captured.standardError,
+            "md list: not a directory: \(missing)\n"
+        )
+        guard let exitCode = captured.error as? ExitCode else {
+            return XCTFail(
+                "Expected ExitCode.failure, got \(String(describing: captured.error))"
+            )
+        }
+        XCTAssertEqual(exitCode.rawValue, ExitCode.failure.rawValue)
     }
 
     func testEmptyDirectoryProducesEmptyOutput() throws {
@@ -210,6 +232,20 @@ final class ListCommandTests: XCTestCase {
         XCTAssertEqual(lines.count, 2)
         XCTAssertTrue(lines[0].hasSuffix("\tFirst"))
         XCTAssertTrue(lines[1].hasSuffix("\tSecond"))
+    }
+
+    func testPlainKeyEscapesLineBreaksInAScalarValue() throws {
+        try write(
+            "---\nnote: |-\n  first\n  second\n---\n",
+            to: "a.md"
+        )
+
+        let out = try runList(["--key", "note"])
+
+        let path = try XCTUnwrap(
+            try ListCommand.parse([tempRoot.path]).collectEntries().first?.path
+        )
+        XCTAssertEqual(out, "\(path)\tfirst\\nsecond\n")
     }
 
     func testPlainKeyOnNestedDict() throws {
