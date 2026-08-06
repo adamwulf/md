@@ -262,7 +262,7 @@ final class BlockFormatterEdgeCaseTests: XCTestCase {
         )
         XCTAssertEqual(
             BlockFormatter.format(block),
-            "> first\n> \n> second\n"
+            "> first\n>\n> second\n"
         )
     }
 

@@ -105,7 +105,7 @@ enum BlockFormatter {
         case .blockquote(let text, _, _, _):
             let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
             for line in lines {
-                output += "> \(line)\n"
+                output += line.isEmpty ? ">\n" : "> \(line)\n"
             }
 
         case .thematicBreak(_, _, _):

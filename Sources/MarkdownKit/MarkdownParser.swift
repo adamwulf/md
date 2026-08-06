@@ -267,9 +267,10 @@ public struct MarkdownParser {
             return .list(items: items, ordered: ordered, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_BLOCK_QUOTE:
-            // The children of a block quote are whole blocks, thus each one comes back
-            // through the CommonMark writer and needs no work here.
-            let text = getChildrenText(node, context: .paragraph)
+            // The children of a block quote are whole blocks. Keep a blank line
+            // between them so two paragraphs, or a paragraph followed by a list,
+            // cannot run together when the quote is written back out.
+            let text = getBlockChildrenText(node, context: .paragraph)
             return .blockquote(text: text, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_THEMATIC_BREAK:
@@ -458,6 +459,27 @@ public struct MarkdownParser {
             child = cmark_node_next(child)
         }
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Render the block children of a container while preserving their boundary.
+    ///
+    /// This is deliberately separate from `getChildrenText`, whose children are
+    /// inline nodes and must remain adjacent. Container children are complete blocks,
+    /// so concatenating them directly welds the end of one block to the start of the
+    /// next one.
+    private func getBlockChildrenText(_ node: UnsafeMutablePointer<cmark_node>?, context: InlineTextContext) -> String {
+        guard let node else { return "" }
+        var blocks: [String] = []
+        var child = cmark_node_first_child(node)
+        while let currentChild = child {
+            let text = getNodeText(currentChild, context: context)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                blocks.append(text)
+            }
+            child = cmark_node_next(currentChild)
+        }
+        return blocks.joined(separator: "\n\n")
     }
 
     private func getNodeText(_ node: UnsafeMutablePointer<cmark_node>?, context: InlineTextContext) -> String {

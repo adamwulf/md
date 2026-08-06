@@ -60,7 +60,7 @@ and the instrumented subprocess hits that limit writing its own profile.
 reported 88.73% where the truth was 98.24%, which were the figures of that
 day. `--build-tests` fixes it.
 
-## Defects: 26 found, 16 fixed, 9 open, 1 withdrawn
+## Defects: 26 found, 17 fixed, 8 open, 1 withdrawn
 
 Each open defect is pinned by tests holding the CORRECT expectation, marked as
 known failures, so it turns green by itself when it is fixed. **The `known-fail`
@@ -73,7 +73,6 @@ Numbers are stable. A fixed defect keeps its number, because commit messages and
 | # | Defect | Pinned by |
 | --- | --- | --- |
 | 4 | An HTML block is deleted. No `MarkdownBlock` case | 6 CLI, 1 Swift |
-| 6 | Two paragraphs in a blockquote flatten into one run | 1 CLI, 3 Swift |
 | 7 | An unused link reference definition is deleted | 3 CLI |
 | 11 | A list block absorbs the blank line below it | 2 CLI |
 | 13 | An unparseable frontmatter fence reads as no frontmatter, exit 0 | 3 CLI |
@@ -83,7 +82,8 @@ Numbers are stable. A fixed defect keeps its number, because commit messages and
 | 22 | `format` has no `-i`. **Do not add it yet** — see below | 1 CLI |
 
 Fixed: **1** non-finite JSON number abort, **2** soft line break dropped, **3**
-hard line break dropped, **5** backslash escapes resolved away, **9** non-ASCII
+hard line break dropped, **5** backslash escapes resolved away, **6** two
+blockquote paragraphs flattened into one run, **9** non-ASCII
 YAML values escaped, **10** phantom final line counted, **12** editing commands
 counted frontmatter as blocks, **14** `list` reported success for invalid paths,
 **15** `--key` mapping printed as a Swift dictionary, **16** null value serialized
@@ -126,9 +126,9 @@ fix for 25 would have carried the defect into `remove` and `replace`.
 ## Two things to know before you fix
 
 **Defect 22 must wait.** Adding `format -i` is one line, but `format` still
-loses HTML blocks, link reference definitions, blockquote paragraph breaks,
-CRLF endings and list numbering. An in-place flag would write all of that into
-the user's file. Fix 4, 6, 7, 17 and 20 first.
+loses HTML blocks, link reference definitions, CRLF endings and list numbering.
+An in-place flag would write all of that into the user's file. Fix 4, 7, 17 and
+20 first.
 
 **Defect 3 has an intentional canonical spelling.** A hard break has two
 spellings and both mean the same break. `format` writes the backslash because
@@ -142,7 +142,7 @@ asterisk bullet, or thematic break remains byte-for-byte unchanged.
 Ordered by tests turned green for code changed:
 
 1. **13**, **21** — small, but each touches its callers.
-2. **11**, **6** — localized parser range and container-separator fixes.
+2. **11** — a localized parser range fix.
 3. **4**, **7**, **17**, **20** need the parsed document model to grow: cases
    for raw HTML and link reference definitions, plus memory of the line ending
    and ordered-list start number. These touch every `switch` over the enum.
@@ -150,5 +150,5 @@ Ordered by tests turned green for code changed:
    holding two blocks apart, and deleting it does not only lose the comment:
    `format-keeps-an-html-comment-that-separates-two-lists` shows two lists
    merging into one, which moves every block index below that point.
-4. **22** only after **4**, **6**, **7**, **17**, and **20**, so in-place
+4. **22** only after **4**, **7**, **17**, and **20**, so in-place
    formatting cannot write any of those losses into the user's file.

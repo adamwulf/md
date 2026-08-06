@@ -298,18 +298,21 @@ final class MarkdownParserTextExtractionTests: XCTestCase {
     }
 
     func testABlockquoteKeepsTheBreakBetweenItsParagraphs() {
-        XCTExpectFailure("""
-            getChildrenText concatenates the rendered child blocks of a container \
-            with no separator, so a blockquote holding two paragraphs collapses to \
-            "AB". The paragraphs should stay separated by a blank line. md format \
-            writes this back out as "> AB", running the two paragraphs together.
-            """)
         let blocks = parser.parse("> A\n>\n> B\n")
         XCTAssertEqual(blocks.count, 1)
         guard case .blockquote(let text, _, _, _) = blocks[0] else {
             return XCTFail("Expected a blockquote, got \(blocks[0])")
         }
         XCTAssertEqual(text, "A\n\nB")
+    }
+
+    func testABlockquoteKeepsAHeadingApartFromTheParagraphBelowIt() {
+        let blocks = parser.parse("> # Heading\n>\n> Paragraph.\n")
+        XCTAssertEqual(blocks.count, 1)
+        guard case .blockquote(let text, _, _, _) = blocks[0] else {
+            return XCTFail("Expected a blockquote, got \(blocks[0])")
+        }
+        XCTAssertEqual(text, "# Heading\n\nParagraph.")
     }
 
     func testABlockquoteKeepsSoftBreaksWithinOneParagraph() {

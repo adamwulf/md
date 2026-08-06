@@ -212,13 +212,8 @@ final class FormatCommandRunTests: XCTestCase {
     }
 
     func testFormatKeepsABlockquoteParagraphBreak() async throws {
-        XCTExpectFailure("""
-            A blockquote holding two paragraphs is flattened to a single run of \
-            text, so md format writes "> AB". The two paragraphs should stay \
-            apart. Same root cause as the parser-level blockquote test.
-            """)
         let output = try await runFormat(on: "> A\n>\n> B\n")
-        XCTAssertEqual(output, "> A\n> \n> B\n")
+        XCTAssertEqual(output, "> A\n>\n> B\n")
     }
 
     /// Fixed by `MarkdownEscaper`. See `EscapedMarkdownRoundTripTests` for the whole
