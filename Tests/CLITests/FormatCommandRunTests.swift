@@ -242,6 +242,34 @@ final class FormatCommandRunTests: XCTestCase {
         }
     }
 
+    func testFormatKeepsListItemsContainingThematicBreaksStable() async throws {
+        let sources = [
+            "- ***\n",
+            "- outer\n    - ***\n"
+        ]
+
+        for source in sources {
+            let once = try await runFormat(on: source)
+            let twice = try await runFormat(on: once)
+            XCTAssertEqual(once, source, "first pass for \(source.debugDescription)")
+            XCTAssertEqual(twice, once, "second pass for \(source.debugDescription)")
+        }
+    }
+
+    func testFormatKeepsSetextHeadingsInsideTaskItemsStable() async throws {
+        let sources = [
+            "- [x] done\n  -\n",
+            "1. [ ] done\n    ===\n"
+        ]
+
+        for source in sources {
+            let once = try await runFormat(on: source)
+            let twice = try await runFormat(on: once)
+            XCTAssertEqual(once, source, "first pass for \(source.debugDescription)")
+            XCTAssertEqual(twice, once, "second pass for \(source.debugDescription)")
+        }
+    }
+
     func testFormatDoesNotAddBlankLinesInsideNestedQuotes() async throws {
         let sources = [
             "> > <!-- x -->\n",
