@@ -169,6 +169,22 @@ final class BlocksCommandTests: XCTestCase {
         XCTAssertEqual(output, "\(html)\n")
     }
 
+    func testSlicesKeepLegalLeadingIndentationOnHtmlAndLists() async throws {
+        let html = "   <script>\nx\n</script>"
+        let htmlOutput = try await runBlocks(
+            ["1"],
+            on: "\(html)\n\nAfter.\n"
+        )
+        XCTAssertEqual(htmlOutput, "\(html)\n")
+
+        let list = "   - alpha\n   - beta"
+        let listOutput = try await runBlocks(
+            ["1"],
+            on: "\(list)\n\nAfter.\n"
+        )
+        XCTAssertEqual(listOutput, "\(list)\n")
+    }
+
     func testListingSummarizesTableWithRowCount() async throws {
         let output = try await runBlocks(
             [],

@@ -712,7 +712,6 @@ public struct MarkdownParser {
         sourceLineCount: Int? = nil
     ) -> RangePair {
         let startLine = Int(cmark_node_get_start_line(node))
-        let startColumn = Int(cmark_node_get_start_column(node))
         var endLine = Int(cmark_node_get_end_line(node))
         var endColumn = Int(cmark_node_get_end_column(node))
 
@@ -752,10 +751,12 @@ public struct MarkdownParser {
         }
 
         let startLineInfo = lineTable[startLine - 1]
-        let startByteColumnOffset = startColumn - 1
-        let startUTF16ColumnOffset = byteToUTF16Offset(startByteColumnOffset, in: startLineInfo)
-        let startUTF16Index = startLineInfo.utf16Offset + startUTF16ColumnOffset
-        let startByteIndex = startLineInfo.byteOffset + startByteColumnOffset
+        // cmark's start column points at the marker after up to three legal
+        // indentation spaces. Public block ranges address authored source, so
+        // those leading bytes belong to the block and must survive slicing and
+        // editing along with its marker.
+        let startUTF16Index = startLineInfo.utf16Offset
+        let startByteIndex = startLineInfo.byteOffset
 
         let endLineInfo = lineTable[endLine - 1]
         let endByteColumnOffset = endColumn

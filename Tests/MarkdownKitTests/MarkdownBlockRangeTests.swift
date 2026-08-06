@@ -246,6 +246,36 @@ final class MarkdownBlockRangeTests: XCTestCase {
         )
     }
 
+    func testHtmlRangesIncludeLegalLeadingSourceIndentation() {
+        let markdown = "   <script>\nx\n</script>\n\nAfter.\n"
+        let blocks = parser.parse(markdown)
+
+        XCTAssertEqual(blocks.first?.lineRange, 1...3)
+        assertByteRanges(
+            markdown,
+            cover: ["   <script>\nx\n</script>", "After."]
+        )
+        assertCharRanges(
+            markdown,
+            cover: ["   <script>\nx\n</script>", "After."]
+        )
+    }
+
+    func testListRangesIncludeLegalLeadingSourceIndentation() {
+        let markdown = "   - alpha\n   - beta\n\nAfter.\n"
+        let blocks = parser.parse(markdown)
+
+        XCTAssertEqual(blocks.first?.lineRange, 1...2)
+        assertByteRanges(
+            markdown,
+            cover: ["   - alpha\n   - beta", "After."]
+        )
+        assertCharRanges(
+            markdown,
+            cover: ["   - alpha\n   - beta", "After."]
+        )
+    }
+
     // MARK: - Line ranges
 
     func testLineRangesCountCarriageReturnLineFeedPairsAsOneLine() {

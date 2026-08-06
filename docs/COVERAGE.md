@@ -13,9 +13,10 @@ This file holds only what those tables do not say.
 ## The CLI suite adds almost no line coverage
 
 `--swift-only` and the combined run give nearly the same lines figure, because
-the Swift tests call each command's `run()` in process. The CLI suite holds 4
-lines of 3180 alone, and no function at all. Do not read that as "the CLI
-suite is redundant". Line coverage cannot see what that suite is for:
+the Swift tests call each command's `run()` in process. At the latest
+measurement, the CLI suite uniquely covers only 3 executable lines and no
+function at all. Do not read that as "the CLI suite is redundant". Line
+coverage cannot see what that suite is for:
 
 - the exact bytes on stdout, including a final newline, a lost CR, and a
   trailing space
