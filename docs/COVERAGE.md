@@ -61,7 +61,7 @@ and the instrumented subprocess hits that limit writing its own profile.
 reported 88.73% where the truth was 98.24%, which were the figures of that
 day. `--build-tests` fixes it.
 
-## Defects: 26 found, 19 fixed, 6 open, 1 withdrawn
+## Defects: 26 found, 21 fixed, 3 open, 2 withdrawn
 
 Each open defect is pinned by tests holding the CORRECT expectation, marked as
 known failures, so it turns green by itself when it is fixed. **The `known-fail`
@@ -74,9 +74,6 @@ Numbers are stable. A fixed defect keeps its number, because commit messages and
 | # | Defect | Pinned by |
 | --- | --- | --- |
 | 7 | An unused link reference definition is deleted | 3 CLI |
-| 13 | An unparseable frontmatter fence reads as no frontmatter, exit 0 | 3 CLI |
-| 17 | `format` rewrites CRLF as LF | 1 CLI |
-| 20 | An ordered list is renumbered from 1 | 2 CLI |
 | 21 | A refusal prints the usage of `md`, not of the subcommand | 4 CLI |
 | 22 | `format` has no `-i`. **Do not add it yet** — see below | 1 CLI |
 
@@ -86,17 +83,19 @@ resolved away, **6** two
 blockquote paragraphs flattened into one run, **9** non-ASCII
 YAML values escaped, **10** phantom final line counted, **11** a list block
 absorbed the blank line below it, **12** editing commands
-counted frontmatter as blocks, **14** `list` reported success for invalid paths,
-**15** `--key` mapping printed as a Swift dictionary, **16** null value serialized
-as `<null>`, **18** editing commands invented a final newline, **19** editing
-commands re-spelled untouched blocks, **23** `list --key` split one file across
-multiple lines, **24** empty JSON arrays spanned three lines, **25** an edit
-destroyed the code block below it, **26** a code fence was closed by the
-backticks it enclosed.
+counted frontmatter as blocks, **13** malformed frontmatter read as empty,
+**14** `list` reported success for invalid paths, **15** `--key` mapping printed
+as a Swift dictionary, **16** null value serialized as `<null>`, **18** editing
+commands invented a final newline, **19** editing commands re-spelled untouched
+blocks, **20** ordered lists renumbered from one, **23** `list --key` split one
+file across multiple lines, **24** empty JSON arrays spanned three lines,
+**25** an edit destroyed the code block below it, **26** a code fence was closed
+by the backticks it enclosed.
 
-Withdrawn: **8** was an incorrect expectation, not a formatter defect. The
-continuation is indented beneath the list item's content and formatting the
-result again is idempotent, so it remains part of the same item.
+Withdrawn: **8** expected a list continuation to be a separate block, but the
+continuation belongs to the item and formatting is idempotent. **17** expected
+`format` to preserve CRLF, but LF is the intentional canonical line ending for
+this project.
 
 ## A fence is not a re-spelling the editor chose freely
 
@@ -127,8 +126,8 @@ fix for 25 would have carried the defect into `remove` and `replace`.
 ## Two things to know before you fix
 
 **Defect 22 must wait.** Adding `format -i` is one line, but `format` still
-loses link reference definitions, CRLF endings and list numbering. An in-place
-flag would write all of that into the user's file. Fix 7, 17 and 20 first.
+loses link reference definitions. An in-place flag would write that loss into
+the user's file. Fix 7 first.
 
 **Defect 3 has an intentional canonical spelling.** A hard break has two
 spellings and both mean the same break. `format` writes the backslash because
@@ -141,9 +140,8 @@ asterisk bullet, or thematic break remains byte-for-byte unchanged.
 
 Ordered by tests turned green for code changed:
 
-1. **13**, **21** — small, but each touches its callers.
-2. **7**, **17**, **20** need the parsed document model to grow: a case for
-   link reference definitions, plus memory of the line ending and ordered-list
-   start number. These touch every `switch` over the enum.
-3. **22** only after **7**, **17**, and **20**, so in-place
-   formatting cannot write any of those losses into the user's file.
+1. **21** is small, but touches each editing command.
+2. **7** needs the parsed document model to grow a case for link reference
+   definitions and touches every `switch` over the enum.
+3. **22** only after **7**, so in-place formatting cannot write that loss into
+   the user's file.
