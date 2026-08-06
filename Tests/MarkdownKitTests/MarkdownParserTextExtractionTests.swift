@@ -226,7 +226,12 @@ final class MarkdownParserTextExtractionTests: XCTestCase {
             items,
             [
                 ListItem(text: "parent", indentLevel: 0, ordered: false),
-                ListItem(text: "numbered", indentLevel: 1, ordered: true)
+                ListItem(
+                    text: "numbered",
+                    indentLevel: 1,
+                    ordered: true,
+                    orderedListStart: 1
+                )
             ]
         )
     }

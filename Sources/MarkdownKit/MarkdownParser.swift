@@ -28,6 +28,13 @@ public struct ListItem: Sendable, Equatable {
     public let text: String
     public let indentLevel: Int
     public let ordered: Bool
+    /// The marker value that starts this ordered list, or `nil` when this
+    /// entry continues a list that has already started.
+    ///
+    /// List items are flattened across nesting levels, so keeping the start
+    /// on the first item of each list preserves both top-level and nested
+    /// starts without requiring a separate nested-list model.
+    public let orderedListStart: Int?
     /// The checkbox this item opens with, or `nil` for an item that has none.
     public let task: TaskState?
     /// Whether the list holding this item is tight, meaning its items are not
@@ -53,6 +60,7 @@ public struct ListItem: Sendable, Equatable {
         text: String,
         indentLevel: Int,
         ordered: Bool,
+        orderedListStart: Int? = nil,
         task: TaskState? = nil,
         tight: Bool = true,
         continuation: Bool = false
@@ -60,6 +68,7 @@ public struct ListItem: Sendable, Equatable {
         self.text = text
         self.indentLevel = indentLevel
         self.ordered = ordered
+        self.orderedListStart = orderedListStart
         self.task = task
         self.tight = tight
         self.continuation = continuation
@@ -385,9 +394,12 @@ public struct MarkdownParser {
         // lines between items and blank lines inside one item.
         let tight = cmark_node_get_list_tight(listNode) != 0 &&
             !formattingRequiresLooseList(listNode)
+        let orderedListStart = ordered ? Int(cmark_node_get_list_start(listNode)) : nil
+        var isFirstItem = true
         var itemNode = cmark_node_first_child(listNode)
 
         while itemNode != nil {
+            let itemOrderedListStart = isFirstItem ? orderedListStart : nil
             // A nested list splits its item into the piece before it and the
             // piece after it. The checkbox belongs to the piece holding the
             // item's first paragraph and to no other.
@@ -444,6 +456,7 @@ public struct MarkdownParser {
                     text: text,
                     indentLevel: indentLevel,
                     ordered: ordered,
+                    orderedListStart: markerIsSpent ? nil : itemOrderedListStart,
                     task: task,
                     tight: tight,
                     continuation: markerIsSpent
@@ -526,6 +539,7 @@ public struct MarkdownParser {
 
             flushGatheredText()
 
+            isFirstItem = false
             itemNode = cmark_node_next(itemNode)
         }
 

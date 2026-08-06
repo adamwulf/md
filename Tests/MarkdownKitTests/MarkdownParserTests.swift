@@ -271,9 +271,34 @@ final class MarkdownParserTests: XCTestCase {
             XCTAssertTrue(ordered)
             XCTAssertEqual(items.count, 3)
             XCTAssertEqual(items[0].text, "First")
+            XCTAssertEqual(items.map(\.orderedListStart), [1, nil, nil])
         } else {
             XCTFail("Expected ordered list")
         }
+    }
+
+    func testParseOrderedListStartsAtAuthoredValueAtEveryNestingLevel() {
+        let markdown = """
+        3. Parent
+
+            7. First child
+            8. Second child
+
+        4. Sibling
+
+            2. Other child
+        """
+        let blocks = parser.parse(markdown)
+        guard blocks.count == 1, case .list(let items, _, _, _, _) = blocks[0] else {
+            return XCTFail("Expected one ordered list block, got \(blocks.count)")
+        }
+
+        XCTAssertEqual(
+            items.map(\.text),
+            ["Parent", "First child", "Second child", "Sibling", "Other child"]
+        )
+        XCTAssertEqual(items.map(\.indentLevel), [0, 1, 1, 0, 1])
+        XCTAssertEqual(items.map(\.orderedListStart), [3, 7, nil, nil, 2])
     }
 
     func testParseNestedList() {

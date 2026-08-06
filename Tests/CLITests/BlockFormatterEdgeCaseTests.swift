@@ -230,11 +230,31 @@ final class BlockFormatterEdgeCaseTests: XCTestCase {
         XCTAssertEqual(BlockFormatter.format(block), "")
     }
 
-    func testFormatOrderedListRenumbersEveryItemAsOne() {
+    func testFormatOrderedListCountsUpFromItsParsedStart() {
         let blocks = parser.parse("3. three\n4. four\n5. five")
         XCTAssertEqual(
             BlockFormatter.format(blocks),
-            "1. three\n1. four\n1. five\n"
+            "3. three\n4. four\n5. five\n"
+        )
+    }
+
+    func testFormatNestedOrderedListsCountIndependentlyFromTheirStarts() {
+        let blocks = parser.parse(
+            "3. Parent\n\n    7. First child\n    8. Second child\n\n4. Sibling\n\n    2. Other child"
+        )
+        XCTAssertEqual(
+            BlockFormatter.format(blocks),
+            "3. Parent\n\n    7. First child\n    8. Second child\n\n4. Sibling\n\n    2. Other child\n"
+        )
+    }
+
+    func testFormatOrderedContinuationDoesNotConsumeANumber() {
+        let blocks = parser.parse(
+            "9. Parent\n\n    3. Nested\n\n    Tail paragraph\n\n10. Sibling"
+        )
+        XCTAssertEqual(
+            BlockFormatter.format(blocks),
+            "9. Parent\n\n    3. Nested\n\n   Tail paragraph\n\n10. Sibling\n"
         )
     }
 

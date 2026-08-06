@@ -132,7 +132,7 @@ final class BlockFormatterTests: XCTestCase {
     func testFormatOrderedList() {
         let blocks = parser.parse("1. First\n2. Second")
         let output = BlockFormatter.format(blocks)
-        XCTAssertEqual(output, "1. First\n1. Second\n")
+        XCTAssertEqual(output, "1. First\n2. Second\n")
     }
 
     func testFormatBlockquote() {

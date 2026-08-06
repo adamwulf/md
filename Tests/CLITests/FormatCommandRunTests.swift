@@ -189,9 +189,9 @@ final class FormatCommandRunTests: XCTestCase {
         XCTAssertEqual(output, "# A\n\n# B\n")
     }
 
-    func testFormatRenumbersOrderedListsFromOne() async throws {
+    func testFormatPreservesOrderedListStartAndCountsUp() async throws {
         let output = try await runFormat(on: "7. seven\n8. eight\n")
-        XCTAssertEqual(output, "1. seven\n1. eight\n")
+        XCTAssertEqual(output, "7. seven\n8. eight\n")
     }
 
     func testFormatRewritesAlternateBulletMarkersAsDashes() async throws {
