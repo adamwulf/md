@@ -473,6 +473,22 @@ public struct MarkdownParser {
                             nestedInList: true
                         )
                         text = blockquoteSource(from: innerText)
+                    } else if childType == CMARK_NODE_THEMATIC_BREAK {
+                        // cmark renders this as five dashes. Once the list
+                        // formatter adds its own dash marker, `- -----`
+                        // reparses as one outer thematic break instead of a
+                        // list item containing a break. Asterisks retain the
+                        // child block unambiguously at every list depth.
+                        text = "***"
+                    } else if childType == CMARK_NODE_HEADING,
+                              pendingTask != nil,
+                              cmark_node_get_heading_level(currentChild) <= 2 {
+                        // An ATX marker placed after a task checkbox is ordinary
+                        // item text (`- [x] # title`), not a heading. A level-one
+                        // or level-two task-item heading can round-trip in setext
+                        // form while leaving the checkbox where the task-list
+                        // extension requires it.
+                        text = taskListHeadingSource(currentChild)
                     } else {
                         text = getNodeText(currentChild, context: .paragraph)
                     }
@@ -492,6 +508,14 @@ public struct MarkdownParser {
         }
 
         return items
+    }
+
+    private func taskListHeadingSource(_ node: UnsafeMutablePointer<cmark_node>) -> String {
+        let level = Int(cmark_node_get_heading_level(node))
+        let text = getChildrenText(node, context: .heading)
+            .replacingOccurrences(of: "\n", with: " ")
+        let underline = level == 1 ? "===" : "-"
+        return "\(text)\n\(underline)"
     }
 
     /// Formatting two adjacent non-list child blocks, or a continuation block

@@ -257,16 +257,16 @@ final class FormatCommandRunTests: XCTestCase {
     }
 
     func testFormatKeepsSetextHeadingsInsideTaskItemsStable() async throws {
-        let sources = [
-            "- [x] done\n  -\n",
-            "1. [ ] done\n    ===\n"
+        let cases = [
+            (source: "- [x] done\n  -\n", expected: "- [x] done\n  -\n"),
+            (source: "1. [ ] done\n    ===\n", expected: "1. [ ] done\n   ===\n")
         ]
 
-        for source in sources {
-            let once = try await runFormat(on: source)
+        for testCase in cases {
+            let once = try await runFormat(on: testCase.source)
             let twice = try await runFormat(on: once)
-            XCTAssertEqual(once, source, "first pass for \(source.debugDescription)")
-            XCTAssertEqual(twice, once, "second pass for \(source.debugDescription)")
+            XCTAssertEqual(once, testCase.expected, "first pass for \(testCase.source.debugDescription)")
+            XCTAssertEqual(twice, once, "second pass for \(testCase.source.debugDescription)")
         }
     }
 
