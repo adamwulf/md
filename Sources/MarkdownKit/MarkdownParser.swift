@@ -392,6 +392,7 @@ public struct MarkdownParser {
             // piece after it. The checkbox belongs to the piece holding the
             // item's first paragraph and to no other.
             var pendingTask = itemNode.flatMap { taskState(of: $0, lineTable: lineTable) }
+            let itemStartLine = itemNode.map { Int(cmark_node_get_start_line($0)) } ?? 0
             var paragraphs: [String] = []
             var child = cmark_node_first_child(itemNode)
             // The author wrote ONE marker for this item, and the first piece
@@ -409,8 +410,20 @@ public struct MarkdownParser {
             func flushGatheredText() {
                 // Each child is its own paragraph, so they are joined by a
                 // blank line. Running them together would weld the last word
-                // of one onto the first word of the next.
-                let text = paragraphs.joined(separator: "\n\n")
+                // of one onto the first word of the next. The one exception is
+                // a checkbox-only paragraph followed immediately by another
+                // block. cmark removes the checkbox from that empty paragraph,
+                // but its line still has to survive so the following block is
+                // not pulled onto the checkbox line.
+                let text: String
+                if pendingTask != nil, paragraphs.first?.isEmpty == true {
+                    let followingBlocks = paragraphs.dropFirst()
+                    text = followingBlocks.isEmpty
+                        ? ""
+                        : "\n" + followingBlocks.joined(separator: "\n\n")
+                } else {
+                    text = paragraphs.joined(separator: "\n\n")
+                }
                 let task = pendingTask
                 // The box is spent here whether or not this piece emits: once
                 // the first content position has passed it has had its turn.
@@ -461,6 +474,11 @@ public struct MarkdownParser {
                     // quote lines and invents separators before raw HTML. Recover
                     // their authored structure the same way as a top-level quote,
                     // then put back the one marker that belongs inside the list.
+                    if pendingTask != nil,
+                       paragraphs.isEmpty,
+                       Int(cmark_node_get_start_line(currentChild)) > itemStartLine {
+                        paragraphs.append("")
+                    }
                     let text: String
                     if childType == CMARK_NODE_BLOCK_QUOTE {
                         let quoteRanges = calculateRanges(
@@ -496,6 +514,10 @@ public struct MarkdownParser {
                         .trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmedText.isEmpty {
                         paragraphs.append(trimmedText)
+                    } else if childType == CMARK_NODE_PARAGRAPH,
+                              pendingTask != nil,
+                              paragraphs.isEmpty {
+                        paragraphs.append("")
                     }
                 }
 
