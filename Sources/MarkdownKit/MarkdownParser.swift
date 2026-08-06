@@ -494,22 +494,27 @@ public struct MarkdownParser {
         return items
     }
 
-    /// Formatting two adjacent non-list child blocks requires a blank line so
-    /// they do not merge. That blank makes the containing list loose on the next
-    /// parse, even when the original source omitted it. Mark the list loose now
-    /// so the first format pass already emits the same inter-item gaps as later
-    /// passes. Nested lists use their own gap rules and do not trigger this path.
+    /// Formatting two adjacent non-list child blocks, or a continuation block
+    /// after a nested list, requires a blank line so the blocks do not merge.
+    /// That blank makes the containing list loose on the next parse, even when
+    /// the original source omitted it. Mark the list loose now so the first
+    /// format pass already emits the same inter-item gaps as later passes.
     private func formattingRequiresLooseList(
         _ listNode: UnsafeMutablePointer<cmark_node>
     ) -> Bool {
         var itemNode = cmark_node_first_child(listNode)
         while let item = itemNode {
             var consecutiveNonListBlocks = 0
+            var sawNestedList = false
             var child = cmark_node_first_child(item)
             while let currentChild = child {
                 if cmark_node_get_type(currentChild) == CMARK_NODE_LIST {
+                    sawNestedList = true
                     consecutiveNonListBlocks = 0
                 } else {
+                    if sawNestedList {
+                        return true
+                    }
                     consecutiveNonListBlocks += 1
                     if consecutiveNonListBlocks > 1 {
                         return true

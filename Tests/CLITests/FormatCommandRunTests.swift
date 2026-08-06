@@ -321,6 +321,32 @@ final class FormatCommandRunTests: XCTestCase {
         }
     }
 
+    func testFormatIsStableWhenABlockquoteFollowsANestedListInTheSameItem() async throws {
+        let cases = [
+            (
+                source: "- alpha\n  - beta\n  > gamma\n",
+                expected: "- alpha\n\n    - beta\n\n  > gamma\n"
+            ),
+            (
+                source: "1. alpha\n    - beta\n    > gamma\n",
+                expected: "1. alpha\n\n    - beta\n\n   > gamma\n"
+            ),
+            (
+                source: "- [ ] alpha\n  - [x] beta\n  > gamma\n",
+                expected: "- [ ] alpha\n\n    - [x] beta\n\n  > gamma\n"
+            )
+        ]
+
+        for testCase in cases {
+            let once = try await runFormat(on: testCase.source)
+            let twice = try await runFormat(on: once)
+            let threeTimes = try await runFormat(on: twice)
+            XCTAssertEqual(once, testCase.expected, "first pass for \(testCase.source)")
+            XCTAssertEqual(twice, once, "second pass for \(testCase.source)")
+            XCTAssertEqual(threeTimes, once, "third pass for \(testCase.source)")
+        }
+    }
+
     func testFormatDoesNotAddLeadingQuoteLinesBeforeFirstChildBlocks() async throws {
         let sources = [
             "> ```\n> code\n> ```\n",
