@@ -7,9 +7,21 @@
 //
 
 import XCTest
+import MarkdownKit
 @testable import md
 
 final class FormatCommandRunTests: XCTestCase {
+
+    private enum BlockSemantics: Equatable {
+        case heading(Int, String)
+        case paragraph(String)
+        case code(String?, String)
+        case list([ListItem], Bool)
+        case blockquote(String)
+        case thematicBreak
+        case table([[String]])
+        case html(String)
+    }
 
     private var scratch: ScratchDirectory!
 
@@ -30,6 +42,50 @@ final class FormatCommandRunTests: XCTestCase {
         return try await StandardStream.capturingStandardOutput {
             try await command.run()
         }
+    }
+
+    private func semantics(of source: String) -> [BlockSemantics] {
+        func normalizedLineEndings(_ text: String) -> String {
+            text.replacingOccurrences(of: "\r\n", with: "\n")
+                .replacingOccurrences(of: "\r", with: "\n")
+        }
+
+        return MarkdownParser().parse(source).map { block in
+            switch block {
+            case .heading(let level, let text, _, _, _):
+                return .heading(level, text)
+            case .paragraph(let text, _, _, _):
+                return .paragraph(normalizedLineEndings(text))
+            case .codeBlock(let language, let code, _, _, _):
+                return .code(language, normalizedLineEndings(code))
+            case .list(let items, let ordered, _, _, _):
+                return .list(items, ordered)
+            case .blockquote(let text, _, _, _):
+                return .blockquote(normalizedLineEndings(text))
+            case .thematicBreak:
+                return .thematicBreak
+            case .table(let rows, _, _, _):
+                return .table(rows)
+            case .htmlBlock(let literal, _, _, _):
+                return .html(normalizedLineEndings(literal))
+            }
+        }
+    }
+
+    private func assertThreePassSemanticIdempotence(
+        _ source: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async throws {
+        let expectedSemantics = semantics(of: source)
+        let once = try await runFormat(on: source)
+        let twice = try await runFormat(on: once)
+        let threeTimes = try await runFormat(on: twice)
+        XCTAssertEqual(semantics(of: once), expectedSemantics, "first pass for \(source.debugDescription)", file: file, line: line)
+        XCTAssertEqual(semantics(of: twice), expectedSemantics, "second pass for \(source.debugDescription)", file: file, line: line)
+        XCTAssertEqual(semantics(of: threeTimes), expectedSemantics, "third pass for \(source.debugDescription)", file: file, line: line)
+        XCTAssertEqual(twice, once, "second-pass bytes for \(source.debugDescription)", file: file, line: line)
+        XCTAssertEqual(threeTimes, twice, "third-pass bytes for \(source.debugDescription)", file: file, line: line)
     }
 
     // MARK: - run()
@@ -287,6 +343,39 @@ final class FormatCommandRunTests: XCTestCase {
             XCTAssertEqual(once, source, "first pass for level \(level)")
             XCTAssertEqual(twice, once, "second pass for level \(level)")
             XCTAssertEqual(threeTimes, twice, "third pass for level \(level)")
+        }
+    }
+
+    func testCheckboxOnlyTaskBoundariesPreserveFollowingBlockSemantics() async throws {
+        var sources: [String] = []
+        for level in 1...6 {
+            let marker = String(repeating: "#", count: level)
+            sources.append("- [x] \n  \(marker)\n")
+            sources.append("- [ ] \n  \(marker) Hé😀 \(level)\n")
+        }
+        sources += [
+            "- [ ] \n  Setext one\n  ===\n",
+            "- [x] \n  Setext two\n  ---\n",
+            "- [x] \n  ---\n",
+            "- [ ] \n  > quoted\n",
+            "- [x] \n  ```swift\n  let café = 1\n  ```\n",
+            "- [ ] \n  <div>\n  Hé😀\n  </div>\n",
+            "- [x] \n  | A | B |\n  | - | - |\n  | α | β |\n",
+            "- [ ] \n  - child\n",
+            "- [x] \n  ### heading\n- sibling\n- [ ] \n  #### next\n",
+            "- [x] \n  # heading\n\n  > adjacent quote\n\n  ```\n  adjacent code\n  ```\n- sibling\n",
+            "- [ ] \n  <div>adjacent HTML</div>\n\n  | A |\n  | - |\n  | β |\n- sibling\n",
+            "1. [x] \n    # ordered\n2. sibling\n",
+            "- outer\n    1. [ ] \n       ### deep\n    2. sibling\n",
+            "- [ ] \n  - [x] \n    #### deep task\n",
+            "-\t[x] \n\t##\tTabbed\n",
+            "- [x] \r\n  ### Hé😀\r\n",
+            "- [ ] \r  #### lone CR\r",
+            "- [x] \n  ##### no final newline"
+        ]
+
+        for source in sources {
+            try await assertThreePassSemanticIdempotence(source)
         }
     }
 
