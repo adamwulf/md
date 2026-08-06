@@ -146,8 +146,8 @@ enum MarkdownSourceEditor {
     }
 
     /// Inserts after a parsed block, consuming only adjacent blank lines.
-    /// Nonblank source that cmark does not model, such as raw HTML or a link
-    /// reference definition, stays on the far side of the insertion.
+    /// Nonblank source that cmark does not model, such as a link reference
+    /// definition, stays on the far side of the insertion.
     static func inserting(
         _ insertion: String,
         after block: MarkdownBlock,

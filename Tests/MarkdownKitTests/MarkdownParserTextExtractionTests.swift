@@ -267,6 +267,39 @@ final class MarkdownParserTextExtractionTests: XCTestCase {
         XCTAssertEqual(second, "After.")
     }
 
+    func testEveryCommonMarkHtmlBlockKindKeepsItsLiteralText() {
+        let cases: [(input: String, literal: String)] = [
+            ("<script>\nraw & text\n</script>\n", "<script>\nraw & text\n</script>\n"),
+            ("<!-- open\nraw -- body\n-->\n", "<!-- open\nraw -- body\n-->\n"),
+            ("<?target data?>\n", "<?target data?>\n"),
+            ("<!DOCTYPE html>\n", "<!DOCTYPE html>\n"),
+            ("<![CDATA[\n<x>&y\n]]>\n", "<![CDATA[\n<x>&y\n]]>\n"),
+            ("<table>\n<tr><td>x</td></tr>\n</table>\n", "<table>\n<tr><td>x</td></tr>\n</table>\n"),
+            ("<x-custom data-x=\"1\">\nraw\n\n", "<x-custom data-x=\"1\">\nraw\n")
+        ]
+
+        for testCase in cases {
+            let blocks = parser.parse(testCase.input)
+            XCTAssertEqual(blocks.count, 1, "input: \(testCase.input.debugDescription)")
+            guard let block = blocks.first,
+                  case .htmlBlock(let literal, _, _, _) = block else {
+                XCTFail("Expected an HTML block for \(testCase.input.debugDescription)")
+                continue
+            }
+            XCTAssertEqual(literal, testCase.literal)
+        }
+    }
+
+    func testHtmlBlockLiteralKeepsIndentationTabsTrailingSpacesAndUnicode() {
+        let source = "   <div data-x=\"é\">  \n\tbody 漢字\t \n   </div>   \n"
+        let blocks = parser.parse(source)
+        guard blocks.count == 1,
+              case .htmlBlock(let literal, _, _, _) = blocks[0] else {
+            return XCTFail("Expected one HTML block, got \(blocks)")
+        }
+        XCTAssertEqual(literal, source)
+    }
+
     // MARK: - Line breaks inside a block
 
     func testAWrappedParagraphKeepsTheBreakBetweenItsLines() throws {
@@ -320,6 +353,15 @@ final class MarkdownParserTextExtractionTests: XCTestCase {
             return XCTFail("Expected a blockquote, got \(blocks[0])")
         }
         XCTAssertEqual(text, "# Heading\n\nParagraph.")
+    }
+
+    func testABlockquoteKeepsSiblingListItemsAtTheSameLevel() {
+        let blocks = parser.parse("> - one\n> - two\n")
+        XCTAssertEqual(blocks.count, 1)
+        guard case .blockquote(let text, _, _, _) = blocks[0] else {
+            return XCTFail("Expected a blockquote, got \(blocks[0])")
+        }
+        XCTAssertEqual(text, "  - one\n  - two")
     }
 
     func testABlockquoteKeepsSoftBreaksWithinOneParagraph() {

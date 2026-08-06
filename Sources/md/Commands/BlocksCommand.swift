@@ -23,7 +23,7 @@ struct BlocksCommand: AsyncParsableCommand {
             (inclusive). END defaults to START.
 
             Block types: heading, paragraph, code block, ordered list, unordered \
-            list, blockquote, table, and thematic break.
+            list, blockquote, table, thematic break, and raw HTML.
 
               $ md blocks --file README.md
               $ md blocks --count --file README.md

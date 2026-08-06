@@ -51,6 +51,40 @@ final class EditingCommandTests: XCTestCase {
         return try scratch.read("document.md")
     }
 
+    func testEditingCommandsCanTargetAnExistingHtmlBlock() async throws {
+        let source = "Before.\n\n<!--  raw HTML  -->\n\nAfter.\n"
+
+        let removed = try await run(RemoveCommand.self, ["2"], on: source)
+        XCTAssertEqual(removed, "Before.\n\nAfter.\n")
+
+        let replaced = try await run(
+            ReplaceCommand.self,
+            ["2", "Replacement."],
+            on: source
+        )
+        XCTAssertEqual(replaced, "Before.\n\nReplacement.\n\nAfter.\n")
+
+        let insertedBefore = try await run(
+            InsertBeforeCommand.self,
+            ["2", "Inserted."],
+            on: source
+        )
+        XCTAssertEqual(
+            insertedBefore,
+            "Before.\n\nInserted.\n\n<!--  raw HTML  -->\n\nAfter.\n"
+        )
+
+        let insertedAfter = try await run(
+            InsertAfterCommand.self,
+            ["2", "Inserted."],
+            on: source
+        )
+        XCTAssertEqual(
+            insertedAfter,
+            "Before.\n\n<!--  raw HTML  -->\n\nInserted.\n\nAfter.\n"
+        )
+    }
+
     // MARK: - remove: happy paths
 
     func testRemoveDropsTheNamedBlock() async throws {

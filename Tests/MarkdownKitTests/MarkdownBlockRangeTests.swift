@@ -140,6 +140,30 @@ final class MarkdownBlockRangeTests: XCTestCase {
         XCTAssertEqual(blocks.first?.lineRange, 1...2)
     }
 
+    func testListRangesKeepNonBreakingSpaceContent() {
+        let markdown = "- a\n\u{00A0}\n\nAfter.\n"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.first?.lineRange, 1...2)
+        assertByteRanges(markdown, cover: ["- a\n\u{00A0}", "After."])
+        assertCharRanges(markdown, cover: ["- a\n\u{00A0}", "After."])
+    }
+
+    func testListRangesKeepEmSpaceContentWithCarriageReturnLineFeeds() {
+        let markdown = "- a\r\n\u{2003}\r\n\r\nAfter.\r\n"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.first?.lineRange, 1...2)
+        assertByteRanges(markdown, cover: ["- a\r\n\u{2003}", "After."])
+        assertCharRanges(markdown, cover: ["- a\r\n\u{2003}", "After."])
+    }
+
+    func testListRangesAddressMultibyteFinalItemsWithCarriageReturnLineFeeds() {
+        let markdown = "- alpha\r\n- 🌍\r\n\r\nAfter.\r\n"
+        let blocks = parser.parse(markdown)
+        XCTAssertEqual(blocks.first?.lineRange, 1...2)
+        assertByteRanges(markdown, cover: ["- alpha\r\n- 🌍", "After."])
+        assertCharRanges(markdown, cover: ["- alpha\r\n- 🌍", "After."])
+    }
+
     func testByteRangesAddressLoneCarriageReturnSource() {
         assertByteRanges("# One\r\r# Two\r", cover: ["# One", "# Two"])
     }

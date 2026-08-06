@@ -138,6 +138,8 @@ public struct MarkdownParser {
     // MARK: - ASCII byte constants
     private static let newlineByte = UInt8(ascii: "\n")
     private static let crByte = UInt8(ascii: "\r")
+    private static let spaceByte = UInt8(ascii: " ")
+    private static let tabByte = UInt8(ascii: "\t")
 
     /// Pre-computed line information for efficient range calculations
     private struct LineInfo {
@@ -275,10 +277,7 @@ public struct MarkdownParser {
             return .list(items: items, ordered: ordered, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_BLOCK_QUOTE:
-            // The children of a block quote are whole blocks. Keep a blank line
-            // between them so two paragraphs, or a paragraph followed by a list,
-            // cannot run together when the quote is written back out.
-            let text = getBlockChildrenText(node, context: .paragraph)
+            let text = getBlockquoteText(node)
             return .blockquote(text: text, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_THEMATIC_BREAK:
@@ -479,25 +478,37 @@ public struct MarkdownParser {
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Render the block children of a container while preserving their boundary.
+    /// Render a blockquote as a complete container, then remove its outer marker.
     ///
-    /// This is deliberately separate from `getChildrenText`, whose children are
-    /// inline nodes and must remain adjacent. Container children are complete blocks,
-    /// so concatenating them directly welds the end of one block to the start of the
-    /// next one.
-    private func getBlockChildrenText(_ node: UnsafeMutablePointer<cmark_node>?, context: InlineTextContext) -> String {
+    /// Rendering child blocks independently loses their container context. In
+    /// particular, cmark indents every list item after the first when handed an
+    /// attached list node on its own, and the indent grows on every format pass.
+    /// Rendering the quote keeps sibling items siblings and preserves the blank lines
+    /// between complete child blocks. Removing exactly one quote marker leaves nested
+    /// quotes and every other inner block marker intact.
+    private func getBlockquoteText(_ node: UnsafeMutablePointer<cmark_node>?) -> String {
         guard let node else { return "" }
-        var blocks: [String] = []
-        var child = cmark_node_first_child(node)
-        while let currentChild = child {
-            let text = getNodeText(currentChild, context: context)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !text.isEmpty {
-                blocks.append(text)
+        let rendered = cmark_render_commonmark(node, 0, 0)
+        defer { free(rendered) }
+        guard let rendered else { return "" }
+
+        var lines = String(cString: rendered)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { line -> String in
+                guard line.first == ">" else { return String(line) }
+                var content = line.dropFirst()
+                if content.first == " " {
+                    content = content.dropFirst()
+                }
+                return String(content)
             }
-            child = cmark_node_next(currentChild)
+
+        // cmark's writer terminates its output with a newline. The model stores the
+        // block content rather than that terminator; BlockFormatter supplies it later.
+        if lines.last?.isEmpty == true {
+            lines.removeLast()
         }
-        return blocks.joined(separator: "\n\n")
+        return lines.joined(separator: "\n")
     }
 
     private func getNodeText(_ node: UnsafeMutablePointer<cmark_node>?, context: InlineTextContext) -> String {
@@ -581,7 +592,7 @@ public struct MarkdownParser {
         if trimTrailingBlankLines {
             var trimmed = false
             while endLine > startLine,
-                  lineTable[endLine - 1].content.trimmingCharacters(in: .whitespaces).isEmpty {
+                  isCommonMarkBlankLine(lineTable[endLine - 1].content) {
                 endLine -= 1
                 trimmed = true
             }
@@ -606,6 +617,15 @@ public struct MarkdownParser {
         let byteRange = NSRange(location: startByteIndex, length: Swift.max(0, endByteIndex - startByteIndex))
 
         return RangePair(charRange: charRange, byteRange: byteRange, lineRange: startLine...endLine)
+    }
+
+    /// CommonMark blank lines contain only ASCII spaces and tabs. Foundation's
+    /// `.whitespaces` also includes NBSP, EM SPACE, and other authored Unicode
+    /// content that cmark keeps inside the list's reported source range.
+    private func isCommonMarkBlankLine(_ line: String) -> Bool {
+        line.utf8.allSatisfy { byte in
+            byte == Self.spaceByte || byte == Self.tabByte
+        }
     }
 
     private func byteToUTF16Offset(_ byteOffset: Int, in lineInfo: LineInfo) -> Int {

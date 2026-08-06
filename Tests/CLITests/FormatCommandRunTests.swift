@@ -216,6 +216,16 @@ final class FormatCommandRunTests: XCTestCase {
         XCTAssertEqual(output, "> A\n>\n> B\n")
     }
 
+    func testFormatKeepsAListInsideABlockquoteStable() async throws {
+        let source = "> Intro.\n>\n> - one\n> - two\n"
+        let once = try await runFormat(on: source)
+        let twice = try await runFormat(on: once)
+        let threeTimes = try await runFormat(on: twice)
+        XCTAssertEqual(once, "> Intro.\n>\n>   - one\n>   - two\n")
+        XCTAssertEqual(twice, once)
+        XCTAssertEqual(threeTimes, once)
+    }
+
     /// Fixed by `MarkdownEscaper`. See `EscapedMarkdownRoundTripTests` for the whole
     /// set of cases that `md format` must not change.
     func testFormatKeepsAnEscapedAsteriskEscaped() async throws {
