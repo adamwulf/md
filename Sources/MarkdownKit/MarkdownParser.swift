@@ -60,7 +60,26 @@ public struct ListItem: Sendable, Equatable {
         text: String,
         indentLevel: Int,
         ordered: Bool,
-        orderedListStart: Int? = nil,
+        task: TaskState? = nil,
+        tight: Bool = true,
+        continuation: Bool = false
+    ) {
+        self.init(
+            text: text,
+            indentLevel: indentLevel,
+            ordered: ordered,
+            orderedListStart: nil,
+            task: task,
+            tight: tight,
+            continuation: continuation
+        )
+    }
+
+    public init(
+        text: String,
+        indentLevel: Int,
+        ordered: Bool,
+        orderedListStart: Int?,
         task: TaskState? = nil,
         tight: Bool = true,
         continuation: Bool = false

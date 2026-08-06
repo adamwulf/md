@@ -126,6 +126,21 @@ final class FormatCommandRunTests: XCTestCase {
         XCTAssertTrue(output.hasSuffix("+++\n# Heading\n"), "got: \(output)")
     }
 
+    func testFormatRefusesAnExplicitConversionOfMalformedFrontmatter() async throws {
+        do {
+            _ = try await runFormat(
+                ["--frontmatter", "json"],
+                on: "---\ntitle: [unclosed\n---\n# Heading\n"
+            )
+            XCTFail("Expected malformed frontmatter conversion to fail")
+        } catch {
+            XCTAssertEqual(
+                error.localizedDescription,
+                "Malformed YAML frontmatter"
+            )
+        }
+    }
+
     func testFormatRefusesToConvertANullValueToTOML() async throws {
         let path = try scratch.write(
             "---\npublished: null\n---\nBody\n",

@@ -37,7 +37,13 @@ struct FormatCommand: AsyncParsableCommand {
 
     func run() async throws {
         let source = try input.readSource()
-        if case .valid(let parsed) = Frontmatter.parseResult(source.content) {
+        switch Frontmatter.parseResult(source.content) {
+        case .malformed(let error) where frontmatter != nil:
+            // An explicit conversion request cannot be honored without
+            // reading the source fence. Refuse it rather than silently
+            // returning unchanged content while reporting success.
+            throw error
+        case .valid(let parsed):
             switch frontmatter {
             case .json:
                 try parsed.validateForJSON()
@@ -46,6 +52,8 @@ struct FormatCommand: AsyncParsableCommand {
             case .yaml, .none:
                 break
             }
+        case .absent, .malformed:
+            break
         }
         try InputReader.writeToStdout(
             FormatCommand.format(

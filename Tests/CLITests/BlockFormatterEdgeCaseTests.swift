@@ -258,6 +258,41 @@ final class BlockFormatterEdgeCaseTests: XCTestCase {
         )
     }
 
+    func testFormatOrderedListUsesAValidLazyMarkerPastNineDigits() {
+        let once = BlockFormatter.format(
+            parser.parse("999999999. first\n999999999. second")
+        )
+
+        XCTAssertEqual(once, "999999999. first\n1. second\n")
+        XCTAssertEqual(BlockFormatter.format(parser.parse(once)), once)
+    }
+
+    func testFormatBoundaryMarkerContinuationKeepsStableIndentation() {
+        let source = """
+            999999999. first
+            999999999. second
+
+                       - nested
+
+                       Tail paragraph
+            """
+        let once = BlockFormatter.format(parser.parse(source))
+
+        XCTAssertEqual(
+            once,
+            "999999999. first\n\n1. second\n\n    - nested\n\n   Tail paragraph\n"
+        )
+        XCTAssertEqual(BlockFormatter.format(parser.parse(once)), once)
+    }
+
+    func testFormatNestedListClearsAThreeDigitParentMarker() {
+        let source = "100. Parent\n\n     7. Child"
+        let once = BlockFormatter.format(parser.parse(source))
+
+        XCTAssertEqual(once, "100. Parent\n\n     7. Child\n")
+        XCTAssertEqual(BlockFormatter.format(parser.parse(once)), once)
+    }
+
     // MARK: - Blockquotes
 
     func testFormatBlockquotePrefixesEveryLine() {

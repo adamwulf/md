@@ -12,6 +12,22 @@ final class MarkdownParserTests: XCTestCase {
 
     let parser = MarkdownParser()
 
+    // MARK: - Public API compatibility
+
+    func testOriginalListItemInitializerRemainsAFunctionValue() {
+        let initializer: (
+            String,
+            Int,
+            Bool,
+            TaskState?,
+            Bool,
+            Bool
+        ) -> ListItem = ListItem.init
+
+        let item = initializer("text", 0, true, nil, true, false)
+        XCTAssertNil(item.orderedListStart)
+    }
+
     // MARK: - Headings
 
     func testParseHeading() {
