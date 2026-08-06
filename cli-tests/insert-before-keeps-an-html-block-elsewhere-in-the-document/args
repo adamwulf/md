@@ -1,1 +1,1 @@
-insert-before 2 "Inserted." --file input.md
+insert-before 3 "Inserted." --file input.md

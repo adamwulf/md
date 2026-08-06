@@ -87,6 +87,7 @@ public enum MarkdownBlock: Sendable {
     case blockquote(text: String, charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
     case thematicBreak(charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
     case table(rows: [[String]], charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
+    case htmlBlock(literal: String, charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
 
     /// Character offset range (for text extraction and display)
     public var charRange: NSRange {
@@ -98,6 +99,7 @@ public enum MarkdownBlock: Sendable {
         case .blockquote(_, let charRange, _, _): return charRange
         case .thematicBreak(let charRange, _, _): return charRange
         case .table(_, let charRange, _, _): return charRange
+        case .htmlBlock(_, let charRange, _, _): return charRange
         }
     }
 
@@ -111,6 +113,7 @@ public enum MarkdownBlock: Sendable {
         case .blockquote(_, _, let byteRange, _): return byteRange
         case .thematicBreak(_, let byteRange, _): return byteRange
         case .table(_, _, let byteRange, _): return byteRange
+        case .htmlBlock(_, _, let byteRange, _): return byteRange
         }
     }
 
@@ -124,6 +127,7 @@ public enum MarkdownBlock: Sendable {
         case .blockquote(_, _, _, let lineRange): return lineRange
         case .thematicBreak(_, _, let lineRange): return lineRange
         case .table(_, _, _, let lineRange): return lineRange
+        case .htmlBlock(_, _, _, let lineRange): return lineRange
         }
     }
 }
@@ -279,6 +283,16 @@ public struct MarkdownParser {
 
         case CMARK_NODE_THEMATIC_BREAK:
             return .thematicBreak(charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
+
+        case CMARK_NODE_HTML_BLOCK:
+            let literal = cmark_node_get_literal(node)
+                .map { String(cString: $0) } ?? ""
+            return .htmlBlock(
+                literal: literal,
+                charRange: ranges.charRange,
+                byteRange: ranges.byteRange,
+                lineRange: ranges.lineRange
+            )
 
         default:
             let typeName = String(cString: cmark_node_get_type_string(node))

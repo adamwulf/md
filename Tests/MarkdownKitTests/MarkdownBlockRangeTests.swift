@@ -27,7 +27,8 @@ final class MarkdownBlockRangeTests: XCTestCase {
             .list(items: [], ordered: false, charRange: charRange, byteRange: byteRange, lineRange: lineRange),
             .blockquote(text: "q", charRange: charRange, byteRange: byteRange, lineRange: lineRange),
             .thematicBreak(charRange: charRange, byteRange: byteRange, lineRange: lineRange),
-            .table(rows: [], charRange: charRange, byteRange: byteRange, lineRange: lineRange)
+            .table(rows: [], charRange: charRange, byteRange: byteRange, lineRange: lineRange),
+            .htmlBlock(literal: "<div></div>", charRange: charRange, byteRange: byteRange, lineRange: lineRange)
         ]
     }
 
@@ -52,7 +53,7 @@ final class MarkdownBlockRangeTests: XCTestCase {
     }
 
     func testEveryCaseIsRepresentedExactlyOnce() {
-        XCTAssertEqual(everyCase.count, 7)
+        XCTAssertEqual(everyCase.count, 8)
     }
 
     // MARK: - ListItem

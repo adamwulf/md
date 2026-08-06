@@ -55,6 +55,8 @@ final class MarkdownDocumentParserTests: XCTestCase {
 
         ---
 
+        <div>raw</div>
+
         | A | B |
         | --- | --- |
         | 1 | 2 |
@@ -70,6 +72,7 @@ final class MarkdownDocumentParserTests: XCTestCase {
         "- one\n- two",
         "> quoted",
         "---\n",
+        "<div>raw</div>",
         "| A | B |\n| --- | --- |\n| 1 | 2 |"
     ]
 
@@ -90,14 +93,14 @@ final class MarkdownDocumentParserTests: XCTestCase {
         let blocks = parser.parseDocument(document)
         XCTAssertEqual(
             blocks.map(\.lineRange),
-            [5...5, 7...7, 9...11, 13...14, 16...16, 18...19, 20...22]
+            [5...5, 7...7, 9...11, 13...14, 16...16, 18...19, 20...20, 22...24]
         )
     }
 
     func testEveryBlockKindKeepsItsPayloadAfterTheShift() {
         let document = "---\ntitle: A\n---\n\n" + allBlockKinds
         let blocks = parser.parseDocument(document)
-        XCTAssertEqual(blocks.count, 7)
+        XCTAssertEqual(blocks.count, 8)
 
         guard case .heading(let level, let headingText, _, _, _) = blocks[0],
               case .paragraph(let paragraphText, _, _, _) = blocks[1],
@@ -105,7 +108,8 @@ final class MarkdownDocumentParserTests: XCTestCase {
               case .list(let items, let ordered, _, _, _) = blocks[3],
               case .blockquote(let quote, _, _, _) = blocks[4],
               case .thematicBreak = blocks[5],
-              case .table(let rows, _, _, _) = blocks[6] else {
+              case .htmlBlock(let literal, _, _, _) = blocks[6],
+              case .table(let rows, _, _, _) = blocks[7] else {
             return XCTFail("Unexpected block kinds: \(blocks)")
         }
 
@@ -117,6 +121,7 @@ final class MarkdownDocumentParserTests: XCTestCase {
         XCTAssertEqual(items.map(\.text), ["one", "two"])
         XCTAssertFalse(ordered)
         XCTAssertEqual(quote, "quoted")
+        XCTAssertEqual(literal, "<div>raw</div>\n")
         XCTAssertEqual(rows, [["A", "B"], ["1", "2"]])
     }
 

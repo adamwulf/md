@@ -243,20 +243,27 @@ final class MarkdownParserTextExtractionTests: XCTestCase {
         )
     }
 
-    // MARK: - Blocks the parser deliberately skips
+    // MARK: - Raw HTML blocks
 
-    func testHtmlBlocksProduceNoBlockAtAll() {
-        XCTAssertEqual(parser.parse("<div>\nhi\n</div>\n").count, 0)
+    func testHtmlBlocksKeepTheirLiteralText() {
+        let blocks = parser.parse("<div>\nhi\n</div>\n")
+        XCTAssertEqual(blocks.count, 1)
+        guard case .htmlBlock(let literal, _, _, _) = blocks[0] else {
+            return XCTFail("Expected an HTML block, got \(blocks[0])")
+        }
+        XCTAssertEqual(literal, "<div>\nhi\n</div>\n")
     }
 
-    func testAnHtmlBlockBetweenTwoParagraphsIsSilentlyDropped() {
+    func testAnHtmlBlockBetweenTwoParagraphsIsKeptInSourceOrder() {
         let blocks = parser.parse("Before.\n\n<div>x</div>\n\nAfter.\n")
-        XCTAssertEqual(blocks.count, 2)
+        XCTAssertEqual(blocks.count, 3)
         guard case .paragraph(let first, _, _, _) = blocks[0],
-              case .paragraph(let second, _, _, _) = blocks[1] else {
-            return XCTFail("Expected two paragraphs, got \(blocks)")
+              case .htmlBlock(let literal, _, _, _) = blocks[1],
+              case .paragraph(let second, _, _, _) = blocks[2] else {
+            return XCTFail("Expected paragraph, HTML, paragraph; got \(blocks)")
         }
         XCTAssertEqual(first, "Before.")
+        XCTAssertEqual(literal, "<div>x</div>\n")
         XCTAssertEqual(second, "After.")
     }
 

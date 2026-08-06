@@ -10,6 +10,8 @@ let x = 1
 
 > A quote.
 
+<div>raw</div>
+
 ---
 
 | a | b |

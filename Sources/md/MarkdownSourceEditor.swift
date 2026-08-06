@@ -608,6 +608,7 @@ private enum MarkdownBlockKind: Equatable {
     case blockquote
     case thematicBreak
     case table
+    case htmlBlock
 }
 
 private extension MarkdownBlock {
@@ -627,6 +628,8 @@ private extension MarkdownBlock {
             return .thematicBreak
         case .table:
             return .table
+        case .htmlBlock:
+            return .htmlBlock
         }
     }
 }

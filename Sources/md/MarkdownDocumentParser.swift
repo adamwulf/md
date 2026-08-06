@@ -60,6 +60,8 @@ private extension MarkdownBlock {
             return .thematicBreak(charRange: newChar, byteRange: newByte, lineRange: newLines)
         case .table(let rows, _, _, _):
             return .table(rows: rows, charRange: newChar, byteRange: newByte, lineRange: newLines)
+        case .htmlBlock(let literal, _, _, _):
+            return .htmlBlock(literal: literal, charRange: newChar, byteRange: newByte, lineRange: newLines)
         }
     }
 }

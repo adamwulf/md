@@ -140,6 +140,11 @@ final class BlocksCommandTests: XCTestCase {
         )
     }
 
+    func testListingSummarizesHTMLWithItsLineRange() async throws {
+        let output = try await runBlocks([], on: "<div>\nraw\n</div>\n")
+        XCTAssertEqual(output, "[1] html L1-3\n")
+    }
+
     func testListingSummarizesTableWithRowCount() async throws {
         let output = try await runBlocks(
             [],

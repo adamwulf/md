@@ -233,12 +233,7 @@ final class FormatCommandRunTests: XCTestCase {
         XCTAssertEqual(secondPass, output)
     }
 
-    func testFormatDropsHtmlBlocksEntirely() async throws {
-        XCTExpectFailure("""
-            MarkdownBlock has no case for raw HTML, so parseNode returns nil for \
-            an html_block and md format deletes it. The <div> below should \
-            survive the round trip.
-            """)
+    func testFormatKeepsHtmlBlocks() async throws {
         let output = try await runFormat(on: "Before.\n\n<div>x</div>\n\nAfter.\n")
         XCTAssertEqual(output, "Before.\n\n<div>x</div>\n\nAfter.\n")
     }

@@ -1,4 +1,3 @@
-md counts two blocks here, the heading and the tail paragraph,
-because it does not model an html block. Whatever it counts, the
-html must survive the edit. insert-before splices into the source,
-so it does.
+md counts three blocks here: the heading, the HTML block, and the tail
+paragraph. The HTML is not the block being edited, so it must survive the
+source splice untouched.

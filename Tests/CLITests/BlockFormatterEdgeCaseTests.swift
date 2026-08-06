@@ -274,6 +274,31 @@ final class BlockFormatterEdgeCaseTests: XCTestCase {
         )
     }
 
+    // MARK: - Raw HTML
+
+    func testFormatHTMLBlockKeepsItsLiteralText() {
+        let block = MarkdownBlock.htmlBlock(
+            literal: "<div>\nraw & text\n</div>\n",
+            charRange: noRange,
+            byteRange: noRange,
+            lineRange: firstLine
+        )
+        XCTAssertEqual(
+            BlockFormatter.format(block),
+            "<div>\nraw & text\n</div>\n"
+        )
+    }
+
+    func testFormatHTMLBlockAddsAFinalNewlineWhenMissing() {
+        let block = MarkdownBlock.htmlBlock(
+            literal: "<!-- separator -->",
+            charRange: noRange,
+            byteRange: noRange,
+            lineRange: firstLine
+        )
+        XCTAssertEqual(BlockFormatter.format(block), "<!-- separator -->\n")
+    }
+
     // MARK: - Headings
 
     func testFormatHeadingUsesOneHashPerLevel() {

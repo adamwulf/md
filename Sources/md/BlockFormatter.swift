@@ -120,6 +120,12 @@ enum BlockFormatter {
             for row in rows.dropFirst() {
                 output += "| \(row.joined(separator: " | ")) |\n"
             }
+
+        case .htmlBlock(let literal, _, _, _):
+            output += literal
+            if !literal.hasSuffix("\n") {
+                output += "\n"
+            }
         }
 
         return output

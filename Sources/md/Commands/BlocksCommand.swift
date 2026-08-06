@@ -106,6 +106,8 @@ struct BlocksCommand: AsyncParsableCommand {
             return "thematic_break L\(lineRange.lowerBound)"
         case .table(let rows, _, _, let lineRange):
             return "table(\(rows.count) rows) L\(lineRange.lowerBound)-\(lineRange.upperBound)"
+        case .htmlBlock(_, _, _, let lineRange):
+            return "html L\(lineRange.lowerBound)-\(lineRange.upperBound)"
         }
     }
 }
