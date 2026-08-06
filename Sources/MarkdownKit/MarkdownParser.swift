@@ -648,12 +648,28 @@ public struct MarkdownParser {
         return RangePair(charRange: charRange, byteRange: byteRange, lineRange: startLine...endLine)
     }
 
+    /// Counts the same source line endings as `buildLineTable`: LF, CR, and
+    /// CRLF as one ending. Other Unicode newline scalars are literal content
+    /// to cmark and must not move a block onto the following source line.
     private func sourceLineCount(_ source: String) -> Int {
+        let bytes = Array(source.utf8)
         var count = 1
-        for character in source where character.isNewline {
-            count += 1
+        var index = 0
+        while index < bytes.count {
+            if bytes[index] == Self.crByte {
+                count += 1
+                index += 1
+                if index < bytes.count && bytes[index] == Self.newlineByte {
+                    index += 1
+                }
+            } else if bytes[index] == Self.newlineByte {
+                count += 1
+                index += 1
+            } else {
+                index += 1
+            }
         }
-        if source.last?.isNewline == true {
+        if bytes.last == Self.crByte || bytes.last == Self.newlineByte {
             count -= 1
         }
         return Swift.max(1, count)

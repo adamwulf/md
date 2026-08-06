@@ -229,6 +229,23 @@ final class MarkdownBlockRangeTests: XCTestCase {
         }
     }
 
+    func testUnicodeLineSeparatorInsideHtmlDoesNotExtendItsSourceRange() {
+        let markdown = "<!-- alpha\u{2028}omega -->\nAfter.\n"
+        let blocks = parser.parse(markdown)
+
+        XCTAssertEqual(blocks.count, 2)
+        XCTAssertEqual(blocks[0].lineRange, 1...1)
+        XCTAssertEqual(blocks[1].lineRange, 2...2)
+        assertByteRanges(
+            markdown,
+            cover: ["<!-- alpha\u{2028}omega -->", "After."]
+        )
+        assertCharRanges(
+            markdown,
+            cover: ["<!-- alpha\u{2028}omega -->", "After."]
+        )
+    }
+
     // MARK: - Line ranges
 
     func testLineRangesCountCarriageReturnLineFeedPairsAsOneLine() {

@@ -163,6 +163,12 @@ final class BlocksCommandTests: XCTestCase {
         }
     }
 
+    func testSliceStopsAtAUnicodeLineSeparatorInsideHtml() async throws {
+        let html = "<!-- alpha\u{2028}omega -->"
+        let output = try await runBlocks(["1"], on: "\(html)\nAfter.\n")
+        XCTAssertEqual(output, "\(html)\n")
+    }
+
     func testListingSummarizesTableWithRowCount() async throws {
         let output = try await runBlocks(
             [],

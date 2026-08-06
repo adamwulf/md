@@ -124,6 +124,21 @@ final class EditingCommandTests: XCTestCase {
         }
     }
 
+    func testEditingAnHtmlBlockDoesNotConsumeTheParagraphAfterAUnicodeLineSeparator() async throws {
+        let html = "<!-- alpha\u{2028}omega -->"
+        let source = "\(html)\nAfter.\n"
+
+        let removed = try await run(RemoveCommand.self, ["1"], on: source)
+        XCTAssertEqual(removed, "After.\n")
+
+        let insertedAfter = try await run(
+            InsertAfterCommand.self,
+            ["1", "Inserted."],
+            on: source
+        )
+        XCTAssertEqual(insertedAfter, "\(html)\n\nInserted.\n\nAfter.\n")
+    }
+
     // MARK: - remove: happy paths
 
     func testRemoveDropsTheNamedBlock() async throws {
