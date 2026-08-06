@@ -257,6 +257,47 @@ final class FormatCommandRunTests: XCTestCase {
         }
     }
 
+    func testFormatPreservesTabExpandedCodeIndentationAfterBlockquoteMarkers() async throws {
+        let markerLookalikes = ["---", "<div>", "- item"]
+        let prefixes = [">\t  ", " >\t   ", "  >\t    ", "   >\t "]
+
+        for marker in markerLookalikes {
+            for prefix in prefixes {
+                let source = "\(prefix)\(marker)\n"
+                let expected = ">     \(marker)\n"
+                let once = try await runFormat(on: source)
+                let twice = try await runFormat(on: once)
+                XCTAssertEqual(once, expected, "first pass for \(source.debugDescription)")
+                XCTAssertEqual(twice, once, "second pass for \(source.debugDescription)")
+            }
+        }
+
+        let spacedCode = try await runFormat(on: ">\t    code\n")
+        XCTAssertEqual(spacedCode, ">       code\n")
+    }
+
+    func testFormatKeepsBlockquotesInsideListItemsStable() async throws {
+        let cases = [
+            (
+                source: "- before\n  > A\n  >\n  > B\n- after\n",
+                expected: "- before\n\n  > A\n  >\n  > B\n\n- after\n"
+            ),
+            (
+                source: "- before\n  > <!-- x -->\n- after\n",
+                expected: "- before\n\n  > <!-- x -->\n\n- after\n"
+            )
+        ]
+
+        for testCase in cases {
+            let once = try await runFormat(on: testCase.source)
+            let twice = try await runFormat(on: once)
+            let threeTimes = try await runFormat(on: twice)
+            XCTAssertEqual(once, testCase.expected, "first pass for \(testCase.source)")
+            XCTAssertEqual(twice, once, "second pass for \(testCase.source)")
+            XCTAssertEqual(threeTimes, once, "third pass for \(testCase.source)")
+        }
+    }
+
     func testFormatDoesNotAddLeadingQuoteLinesBeforeFirstChildBlocks() async throws {
         let sources = [
             "> ```\n> code\n> ```\n",

@@ -383,7 +383,8 @@ public struct MarkdownParser {
         var items: [ListItem] = []
         // cmark decides tightness for the whole list, counting both blank
         // lines between items and blank lines inside one item.
-        let tight = cmark_node_get_list_tight(listNode) != 0
+        let tight = cmark_node_get_list_tight(listNode) != 0 &&
+            !formattingRequiresLooseList(listNode)
         var itemNode = cmark_node_first_child(listNode)
 
         while itemNode != nil {
@@ -456,10 +457,30 @@ public struct MarkdownParser {
                 } else {
                     // The children of a list item are whole blocks, thus each one
                     // comes back through the CommonMark writer with its backslashes.
-                    let text = getNodeText(currentChild, context: .paragraph)
+                    // Blockquotes are the exception: cmark's writer loses blank
+                    // quote lines and invents separators before raw HTML. Recover
+                    // their authored structure the same way as a top-level quote,
+                    // then put back the one marker that belongs inside the list.
+                    let text: String
+                    if childType == CMARK_NODE_BLOCK_QUOTE {
+                        let quoteRanges = calculateRanges(
+                            for: currentChild,
+                            lineTable: lineTable
+                        )
+                        let markerColumn = Int(cmark_node_get_start_column(currentChild))
+                        let innerText = getBlockquoteText(
+                            lineRange: quoteRanges.lineRange,
+                            lineTable: lineTable,
+                            maximumLeadingSpaces: Swift.max(3, markerColumn - 1)
+                        )
+                        text = blockquoteSource(from: innerText)
+                    } else {
+                        text = getNodeText(currentChild, context: .paragraph)
+                    }
+                    let trimmedText = text
                         .trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !text.isEmpty {
-                        paragraphs.append(text)
+                    if !trimmedText.isEmpty {
+                        paragraphs.append(trimmedText)
                     }
                 }
 
@@ -472,6 +493,34 @@ public struct MarkdownParser {
         }
 
         return items
+    }
+
+    /// Formatting two adjacent non-list child blocks requires a blank line so
+    /// they do not merge. That blank makes the containing list loose on the next
+    /// parse, even when the original source omitted it. Mark the list loose now
+    /// so the first format pass already emits the same inter-item gaps as later
+    /// passes. Nested lists use their own gap rules and do not trigger this path.
+    private func formattingRequiresLooseList(
+        _ listNode: UnsafeMutablePointer<cmark_node>
+    ) -> Bool {
+        var itemNode = cmark_node_first_child(listNode)
+        while let item = itemNode {
+            var consecutiveNonListBlocks = 0
+            var child = cmark_node_first_child(item)
+            while let currentChild = child {
+                if cmark_node_get_type(currentChild) == CMARK_NODE_LIST {
+                    consecutiveNonListBlocks = 0
+                } else {
+                    consecutiveNonListBlocks += 1
+                    if consecutiveNonListBlocks > 1 {
+                        return true
+                    }
+                }
+                child = cmark_node_next(currentChild)
+            }
+            itemNode = cmark_node_next(item)
+        }
+        return false
     }
 
     private func getChildrenText(_ node: UnsafeMutablePointer<cmark_node>?, context: InlineTextContext) -> String {
@@ -493,33 +542,57 @@ public struct MarkdownParser {
     /// sibling structure and escaping needed to parse the same way again.
     private func getBlockquoteText(
         lineRange: ClosedRange<Int>,
-        lineTable: [LineInfo]
+        lineTable: [LineInfo],
+        maximumLeadingSpaces: Int = 3
     ) -> String {
         guard lineRange.lowerBound > 0,
               lineRange.upperBound <= lineTable.count else { return "" }
 
         return lineRange.map { lineNumber in
-            stripOuterBlockquoteMarker(from: lineTable[lineNumber - 1].content)
+            stripOuterBlockquoteMarker(
+                from: lineTable[lineNumber - 1].content,
+                maximumLeadingSpaces: maximumLeadingSpaces
+            )
         }
         .joined(separator: "\n")
     }
 
-    /// A CommonMark blockquote marker may have up to three leading ASCII spaces,
-    /// then `>`, then one optional ASCII space or tab. Lazy continuation lines
-    /// have no marker and therefore pass through byte-for-byte.
-    private func stripOuterBlockquoteMarker(from line: String) -> String {
+    private func blockquoteSource(from innerText: String) -> String {
+        innerText
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { $0.isEmpty ? ">" : "> \($0)" }
+            .joined(separator: "\n")
+    }
+
+    /// A CommonMark blockquote marker may have leading container indentation,
+    /// then `>`, then one optional padding column. A following tab expands to
+    /// the next four-column stop; only its first column is marker padding, so
+    /// the residual columns remain authored indentation. Lazy continuation
+    /// lines have no marker and therefore pass through byte-for-byte.
+    private func stripOuterBlockquoteMarker(
+        from line: String,
+        maximumLeadingSpaces: Int
+    ) -> String {
         let bytes = Array(line.utf8)
         var index = 0
-        while index < bytes.count && index < 3 && bytes[index] == Self.spaceByte {
+        while index < bytes.count &&
+            index < maximumLeadingSpaces &&
+            bytes[index] == Self.spaceByte {
             index += 1
         }
         guard index < bytes.count && bytes[index] == 0x3E else { return line }
         index += 1
-        if index < bytes.count &&
-            (bytes[index] == Self.spaceByte || bytes[index] == Self.tabByte) {
+
+        var residualTabIndent = 0
+        if index < bytes.count && bytes[index] == Self.spaceByte {
+            index += 1
+        } else if index < bytes.count && bytes[index] == Self.tabByte {
+            let tabWidth = 4 - (index % 4)
+            residualTabIndent = Swift.max(0, tabWidth - 1)
             index += 1
         }
-        return String(decoding: bytes[index...], as: UTF8.self)
+        return String(repeating: " ", count: residualTabIndent) +
+            String(decoding: bytes[index...], as: UTF8.self)
     }
 
     private func getNodeText(_ node: UnsafeMutablePointer<cmark_node>?, context: InlineTextContext) -> String {

@@ -408,4 +408,24 @@ final class MarkdownParserTextExtractionTests: XCTestCase {
         }
         XCTAssertEqual(text, "> <!-- x -->")
     }
+
+    func testABlockquoteTabKeepsIndentationBeyondItsMarkerPaddingColumn() {
+        let cases = [
+            (source: ">\t  ---\n", expected: "    ---"),
+            (source: " >\t   <div>\n", expected: "    <div>"),
+            (source: "  >\t    - item\n", expected: "    - item"),
+            (source: "   >\t code\n", expected: "    code"),
+            (source: ">\t    code\n", expected: "      code")
+        ]
+
+        for testCase in cases {
+            let blocks = parser.parse(testCase.source)
+            XCTAssertEqual(blocks.count, 1, "for \(testCase.source.debugDescription)")
+            guard case .blockquote(let text, _, _, _) = blocks[0] else {
+                XCTFail("Expected a blockquote for \(testCase.source.debugDescription)")
+                continue
+            }
+            XCTAssertEqual(text, testCase.expected, "for \(testCase.source.debugDescription)")
+        }
+    }
 }
