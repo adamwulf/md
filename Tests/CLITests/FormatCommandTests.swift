@@ -381,4 +381,44 @@ final class FormatCommandTests: XCTestCase {
         let input = "[![alt][img]][link]\n\n[img]: /i.png\n[link]: /url\n"
         XCTAssertEqual(runFormat(input), input)
     }
+
+    /// With no blank line below it, cmark folds a definition into the
+    /// paragraph that follows and strips it, leaving the paragraph's
+    /// reported start on the definition line. The definition comes back
+    /// above the paragraph, separated by the one blank line format writes
+    /// between blocks, and the link keeps its reference spelling.
+    func testFormatKeepsADefinitionDirectlyAboveItsParagraph() {
+        XCTAssertEqual(
+            runFormat("[ref]: https://example.com\nUses [ref].\n"),
+            "[ref]: https://example.com\n\nUses [ref].\n"
+        )
+    }
+
+    /// The unused variant of the folded shape: nothing links to the
+    /// definition, and it still comes back above the paragraph.
+    func testFormatKeepsAnUnusedDefinitionDirectlyAboveAParagraph() {
+        XCTAssertEqual(
+            runFormat("[unused]: https://example.com\nSome body text here.\n"),
+            "[unused]: https://example.com\n\nSome body text here.\n"
+        )
+    }
+
+    /// A run of definitions folds as one leading strip; both come back on
+    /// adjacent lines and both links keep their reference spelling.
+    func testFormatKeepsTwoDefinitionsDirectlyAboveTheirParagraph() {
+        XCTAssertEqual(
+            runFormat("[a]: https://a.com\n[b]: https://b.com\nUses [a] and [b].\n"),
+            "[a]: https://a.com\n[b]: https://b.com\n\nUses [a] and [b].\n"
+        )
+    }
+
+    /// The folded shape inside a list item: the definition sits on the
+    /// marker line and the text continues below it. Both stay inside the
+    /// bullet, in the author's order.
+    func testFormatKeepsADefinitionOnAnItemAboveItsText() {
+        XCTAssertEqual(
+            runFormat("- [ref]: https://example.com\n  Uses [ref].\n"),
+            "- [ref]: https://example.com\n\n  Uses [ref].\n"
+        )
+    }
 }

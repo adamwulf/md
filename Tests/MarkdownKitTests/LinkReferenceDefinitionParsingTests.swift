@@ -90,4 +90,34 @@ final class LinkReferenceDefinitionParsingTests: XCTestCase {
             XCTFail("Expected a list block")
         }
     }
+
+    /// With no blank line below it, cmark folds a definition into the
+    /// paragraph that follows and strips it, leaving the paragraph's
+    /// reported start on the definition line. The definition becomes its
+    /// own block, and the paragraph's ranges begin at its surviving content.
+    func testParseSplitsAFoldedDefinitionFromItsParagraph() {
+        let blocks = parser.parse("[ref]: https://example.com\nUses [ref].\n")
+        XCTAssertEqual(blocks.count, 2)
+        guard case .linkReferenceDefinition(let text, _, _, let definitionLines) = blocks[0],
+              case .paragraph(let paragraph, _, _, let paragraphLines) = blocks[1] else {
+            XCTFail("Expected a definition and then a paragraph")
+            return
+        }
+        XCTAssertEqual(text, "[ref]: https://example.com")
+        XCTAssertEqual(definitionLines, 1...1)
+        XCTAssertEqual(paragraph, "Uses [ref].")
+        XCTAssertEqual(paragraphLines, 2...2)
+    }
+
+    /// The folded shape inside a list item keeps the author's order: the
+    /// definition on the marker line, the text below it.
+    func testParseKeepsAFoldedItemDefinitionAboveTheItemText() {
+        let blocks = parser.parse("- [ref]: https://example.com\n  Uses [ref].\n")
+        XCTAssertEqual(blocks.count, 1)
+        if case .list(let items, _, _, _, _) = blocks[0] {
+            XCTAssertEqual(items.map(\.text), ["[ref]: https://example.com\n\nUses [ref]."])
+        } else {
+            XCTFail("Expected a list block")
+        }
+    }
 }

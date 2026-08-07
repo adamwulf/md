@@ -303,7 +303,8 @@ public struct MarkdownParser {
             for: node,
             lineTable: lineTable,
             trimTrailingBlankLines: type == CMARK_NODE_LIST,
-            sourceLineCount: htmlLiteral.map(sourceLineCount)
+            sourceLineCount: htmlLiteral.map(sourceLineCount),
+            contentStartLine: contentStartLine(of: node, lineTable: lineTable)
         )
 
         switch type {
@@ -538,7 +539,10 @@ public struct MarkdownParser {
 
             while let currentChild = child {
                 let childType = cmark_node_get_type(currentChild)
-                appendDefinitions(before: Int(cmark_node_get_start_line(currentChild)))
+                // The child's surviving content decides the order: a
+                // definition stripped off the front of this child's own
+                // paragraph sits above that content and goes back first.
+                appendDefinitions(before: contentStartLine(of: currentChild, lineTable: lineTable))
 
                 if childType == CMARK_NODE_LIST {
                     let nestedOrdered = cmark_node_get_list_type(currentChild) == CMARK_ORDERED_LIST
@@ -762,10 +766,183 @@ public struct MarkdownParser {
         return ConsumedDefinitions(topLevel: topLevel, byItem: byItem, labels: labels)
     }
 
+    /// The line where a node's surviving content begins. cmark strips the
+    /// leading link reference definitions out of a paragraph — or the
+    /// paragraph a setext heading grew from — without advancing the node's
+    /// start line, so the node still reports definition lines its content no
+    /// longer holds, and every inline position inside it is short by the
+    /// same count. The stripped run is re-read from the source with a
+    /// grammar stricter than CommonMark's: a line this accepts is one cmark
+    /// consumed, so text can never be recovered as a definition while it
+    /// also stays in the block.
+    private func contentStartLine(
+        of node: UnsafeMutablePointer<cmark_node>,
+        lineTable: [LineInfo]
+    ) -> Int {
+        let startLine = Int(cmark_node_get_start_line(node))
+        let type = cmark_node_get_type(node)
+        guard type == CMARK_NODE_PARAGRAPH || type == CMARK_NODE_HEADING,
+              startLine >= 1, startLine <= lineTable.count else { return startLine }
+        let endLine = Swift.min(Int(cmark_node_get_end_line(node)), lineTable.count)
+        guard endLine > startLine else { return startLine }
+        let lines = (startLine...endLine).map { lineTable[$0 - 1].content }
+        let containerIndent = Swift.max(0, Int(cmark_node_get_start_column(node)) - 1)
+        return startLine + leadingDefinitionLineCount(lines: lines, containerIndent: containerIndent)
+    }
+
+    /// How many leading lines of a block's source cmark consumed as link
+    /// reference definitions. The first line begins at the block's own
+    /// column, past any container syntax; later lines drop the same indent.
+    /// At least one line is always left for the block's surviving content.
+    private func leadingDefinitionLineCount(lines: [String], containerIndent: Int) -> Int {
+        let rows: [[UInt8]] = lines.enumerated().map { index, line in
+            let bytes = Array(line.utf8)
+            if index == 0 {
+                return Array(bytes.dropFirst(Swift.min(containerIndent, bytes.count)))
+            }
+            var strip = 0
+            while strip < containerIndent, strip < bytes.count, bytes[strip] == Self.spaceByte {
+                strip += 1
+            }
+            return Array(bytes.dropFirst(strip))
+        }
+        var consumed = 0
+        while consumed < rows.count - 1 {
+            guard let end = definitionEndLine(in: rows, startingAt: consumed),
+                  end < rows.count - 1 else { break }
+            consumed = end + 1
+        }
+        return consumed
+    }
+
+    /// The last row of the one definition that starts at `startRow`, or nil
+    /// when no definition starts there. The label and its colon sit on the
+    /// start row; the destination may follow one line ending; a title may
+    /// span further rows. A title that opens on the destination's own row
+    /// must close cleanly or the whole definition is invalid, while a title
+    /// on the next row that fails to close is content, and the definition
+    /// ends with its destination — the same backtrack CommonMark asks for.
+    private func definitionEndLine(in rows: [[UInt8]], startingAt startRow: Int) -> Int? {
+        let startBytes = rows[startRow]
+        var column = 0
+        while column < startBytes.count, column < 3, startBytes[column] == Self.spaceByte {
+            column += 1
+        }
+        guard column < startBytes.count, startBytes[column] == UInt8(ascii: "["),
+              let close = matchingCloseBracket(in: startBytes, opening: column),
+              close + 1 < startBytes.count,
+              startBytes[close + 1] == UInt8(ascii: ":"),
+              !normalizedLabel(String(decoding: startBytes[(column + 1)..<close], as: UTF8.self)).isEmpty
+        else { return nil }
+
+        var row = startRow
+        column = skipSpacesAndTabs(in: rows[row], from: close + 2)
+        if column == rows[row].count {
+            // the destination may sit on the next line, after one line ending
+            guard row + 1 < rows.count else { return nil }
+            row += 1
+            column = skipSpacesAndTabs(in: rows[row], from: 0)
+        }
+        guard let afterDestination = destinationEnd(in: rows[row], from: column) else { return nil }
+
+        column = skipSpacesAndTabs(in: rows[row], from: afterDestination)
+        if column < rows[row].count {
+            guard column > afterDestination,
+                  let titleEnd = titleEndPosition(in: rows, row: row, column: column) else { return nil }
+            return titleEnd.row
+        }
+        if row + 1 < rows.count {
+            let titleRow = rows[row + 1]
+            let titleColumn = skipSpacesAndTabs(in: titleRow, from: 0)
+            if titleColumn < titleRow.count,
+               isTitleOpener(titleRow[titleColumn]),
+               let titleEnd = titleEndPosition(in: rows, row: row + 1, column: titleColumn) {
+                return titleEnd.row
+            }
+        }
+        return row
+    }
+
+    /// The index past a link destination that begins at `start`: either a
+    /// `<...>` form closed on the same line, or a nonempty run of
+    /// non-whitespace with balanced unescaped parentheses.
+    private func destinationEnd(in bytes: [UInt8], from start: Int) -> Int? {
+        guard start < bytes.count else { return nil }
+        if bytes[start] == UInt8(ascii: "<") {
+            var index = start + 1
+            while index < bytes.count {
+                let byte = bytes[index]
+                if byte == UInt8(ascii: "\\") { index += 2; continue }
+                if byte == UInt8(ascii: ">") { return index + 1 }
+                if byte == UInt8(ascii: "<") { return nil }
+                index += 1
+            }
+            return nil
+        }
+        var index = start
+        var parenDepth = 0
+        while index < bytes.count, bytes[index] != Self.spaceByte, bytes[index] != Self.tabByte {
+            let byte = bytes[index]
+            if byte == UInt8(ascii: "\\") { index += 2; continue }
+            if byte == UInt8(ascii: "(") { parenDepth += 1 }
+            if byte == UInt8(ascii: ")") {
+                parenDepth -= 1
+                guard parenDepth >= 0 else { return nil }
+            }
+            index += 1
+        }
+        guard index > start, parenDepth == 0 else { return nil }
+        return Swift.min(index, bytes.count)
+    }
+
+    private func isTitleOpener(_ byte: UInt8) -> Bool {
+        byte == UInt8(ascii: "\"") || byte == UInt8(ascii: "'") || byte == UInt8(ascii: "(")
+    }
+
+    /// Where the title that opens at (`startRow`, `startColumn`) closes, or
+    /// nil when it never closes cleanly. Only whitespace may follow the
+    /// closer on its line.
+    private func titleEndPosition(
+        in rows: [[UInt8]],
+        row startRow: Int,
+        column startColumn: Int
+    ) -> (row: Int, column: Int)? {
+        let opener = rows[startRow][startColumn]
+        guard isTitleOpener(opener) else { return nil }
+        let closer = opener == UInt8(ascii: "(") ? UInt8(ascii: ")") : opener
+        var row = startRow
+        var column = startColumn + 1
+        while row < rows.count {
+            let bytes = rows[row]
+            while column < bytes.count {
+                let byte = bytes[column]
+                if byte == UInt8(ascii: "\\") { column += 2; continue }
+                if byte == closer {
+                    guard skipSpacesAndTabs(in: bytes, from: column + 1) == bytes.count else { return nil }
+                    return (row, column)
+                }
+                if opener == UInt8(ascii: "("), byte == UInt8(ascii: "(") { return nil }
+                column += 1
+            }
+            row += 1
+            column = 0
+        }
+        return nil
+    }
+
+    private func skipSpacesAndTabs(in bytes: [UInt8], from start: Int) -> Int {
+        var index = start
+        while index < bytes.count, bytes[index] == Self.spaceByte || bytes[index] == Self.tabByte {
+            index += 1
+        }
+        return index
+    }
+
     /// Mark the lines whose bytes some node in the tree carries. Lists and
     /// items are containers, so only their children cover lines: what an item
     /// spans beyond its children is exactly what a consumed definition left
-    /// behind.
+    /// behind. A paragraph's coverage starts at its surviving content, so the
+    /// definitions cmark stripped off its front stay uncovered too.
     private func markContentLines(
         of node: UnsafeMutablePointer<cmark_node>?,
         lineTable: [LineInfo],
@@ -777,7 +954,7 @@ public struct MarkdownParser {
             if type == CMARK_NODE_LIST || type == CMARK_NODE_ITEM {
                 markContentLines(of: current, lineTable: lineTable, covered: &covered)
             } else {
-                let startLine = Int(cmark_node_get_start_line(current))
+                let startLine = contentStartLine(of: current, lineTable: lineTable)
                 var endLine = Int(cmark_node_get_end_line(current))
                 if type == CMARK_NODE_HTML_BLOCK {
                     // cmark reports delimiter-terminated raw HTML short of its
@@ -875,7 +1052,7 @@ public struct MarkdownParser {
             .compactMap { definitionLabel(inLine: $0) }
     }
 
-    private func definitionLabel(inLine line: Substring) -> String? {
+    private func definitionLabel(inLine line: some StringProtocol) -> String? {
         let bytes = Array(line.utf8)
         var index = 0
         while index < bytes.count, index < 3, bytes[index] == Self.spaceByte {
@@ -952,7 +1129,12 @@ public struct MarkdownParser {
         // walk runs backwards: each descendant is decided while its ancestor
         // still owns live memory, and never read after that ancestor is freed.
         for node in references.reversed() {
-            guard let source = singleLineSource(of: node, lineTable: lineTable),
+            // Inline positions inside a paragraph that lost leading
+            // definitions are short by the stripped line count, because
+            // cmark parses the stripped buffer as if it began at the node's
+            // reported start line.
+            let lineShift = foldedAncestorLineShift(of: node, lineTable: lineTable)
+            guard let source = singleLineSource(of: node, lineTable: lineTable, lineShift: lineShift),
                   let label = referenceLabel(inLinkSource: source),
                   labels.contains(label),
                   let replacement = cmark_node_new(CMARK_NODE_CUSTOM_INLINE) else { continue }
@@ -966,14 +1148,34 @@ public struct MarkdownParser {
         }
     }
 
+    /// The lines cmark's inline positions are short by inside this node's
+    /// nearest paragraph or heading, which is the count of leading
+    /// definition lines cmark stripped from it.
+    private func foldedAncestorLineShift(
+        of node: UnsafeMutablePointer<cmark_node>,
+        lineTable: [LineInfo]
+    ) -> Int {
+        var ancestor = cmark_node_parent(node)
+        while let current = ancestor {
+            let type = cmark_node_get_type(current)
+            if type == CMARK_NODE_PARAGRAPH || type == CMARK_NODE_HEADING {
+                return contentStartLine(of: current, lineTable: lineTable)
+                    - Int(cmark_node_get_start_line(current))
+            }
+            ancestor = cmark_node_parent(current)
+        }
+        return 0
+    }
+
     /// The authored bytes of an inline node that sits on one source line, or
     /// nil when the reported position cannot be trusted to slice with.
     private func singleLineSource(
         of node: UnsafeMutablePointer<cmark_node>,
-        lineTable: [LineInfo]
+        lineTable: [LineInfo],
+        lineShift: Int = 0
     ) -> String? {
-        let startLine = Int(cmark_node_get_start_line(node))
-        let endLine = Int(cmark_node_get_end_line(node))
+        let startLine = Int(cmark_node_get_start_line(node)) + lineShift
+        let endLine = Int(cmark_node_get_end_line(node)) + lineShift
         let startColumn = Int(cmark_node_get_start_column(node))
         let endColumn = Int(cmark_node_get_end_column(node))
         guard startLine == endLine, startLine >= 1, startLine <= lineTable.count else { return nil }
@@ -1216,9 +1418,14 @@ public struct MarkdownParser {
         for node: UnsafeMutablePointer<cmark_node>,
         lineTable: [LineInfo],
         trimTrailingBlankLines: Bool = false,
-        sourceLineCount: Int? = nil
+        sourceLineCount: Int? = nil,
+        contentStartLine: Int? = nil
     ) -> RangePair {
-        let startLine = Int(cmark_node_get_start_line(node))
+        // A block's public ranges address its surviving content. For a
+        // paragraph that cmark stripped leading definitions from, that
+        // content starts below the node's reported line, and the recovered
+        // definition block owns the lines above it.
+        let startLine = contentStartLine ?? Int(cmark_node_get_start_line(node))
         var endLine = Int(cmark_node_get_end_line(node))
         var endColumn = Int(cmark_node_get_end_column(node))
 
