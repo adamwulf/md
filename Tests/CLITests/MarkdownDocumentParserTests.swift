@@ -148,6 +148,13 @@ final class MarkdownDocumentParserTests: XCTestCase {
         XCTAssertEqual(blocks.map(\.lineRange), [4...4])
     }
 
+    func testMalformedFrontmatterIsStillExcludedFromDocumentBlockIndexes() {
+        let document = "---\ntitle: [unclosed\n---\n\n# Heading\n"
+        let blocks = parser.parseDocument(document)
+        XCTAssertEqual(sources(of: blocks, in: document), ["# Heading"])
+        XCTAssertEqual(blocks.map(\.lineRange), [5...5])
+    }
+
     func testMultiLineFrontmatterShiftsByItsFullHeight() {
         let document = """
             ---

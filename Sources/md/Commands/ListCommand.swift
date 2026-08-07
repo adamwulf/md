@@ -206,8 +206,18 @@ struct ListCommand: AsyncParsableCommand {
             return Entry(path: path, mtime: mtime, frontmatter: nil)
         }
 
-        guard var fm = Frontmatter.parse(content) else {
+        var fm: Frontmatter
+        switch Frontmatter.parseResult(content) {
+        case .absent:
             return Entry(path: path, mtime: mtime, frontmatter: nil)
+        case .malformed(let error):
+            // A bad fence is not an empty mapping. Report the file and render
+            // it using the documented missing-frontmatter representation, but
+            // keep walking so valid neighboring files are still available.
+            writeStderr("md list: \(path): \(error.localizedDescription)")
+            return Entry(path: path, mtime: mtime, frontmatter: nil)
+        case .valid(let parsed):
+            fm = parsed
         }
         fm.format = format
         return Entry(path: path, mtime: mtime, frontmatter: fm)

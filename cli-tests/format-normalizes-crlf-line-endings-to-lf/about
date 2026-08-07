@@ -1,0 +1,4 @@
+`format` uses LF as its canonical line ending. This is intentional: the
+project's markdown files use LF, and formatting normalizes CRLF input to that
+spelling along with the rest of the document. The input remains CRLF so this
+case proves the normalization explicitly.

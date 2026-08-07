@@ -28,6 +28,13 @@ public struct ListItem: Sendable, Equatable {
     public let text: String
     public let indentLevel: Int
     public let ordered: Bool
+    /// The marker value that starts this ordered list, or `nil` when this
+    /// entry continues a list that has already started.
+    ///
+    /// List items are flattened across nesting levels, so keeping the start
+    /// on the first item of each list preserves both top-level and nested
+    /// starts without requiring a separate nested-list model.
+    public let orderedListStart: Int?
     /// The checkbox this item opens with, or `nil` for an item that has none.
     public let task: TaskState?
     /// Whether the list holding this item is tight, meaning its items are not
@@ -57,9 +64,30 @@ public struct ListItem: Sendable, Equatable {
         tight: Bool = true,
         continuation: Bool = false
     ) {
+        self.init(
+            text: text,
+            indentLevel: indentLevel,
+            ordered: ordered,
+            orderedListStart: nil,
+            task: task,
+            tight: tight,
+            continuation: continuation
+        )
+    }
+
+    public init(
+        text: String,
+        indentLevel: Int,
+        ordered: Bool,
+        orderedListStart: Int?,
+        task: TaskState? = nil,
+        tight: Bool = true,
+        continuation: Bool = false
+    ) {
         self.text = text
         self.indentLevel = indentLevel
         self.ordered = ordered
+        self.orderedListStart = orderedListStart
         self.task = task
         self.tight = tight
         self.continuation = continuation
@@ -385,9 +413,12 @@ public struct MarkdownParser {
         // lines between items and blank lines inside one item.
         let tight = cmark_node_get_list_tight(listNode) != 0 &&
             !formattingRequiresLooseList(listNode)
+        let orderedListStart = ordered ? Int(cmark_node_get_list_start(listNode)) : nil
+        var isFirstItem = true
         var itemNode = cmark_node_first_child(listNode)
 
         while itemNode != nil {
+            let itemOrderedListStart = isFirstItem ? orderedListStart : nil
             // A nested list splits its item into the piece before it and the
             // piece after it. The checkbox belongs to the piece holding the
             // item's first paragraph and to no other.
@@ -407,7 +438,7 @@ public struct MarkdownParser {
             let itemIsEmpty = cmark_node_first_child(itemNode) == nil
 
             /// Emit everything gathered since the last nested list as one item.
-            func flushGatheredText() {
+            func flushGatheredText(preservingEmptyParentMarker: Bool = false) {
                 // Each child is its own paragraph, so they are joined by a
                 // blank line. Running them together would weld the last word
                 // of one onto the first word of the next. The one exception is
@@ -429,7 +460,7 @@ public struct MarkdownParser {
                 // the first content position has passed it has had its turn.
                 paragraphs = []
                 pendingTask = nil
-                // An empty piece is dropped, with two exceptions.
+                // An empty piece is dropped, with three exceptions.
                 //
                 // A checkbox is state and is content in its own right, so an
                 // item that is nothing but a box still has to survive.
@@ -439,11 +470,21 @@ public struct MarkdownParser {
                 // An item the author wrote empty is still an item. Dropping it
                 // takes a bullet out of the list, and `format` writes the file,
                 // so the line is gone for good after one run.
-                guard !text.isEmpty || task != nil || itemIsEmpty else { return }
+                //
+                // A parent whose first child is itself a list also has no text
+                // to gather, but its marker owns that nested list. Preserve the
+                // empty parent before flattening its children or they are
+                // promoted one level and both list starts change meaning.
+                guard !text.isEmpty
+                    || task != nil
+                    || itemIsEmpty
+                    || preservingEmptyParentMarker
+                else { return }
                 items.append(ListItem(
                     text: text,
                     indentLevel: indentLevel,
                     ordered: ordered,
+                    orderedListStart: markerIsSpent ? nil : itemOrderedListStart,
                     task: task,
                     tight: tight,
                     continuation: markerIsSpent
@@ -465,7 +506,7 @@ public struct MarkdownParser {
                         ordered: nestedOrdered,
                         lineTable: lineTable
                     )
-                    flushGatheredText()
+                    flushGatheredText(preservingEmptyParentMarker: !markerIsSpent)
                     items.append(contentsOf: nestedItems)
                 } else {
                     // The children of a list item are whole blocks, thus each one
@@ -526,6 +567,7 @@ public struct MarkdownParser {
 
             flushGatheredText()
 
+            isFirstItem = false
             itemNode = cmark_node_next(itemNode)
         }
 

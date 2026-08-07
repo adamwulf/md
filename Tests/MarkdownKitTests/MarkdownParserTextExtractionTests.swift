@@ -226,12 +226,17 @@ final class MarkdownParserTextExtractionTests: XCTestCase {
             items,
             [
                 ListItem(text: "parent", indentLevel: 0, ordered: false),
-                ListItem(text: "numbered", indentLevel: 1, ordered: true)
+                ListItem(
+                    text: "numbered",
+                    indentLevel: 1,
+                    ordered: true,
+                    orderedListStart: 1
+                )
             ]
         )
     }
 
-    func testAnItemHoldingOnlyANestedListDoesNotEmitAnEmptyParent() {
+    func testAnItemHoldingOnlyANestedListKeepsItsEmptyParent() {
         let blocks = parser.parse("-   - only child\n")
         XCTAssertEqual(blocks.count, 1)
         guard case .list(let items, _, _, _, _) = blocks[0] else {
@@ -239,7 +244,10 @@ final class MarkdownParserTextExtractionTests: XCTestCase {
         }
         XCTAssertEqual(
             items,
-            [ListItem(text: "only child", indentLevel: 1, ordered: false)]
+            [
+                ListItem(text: "", indentLevel: 0, ordered: false),
+                ListItem(text: "only child", indentLevel: 1, ordered: false)
+            ]
         )
     }
 

@@ -126,6 +126,21 @@ final class FormatCommandRunTests: XCTestCase {
         XCTAssertTrue(output.hasSuffix("+++\n# Heading\n"), "got: \(output)")
     }
 
+    func testFormatRefusesAnExplicitConversionOfMalformedFrontmatter() async throws {
+        do {
+            _ = try await runFormat(
+                ["--frontmatter", "json"],
+                on: "---\ntitle: [unclosed\n---\n# Heading\n"
+            )
+            XCTFail("Expected malformed frontmatter conversion to fail")
+        } catch {
+            XCTAssertEqual(
+                error.localizedDescription,
+                "Malformed YAML frontmatter"
+            )
+        }
+    }
+
     func testFormatRefusesToConvertANullValueToTOML() async throws {
         let path = try scratch.write(
             "---\npublished: null\n---\nBody\n",
@@ -189,9 +204,9 @@ final class FormatCommandRunTests: XCTestCase {
         XCTAssertEqual(output, "# A\n\n# B\n")
     }
 
-    func testFormatRenumbersOrderedListsFromOne() async throws {
+    func testFormatPreservesOrderedListStartAndCountsUp() async throws {
         let output = try await runFormat(on: "7. seven\n8. eight\n")
-        XCTAssertEqual(output, "1. seven\n1. eight\n")
+        XCTAssertEqual(output, "7. seven\n8. eight\n")
     }
 
     func testFormatRewritesAlternateBulletMarkersAsDashes() async throws {

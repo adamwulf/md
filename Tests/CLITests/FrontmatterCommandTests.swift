@@ -201,6 +201,15 @@ final class FrontmatterCommandTests: XCTestCase {
         XCTAssertEqual(output, "")
     }
 
+    func testReadModeRefusesMalformedFrontmatter() async {
+        await XCTAssertThrowsErrorMessage("Malformed YAML frontmatter") {
+            _ = try await self.runFrontmatter(
+                [],
+                on: "---\ntitle: [unclosed\n---\nBody\n"
+            )
+        }
+    }
+
     func testReadModeOutputIsEmptyForContentWithoutFrontmatter() throws {
         XCTAssertEqual(
             try FrontmatterCommand.readModeOutput(
@@ -318,6 +327,15 @@ final class FrontmatterCommandTests: XCTestCase {
             on: "# Heading\n"
         )
         XCTAssertEqual(output, "")
+    }
+
+    func testKeyModeRefusesMalformedFrontmatter() async {
+        await XCTAssertThrowsErrorMessage("Malformed YAML frontmatter") {
+            _ = try await self.runFrontmatter(
+                ["--key", "title"],
+                on: "---\ntitle: \"unterminated\n---\nBody\n"
+            )
+        }
     }
 
     // MARK: - --set
@@ -457,6 +475,22 @@ final class FrontmatterCommandTests: XCTestCase {
         XCTAssertEqual(written, "---\ntitle: Hello\n---\n# Heading\n")
     }
 
+    func testSetInPlaceRefusesMalformedFrontmatterWithoutRewritingIt() async throws {
+        let content = "---\ntitle: [unclosed\n---\nBody\n"
+        let path = try scratch.write(content, to: "malformed.md")
+        let command = try FrontmatterCommand.parse([
+            "--set", "title=New", "--in-place", "--file", path,
+        ])
+
+        await XCTAssertThrowsErrorMessage("Malformed YAML frontmatter") {
+            try await command.run()
+        }
+        XCTAssertEqual(
+            try String(contentsOfFile: path, encoding: .utf8),
+            content
+        )
+    }
+
     func testSetWritesNothingToStandardOutputWhenEditingInPlace() async throws {
         let path = try scratch.write("---\ntitle: Old\n---\nBody\n", to: "document.md")
         let command = try FrontmatterCommand.parse(
@@ -514,6 +548,22 @@ final class FrontmatterCommandTests: XCTestCase {
             on: "---\ntitle: Hello\ndraft: true\n---\nBody\n"
         )
         XCTAssertEqual(written, "---\ntitle: Hello\n---\nBody\n")
+    }
+
+    func testRemoveKeyInPlaceRefusesMalformedFrontmatterWithoutRewritingIt() async throws {
+        let content = "---\ntitle: [unclosed\n---\nBody\n"
+        let path = try scratch.write(content, to: "malformed.md")
+        let command = try FrontmatterCommand.parse([
+            "--remove-key", "title", "--in-place", "--file", path,
+        ])
+
+        await XCTAssertThrowsErrorMessage("Malformed YAML frontmatter") {
+            try await command.run()
+        }
+        XCTAssertEqual(
+            try String(contentsOfFile: path, encoding: .utf8),
+            content
+        )
     }
 
     // MARK: - Input selection

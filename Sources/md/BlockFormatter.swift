@@ -36,6 +36,15 @@ enum BlockFormatter {
             // the level of the item before decides what a gap means.
             var previousLevel = -1
             var previousTight = true
+            // Each nesting level owns its own ordered-list counter. A parsed
+            // start resets that level when a new list begins, including when
+            // sibling items each contain their own nested ordered list.
+            var nextOrderedNumber: [Int: Int] = [:]
+            var currentOrderedNumber: [Int: Int] = [:]
+            // Four columns is the canonical nesting step, but a parent marker
+            // wider than three characters needs enough space to put its child
+            // at or beyond the parent's content column.
+            var indentWidthByLevel = [0: 0]
             for (index, item) in items.enumerated() {
                 // An item may not stand more than one level deeper than the
                 // item before it. A wider jump writes an indent that reads
@@ -67,8 +76,41 @@ enum BlockFormatter {
                 previousLevel = level
                 previousTight = item.tight
 
-                let indent = String(repeating: "    ", count: level)
-                let marker = item.ordered ? "1." : "-"
+                let indentWidth = indentWidthByLevel[level] ?? (level * 4)
+                let indent = String(repeating: " ", count: indentWidth)
+                let marker: String
+                if item.ordered {
+                    let number: Int
+                    if item.continuation {
+                        // A continuation repeats the content indent of the
+                        // item it belongs to. It neither advances the counter
+                        // nor borrows the following item's (possibly wider)
+                        // marker.
+                        number = currentOrderedNumber[level]
+                            ?? item.orderedListStart
+                            ?? nextOrderedNumber[level]
+                            ?? 1
+                    } else {
+                        if let start = item.orderedListStart {
+                            nextOrderedNumber[level] = start
+                        }
+                        number = nextOrderedNumber[level] ?? 1
+                        currentOrderedNumber[level] = number
+                        nextOrderedNumber[level] = number + 1
+                    }
+                    // CommonMark accepts at most nine digits in an ordered
+                    // marker. Once the logical number crosses that boundary,
+                    // a valid lazy marker keeps the authored list start and
+                    // structure without emitting a line that parses as prose.
+                    let markerNumber = (0...999_999_999).contains(number)
+                        ? number
+                        : 1
+                    marker = "\(markerNumber)."
+                } else {
+                    marker = "-"
+                }
+                indentWidthByLevel[level + 1] = indentWidth
+                    + max(4, marker.count + 1)
                 let checkbox = Self.checkboxPrefix(for: item.task)
                 // Content begins after the marker and its one space, and every
                 // line but the first lines up there. The checkbox stands

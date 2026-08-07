@@ -12,6 +12,22 @@ final class MarkdownParserTests: XCTestCase {
 
     let parser = MarkdownParser()
 
+    // MARK: - Public API compatibility
+
+    func testOriginalListItemInitializerRemainsAFunctionValue() {
+        let initializer: (
+            String,
+            Int,
+            Bool,
+            TaskState?,
+            Bool,
+            Bool
+        ) -> ListItem = ListItem.init
+
+        let item = initializer("text", 0, true, nil, true, false)
+        XCTAssertNil(item.orderedListStart)
+    }
+
     // MARK: - Headings
 
     func testParseHeading() {
@@ -271,9 +287,34 @@ final class MarkdownParserTests: XCTestCase {
             XCTAssertTrue(ordered)
             XCTAssertEqual(items.count, 3)
             XCTAssertEqual(items[0].text, "First")
+            XCTAssertEqual(items.map(\.orderedListStart), [1, nil, nil])
         } else {
             XCTFail("Expected ordered list")
         }
+    }
+
+    func testParseOrderedListStartsAtAuthoredValueAtEveryNestingLevel() {
+        let markdown = """
+        3. Parent
+
+            7. First child
+            8. Second child
+
+        4. Sibling
+
+            2. Other child
+        """
+        let blocks = parser.parse(markdown)
+        guard blocks.count == 1, case .list(let items, _, _, _, _) = blocks[0] else {
+            return XCTFail("Expected one ordered list block, got \(blocks.count)")
+        }
+
+        XCTAssertEqual(
+            items.map(\.text),
+            ["Parent", "First child", "Second child", "Sibling", "Other child"]
+        )
+        XCTAssertEqual(items.map(\.indentLevel), [0, 1, 1, 0, 1])
+        XCTAssertEqual(items.map(\.orderedListStart), [3, 7, nil, nil, 2])
     }
 
     func testParseNestedList() {
@@ -383,6 +424,22 @@ final class MarkdownParserTests: XCTestCase {
         XCTAssertEqual(items.map(\.text), ["One", "", "Three"])
         XCTAssertEqual(items.authoredCount, 3)
         // It is an item in its own right, not a continuation of "One".
+        XCTAssertTrue(items.allSatisfy { !$0.continuation })
+    }
+
+    /// A marker followed immediately by a nested list is still the parent
+    /// item. Dropping its empty text promotes the child into the outer list
+    /// and loses both authored starts when the flat model is formatted.
+    func testAnEmptyParentOfANestedOrderedListSurvives() {
+        let blocks = parser.parse("3.\n   7. Child\n4. Sibling\n")
+        guard blocks.count == 1, case .list(let items, _, _, _, _) = blocks[0] else {
+            return XCTFail("Expected one list block, got \(blocks.count)")
+        }
+
+        XCTAssertEqual(items.map(\.text), ["", "Child", "Sibling"])
+        XCTAssertEqual(items.map(\.indentLevel), [0, 1, 0])
+        XCTAssertEqual(items.map(\.orderedListStart), [3, 7, nil])
+        XCTAssertEqual(items.authoredCount, 3)
         XCTAssertTrue(items.allSatisfy { !$0.continuation })
     }
 

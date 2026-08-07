@@ -19,17 +19,27 @@ extension MarkdownParser {
     /// and `charRange` adjusted so they refer to positions in the original
     /// (unstripped) `content`.
     func parseDocument(_ content: String) -> [MarkdownBlock] {
-        guard let frontmatter = Frontmatter.parse(content) else {
+        let body: String
+        switch Frontmatter.parseResult(content) {
+        case .absent:
             return parse(content)
+        case .valid(let frontmatter):
+            body = frontmatter.body
+        case .malformed(let error):
+            // A malformed payload is still inside an unmistakable delimiter
+            // pair. Keep it out of document block indexes while leaving data
+            // operations to report the parse error.
+            body = error.body
         }
-        let bodyBlocks = parse(frontmatter.body)
-        let byteOffset = content.utf8.count - frontmatter.body.utf8.count
-        let charOffset = content.utf16.count - frontmatter.body.utf16.count
+
+        let bodyBlocks = parse(body)
+        let byteOffset = content.utf8.count - body.utf8.count
+        let charOffset = content.utf16.count - body.utf16.count
         let lineOffset = content.reduce(into: 0) { count, character in
             if character == "\n" || character == "\r" || character == "\r\n" {
                 count += 1
             }
-        } - frontmatter.body.reduce(into: 0) { count, character in
+        } - body.reduce(into: 0) { count, character in
             if character == "\n" || character == "\r" || character == "\r\n" {
                 count += 1
             }

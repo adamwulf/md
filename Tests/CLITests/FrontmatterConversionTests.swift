@@ -79,39 +79,81 @@ final class FrontmatterConversionTests: XCTestCase {
         XCTAssertEqual(frontmatter?.body, "Body\r")
     }
 
-    // MARK: - Malformed payloads fall back to empty data
+    // MARK: - Malformed payloads remain distinct from valid empty mappings
 
-    func testMalformedYAMLYieldsEmptyData() {
-        let frontmatter = Frontmatter.parse("---\n\tbad:\n  - [unclosed\n---\nBody\n")
-        XCTAssertEqual(frontmatter?.data.count, 0)
-        XCTAssertEqual(frontmatter?.format, .yaml)
+    func testAbsentValidEmptyAndMalformedAreThreeDistinctResults() {
+        guard case .absent = Frontmatter.parseResult("# Body\n") else {
+            return XCTFail("Expected absent frontmatter")
+        }
+        guard case .valid(let empty) = Frontmatter.parseResult("---\n---\nBody\n") else {
+            return XCTFail("Expected valid empty frontmatter")
+        }
+        XCTAssertTrue(empty.data.isEmpty)
+        guard case .malformed = Frontmatter.parseResult(
+            "---\ntitle: [unclosed\n---\nBody\n"
+        ) else {
+            return XCTFail("Expected malformed frontmatter")
+        }
     }
 
-    func testAYAMLScalarThatIsNotAMappingYieldsEmptyData() {
-        let frontmatter = Frontmatter.parse("---\njust a string\n---\nBody\n")
-        XCTAssertEqual(frontmatter?.data.count, 0)
+    func testMalformedYAMLReturnsASyntaxErrorInsteadOfEmptyData() {
+        let content = "---\n\tbad:\n  - [unclosed\n---\nBody\n"
+        guard case .malformed(let error) = Frontmatter.parseResult(content) else {
+            return XCTFail("Expected malformed frontmatter")
+        }
+        XCTAssertEqual(error.format, .yaml)
+        XCTAssertEqual(error.kind, .invalidSyntax)
+        XCTAssertEqual(error.body, "Body\n")
+        XCTAssertNil(Frontmatter.parse(content))
     }
 
-    func testAYAMLSequenceAtTheTopLevelYieldsEmptyData() {
-        let frontmatter = Frontmatter.parse("---\n- one\n- two\n---\nBody\n")
-        XCTAssertEqual(frontmatter?.data.count, 0)
+    func testAYAMLScalarReturnsANonMappingError() {
+        let content = "---\njust a string\n---\nBody\n"
+        guard case .malformed(let error) = Frontmatter.parseResult(content) else {
+            return XCTFail("Expected malformed frontmatter")
+        }
+        XCTAssertEqual(error.format, .yaml)
+        XCTAssertEqual(error.kind, .nonMapping)
+        XCTAssertNil(Frontmatter.parse(content))
     }
 
-    func testMalformedJSONYieldsEmptyData() {
-        let frontmatter = Frontmatter.parse(";;;\n{not json}\n;;;\nBody\n")
-        XCTAssertEqual(frontmatter?.data.count, 0)
-        XCTAssertEqual(frontmatter?.format, .json)
+    func testAYAMLSequenceAtTheTopLevelReturnsANonMappingError() {
+        let content = "---\n- one\n- two\n---\nBody\n"
+        guard case .malformed(let error) = Frontmatter.parseResult(content) else {
+            return XCTFail("Expected malformed frontmatter")
+        }
+        XCTAssertEqual(error.kind, .nonMapping)
+        XCTAssertNil(Frontmatter.parse(content))
     }
 
-    func testAJSONArrayAtTheTopLevelYieldsEmptyData() {
-        let frontmatter = Frontmatter.parse(";;;\n[1, 2, 3]\n;;;\nBody\n")
-        XCTAssertEqual(frontmatter?.data.count, 0)
+    func testMalformedJSONReturnsASyntaxErrorInsteadOfEmptyData() {
+        let content = ";;;\n{not json}\n;;;\nBody\n"
+        guard case .malformed(let error) = Frontmatter.parseResult(content) else {
+            return XCTFail("Expected malformed frontmatter")
+        }
+        XCTAssertEqual(error.format, .json)
+        XCTAssertEqual(error.kind, .invalidSyntax)
+        XCTAssertNil(Frontmatter.parse(content))
     }
 
-    func testMalformedTOMLYieldsEmptyData() {
-        let frontmatter = Frontmatter.parse("+++\ntitle = \n+++\nBody\n")
-        XCTAssertEqual(frontmatter?.data.count, 0)
-        XCTAssertEqual(frontmatter?.format, .toml)
+    func testAJSONArrayAtTheTopLevelReturnsANonMappingError() {
+        let content = ";;;\n[1, 2, 3]\n;;;\nBody\n"
+        guard case .malformed(let error) = Frontmatter.parseResult(content) else {
+            return XCTFail("Expected malformed frontmatter")
+        }
+        XCTAssertEqual(error.format, .json)
+        XCTAssertEqual(error.kind, .nonMapping)
+        XCTAssertNil(Frontmatter.parse(content))
+    }
+
+    func testMalformedTOMLReturnsASyntaxErrorInsteadOfEmptyData() {
+        let content = "+++\ntitle = \n+++\nBody\n"
+        guard case .malformed(let error) = Frontmatter.parseResult(content) else {
+            return XCTFail("Expected malformed frontmatter")
+        }
+        XCTAssertEqual(error.format, .toml)
+        XCTAssertEqual(error.kind, .invalidSyntax)
+        XCTAssertNil(Frontmatter.parse(content))
     }
 
     // MARK: - Body extraction
