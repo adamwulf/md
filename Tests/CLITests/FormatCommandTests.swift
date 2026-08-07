@@ -451,4 +451,32 @@ final class FormatCommandTests: XCTestCase {
         XCTAssertEqual(once, "   [a]: /x\n\nUses [a].\n")
         XCTAssertEqual(runFormat(once), once)
     }
+
+    /// A backslash cannot jump the space that ends a bare destination, so
+    /// cmark reads this whole shape as one paragraph and so must the
+    /// recovery: no definition comes back, the text stays escaped text, and
+    /// a second pass changes nothing.
+    func testFormatDoesNotReadAnEscapedSpaceDestinationAsADefinition() {
+        let once = runFormat("[a]: /foo\\ bar\nUses [a].\n")
+        XCTAssertEqual(once, "\\[a]: /foo\\\\ bar\nUses \\[a].\n")
+        XCTAssertEqual(runFormat(once), once)
+    }
+
+    /// A definition label ends at the first unescaped bracket, so an
+    /// unescaped `[` inside one means there is no definition at all: the
+    /// line stays paragraph text and no definition is recovered beside it.
+    func testFormatDoesNotReadALabelWithInnerBracketsAsADefinition() {
+        let once = runFormat("[ref [1]]: /url\ntext\n")
+        XCTAssertEqual(once, "\\[ref \\[1]]: /url\ntext\n")
+        XCTAssertEqual(runFormat(once), once)
+    }
+
+    /// cmark's bare-destination scanner treats a control byte as an
+    /// ordinary character, so a definition holding one is consumed and must
+    /// be recovered like any other.
+    func testFormatKeepsADefinitionWhoseDestinationHoldsAControlByte() {
+        let once = runFormat("[a]: /u\u{01}rest\ntext\n")
+        XCTAssertEqual(once, "[a]: /u\u{01}rest\n\ntext\n")
+        XCTAssertEqual(runFormat(once), once)
+    }
 }

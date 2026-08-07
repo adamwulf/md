@@ -120,4 +120,19 @@ final class LinkReferenceDefinitionParsingTests: XCTestCase {
             XCTFail("Expected a list block")
         }
     }
+
+    /// An unescaped `[` inside a label means there is no definition: cmark
+    /// keeps the line as a paragraph, so the parser must return exactly one
+    /// paragraph and never invent a definition block beside it.
+    func testParseDoesNotInventADefinitionForALabelWithInnerBrackets() {
+        let blocks = parser.parse("[ref [1]]: /url\n\ntext\n")
+        XCTAssertEqual(blocks.count, 2)
+        guard case .paragraph(let first, _, _, _) = blocks[0],
+              case .paragraph(let second, _, _, _) = blocks[1] else {
+            XCTFail("Expected two paragraphs")
+            return
+        }
+        XCTAssertEqual(first, "\\[ref \\[1]]: /url")
+        XCTAssertEqual(second, "text")
+    }
 }

@@ -829,23 +829,23 @@ public struct MarkdownParser {
             column += 1
         }
         guard column < startBytes.count, startBytes[column] == UInt8(ascii: "["),
-              let close = matchingCloseBracket(in: startBytes, opening: column),
+              let close = definitionLabelEnd(in: startBytes, opening: column),
               close + 1 < startBytes.count,
               startBytes[close + 1] == UInt8(ascii: ":"),
               !normalizedLabel(String(decoding: startBytes[(column + 1)..<close], as: UTF8.self)).isEmpty
         else { return nil }
 
         var row = startRow
-        column = skipSpacesAndTabs(in: rows[row], from: close + 2)
+        column = skipLineWhitespace(in: rows[row], from: close + 2)
         if column == rows[row].count {
             // the destination may sit on the next line, after one line ending
             guard row + 1 < rows.count else { return nil }
             row += 1
-            column = skipSpacesAndTabs(in: rows[row], from: 0)
+            column = skipLineWhitespace(in: rows[row], from: 0)
         }
         guard let afterDestination = destinationEnd(in: rows[row], from: column) else { return nil }
 
-        column = skipSpacesAndTabs(in: rows[row], from: afterDestination)
+        column = skipLineWhitespace(in: rows[row], from: afterDestination)
         if column < rows[row].count {
             guard column > afterDestination,
                   let titleEnd = titleEndPosition(in: rows, row: row, column: column) else { return nil }
@@ -853,7 +853,7 @@ public struct MarkdownParser {
         }
         if row + 1 < rows.count {
             let titleRow = rows[row + 1]
-            let titleColumn = skipSpacesAndTabs(in: titleRow, from: 0)
+            let titleColumn = skipLineWhitespace(in: titleRow, from: 0)
             if titleColumn < titleRow.count,
                isTitleOpener(titleRow[titleColumn]),
                let titleEnd = titleEndPosition(in: rows, row: row + 1, column: titleColumn) {
@@ -866,13 +866,24 @@ public struct MarkdownParser {
     /// The index past a link destination that begins at `start`: either a
     /// `<...>` form closed on the same line, or a nonempty run of
     /// non-whitespace with balanced unescaped parentheses.
+    ///
+    /// A backslash escapes only ASCII punctuation, exactly as cmark reads
+    /// it: it can never jump the whitespace that ends a bare destination,
+    /// and `\` before an ordinary character is that character's neighbour,
+    /// not an escape. Whitespace is cmark's own set — a vertical tab or form
+    /// feed ends the run the way a space does — and parentheses nest at most
+    /// 32 deep, cmark's own cap. Control characters are ordinary bytes to
+    /// cmark's scanner, so they are ordinary here.
     private func destinationEnd(in bytes: [UInt8], from start: Int) -> Int? {
         guard start < bytes.count else { return nil }
         if bytes[start] == UInt8(ascii: "<") {
             var index = start + 1
             while index < bytes.count {
                 let byte = bytes[index]
-                if byte == UInt8(ascii: "\\") { index += 2; continue }
+                if byte == UInt8(ascii: "\\"), index + 1 < bytes.count, isASCIIPunctuation(bytes[index + 1]) {
+                    index += 2
+                    continue
+                }
                 if byte == UInt8(ascii: ">") { return index + 1 }
                 if byte == UInt8(ascii: "<") { return nil }
                 index += 1
@@ -881,10 +892,20 @@ public struct MarkdownParser {
         }
         var index = start
         var parenDepth = 0
-        while index < bytes.count, bytes[index] != Self.spaceByte, bytes[index] != Self.tabByte {
+        while index < bytes.count, !isLineWhitespace(bytes[index]) {
             let byte = bytes[index]
-            if byte == UInt8(ascii: "\\") { index += 2; continue }
-            if byte == UInt8(ascii: "(") { parenDepth += 1 }
+            if byte == UInt8(ascii: "\\") {
+                if index + 1 < bytes.count, isASCIIPunctuation(bytes[index + 1]) {
+                    index += 2
+                } else {
+                    index += 1
+                }
+                continue
+            }
+            if byte == UInt8(ascii: "(") {
+                parenDepth += 1
+                guard parenDepth <= 32 else { return nil }
+            }
             if byte == UInt8(ascii: ")") {
                 parenDepth -= 1
                 guard parenDepth >= 0 else { return nil }
@@ -892,7 +913,19 @@ public struct MarkdownParser {
             index += 1
         }
         guard index > start, parenDepth == 0 else { return nil }
-        return Swift.min(index, bytes.count)
+        return index
+    }
+
+    /// cmark's `cmark_isspace`, restricted to bytes that can sit inside a
+    /// line: space, tab, vertical tab, and form feed.
+    private func isLineWhitespace(_ byte: UInt8) -> Bool {
+        byte == Self.spaceByte || byte == Self.tabByte || byte == 0x0B || byte == 0x0C
+    }
+
+    /// cmark's `cmark_ispunct`: the four ASCII punctuation ranges.
+    private func isASCIIPunctuation(_ byte: UInt8) -> Bool {
+        (0x21...0x2F).contains(byte) || (0x3A...0x40).contains(byte)
+            || (0x5B...0x60).contains(byte) || (0x7B...0x7E).contains(byte)
     }
 
     private func isTitleOpener(_ byte: UInt8) -> Bool {
@@ -918,7 +951,7 @@ public struct MarkdownParser {
                 let byte = bytes[column]
                 if byte == UInt8(ascii: "\\") { column += 2; continue }
                 if byte == closer {
-                    guard skipSpacesAndTabs(in: bytes, from: column + 1) == bytes.count else { return nil }
+                    guard skipLineWhitespace(in: bytes, from: column + 1) == bytes.count else { return nil }
                     return (row, column)
                 }
                 if opener == UInt8(ascii: "("), byte == UInt8(ascii: "(") { return nil }
@@ -930,9 +963,9 @@ public struct MarkdownParser {
         return nil
     }
 
-    private func skipSpacesAndTabs(in bytes: [UInt8], from start: Int) -> Int {
+    private func skipLineWhitespace(in bytes: [UInt8], from start: Int) -> Int {
         var index = start
-        while index < bytes.count, bytes[index] == Self.spaceByte || bytes[index] == Self.tabByte {
+        while index < bytes.count, isLineWhitespace(bytes[index]) {
             index += 1
         }
         return index
@@ -1059,11 +1092,35 @@ public struct MarkdownParser {
             index += 1
         }
         guard index < bytes.count, bytes[index] == UInt8(ascii: "["),
-              let close = matchingCloseBracket(in: bytes, opening: index),
+              let close = definitionLabelEnd(in: bytes, opening: index),
               close + 1 < bytes.count,
               bytes[close + 1] == UInt8(ascii: ":") else { return nil }
         let label = normalizedLabel(String(decoding: bytes[(index + 1)..<close], as: UTF8.self))
         return label.isEmpty ? nil : label
+    }
+
+    /// The index of the `]` that closes a DEFINITION label opened at
+    /// `opening`, or nil. Unlike link text, which nests, a definition label
+    /// ends at the first unescaped bracket of either kind: an unescaped `[`
+    /// inside it makes the label invalid, and cmark caps a label's length,
+    /// so anything this accepts cmark read as a label too.
+    private func definitionLabelEnd(in bytes: [UInt8], opening: Int) -> Int? {
+        var index = opening + 1
+        while index < bytes.count {
+            switch bytes[index] {
+            case UInt8(ascii: "\\"):
+                index += 1
+            case UInt8(ascii: "["):
+                return nil
+            case UInt8(ascii: "]"):
+                guard index - opening - 1 <= 999 else { return nil }
+                return index
+            default:
+                break
+            }
+            index += 1
+        }
+        return nil
     }
 
     /// Labels match case-insensitively with runs of whitespace collapsed, so
