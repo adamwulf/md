@@ -325,4 +325,45 @@ final class FormatCommandTests: XCTestCase {
             return
         }
     }
+
+    // MARK: - Link reference definitions (defects 7 and 27)
+
+    /// Defect 7: a definition that no link uses is still text the author
+    /// wrote, and the URL appears nowhere else in the file. `format` writes
+    /// it back instead of deleting it.
+    func testFormatKeepsAnUnusedLinkReferenceDefinition() {
+        let input = "Just a paragraph.\n\n[unused]: https://example.org\n"
+        XCTAssertEqual(runFormat(input), input)
+    }
+
+    /// Defect 27: a used definition keeps the author's reference style. The
+    /// link stays `[ref]`, not the resolved `[ref](url)`, and the definition
+    /// line stays below it, so the URL appears once.
+    func testFormatKeepsAUsedLinkReferenceDefinitionAndItsLink() {
+        let input = "paragraph [ref] here\n\n[ref]: url\n"
+        XCTAssertEqual(runFormat(input), input)
+    }
+
+    /// Defect 7 in a list: a definition that was an item's only content goes
+    /// back inside its bullet, not after the list.
+    func testFormatKeepsADefinitionThatIsAnItemsOnlyContent() {
+        let input = "# Title\n\n- [ref]: /url\n"
+        XCTAssertEqual(runFormat(input), input)
+    }
+
+    /// Defect 7 in a list: a definition below an item's text goes back at the
+    /// item's content indent, where the author put it.
+    func testFormatKeepsADefinitionBelowItemText() {
+        let input = "- Some text\n\n  [ref]: /url\n"
+        XCTAssertEqual(runFormat(input), input)
+    }
+
+    /// A titled definition and a full `[text][label]` reference survive a
+    /// round trip unchanged, and a second pass changes nothing.
+    func testFormatKeepsAFullReferenceAndATitledDefinition() {
+        let input = "See [the docs][ref] here.\n\n[ref]: /url \"A title\"\n"
+        let once = runFormat(input)
+        XCTAssertEqual(once, input)
+        XCTAssertEqual(runFormat(once), once)
+    }
 }
