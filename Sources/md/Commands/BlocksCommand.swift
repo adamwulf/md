@@ -108,6 +108,8 @@ struct BlocksCommand: AsyncParsableCommand {
             return "table(\(rows.count) rows) L\(lineRange.lowerBound)-\(lineRange.upperBound)"
         case .htmlBlock(_, _, _, let lineRange):
             return "html L\(lineRange.lowerBound)-\(lineRange.upperBound)"
+        case .linkReferenceDefinition(_, _, _, let lineRange):
+            return "link_reference_definition L\(lineRange.lowerBound)-\(lineRange.upperBound)"
         }
     }
 }

@@ -21,6 +21,7 @@ final class FormatCommandRunTests: XCTestCase {
         case thematicBreak
         case table([[String]])
         case html(String)
+        case linkReferenceDefinition(String)
     }
 
     private var scratch: ScratchDirectory!
@@ -68,6 +69,8 @@ final class FormatCommandRunTests: XCTestCase {
                 return .table(rows)
             case .htmlBlock(let literal, _, _, _):
                 return .html(normalizedLineEndings(literal))
+            case .linkReferenceDefinition(let text, _, _, _):
+                return .linkReferenceDefinition(normalizedLineEndings(text))
             }
         }
     }

@@ -116,6 +116,11 @@ public enum MarkdownBlock: Sendable {
     case thematicBreak(charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
     case table(rows: [[String]], charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
     case htmlBlock(literal: String, charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
+    /// A link reference definition such as `[ref]: /url`, or a run of adjacent
+    /// ones, recovered from the source text. cmark consumes a definition into
+    /// the document's reference map and leaves no node in the tree, so the
+    /// parser reads it back out of the lines no other block covers.
+    case linkReferenceDefinition(text: String, charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
 
     /// Character offset range (for text extraction and display)
     public var charRange: NSRange {
@@ -128,6 +133,7 @@ public enum MarkdownBlock: Sendable {
         case .thematicBreak(let charRange, _, _): return charRange
         case .table(_, let charRange, _, _): return charRange
         case .htmlBlock(_, let charRange, _, _): return charRange
+        case .linkReferenceDefinition(_, let charRange, _, _): return charRange
         }
     }
 
@@ -142,6 +148,7 @@ public enum MarkdownBlock: Sendable {
         case .thematicBreak(_, let byteRange, _): return byteRange
         case .table(_, _, let byteRange, _): return byteRange
         case .htmlBlock(_, _, let byteRange, _): return byteRange
+        case .linkReferenceDefinition(_, _, let byteRange, _): return byteRange
         }
     }
 
@@ -156,6 +163,7 @@ public enum MarkdownBlock: Sendable {
         case .thematicBreak(_, _, let lineRange): return lineRange
         case .table(_, _, _, let lineRange): return lineRange
         case .htmlBlock(_, _, _, let lineRange): return lineRange
+        case .linkReferenceDefinition(_, _, _, let lineRange): return lineRange
         }
     }
 }
@@ -210,15 +218,23 @@ public struct MarkdownParser {
         let doc = cmark_parser_finish(parser)
         defer { cmark_node_free(doc) }
 
+        // cmark consumes each link reference definition into the document's
+        // reference map and leaves no node, so the definitions have to come
+        // back out of the source before the tree is walked. It also resolves
+        // each link that used one, so those links are pinned to their authored
+        // spelling before the resolved URL can be pasted inline.
+        let definitions = consumedLinkReferenceDefinitions(in: doc, lineTable: lineTable)
+        restoreReferenceStyleLinks(in: doc, labels: definitions.labels, lineTable: lineTable)
+
         var node = cmark_node_first_child(doc)
         while node != nil {
-            if let block = parseNode(node, lineTable: lineTable) {
+            if let block = parseNode(node, lineTable: lineTable, itemDefinitions: definitions.byItem) {
                 blocks.append(block)
             }
             node = cmark_node_next(node)
         }
 
-        return blocks
+        return merged(blocks, with: definitions.topLevel)
     }
 
     private func buildLineTable(for markdown: String) -> [LineInfo] {
@@ -270,7 +286,11 @@ public struct MarkdownParser {
         return table
     }
 
-    private func parseNode(_ node: UnsafeMutablePointer<cmark_node>?, lineTable: [LineInfo]) -> MarkdownBlock? {
+    private func parseNode(
+        _ node: UnsafeMutablePointer<cmark_node>?,
+        lineTable: [LineInfo],
+        itemDefinitions: [UInt: [ItemDefinition]] = [:]
+    ) -> MarkdownBlock? {
         guard let node = node else { return nil }
 
         let type = cmark_node_get_type(node)
@@ -307,7 +327,13 @@ public struct MarkdownParser {
 
         case CMARK_NODE_LIST:
             let ordered = cmark_node_get_list_type(node) == CMARK_ORDERED_LIST
-            let items = collectListItems(from: node, indentLevel: 0, ordered: ordered, lineTable: lineTable)
+            let items = collectListItems(
+                from: node,
+                indentLevel: 0,
+                ordered: ordered,
+                lineTable: lineTable,
+                itemDefinitions: itemDefinitions
+            )
             return .list(items: items, ordered: ordered, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_BLOCK_QUOTE:
@@ -406,7 +432,8 @@ public struct MarkdownParser {
         from listNode: UnsafeMutablePointer<cmark_node>,
         indentLevel: Int,
         ordered: Bool,
-        lineTable: [LineInfo]
+        lineTable: [LineInfo],
+        itemDefinitions: [UInt: [ItemDefinition]] = [:]
     ) -> [ListItem] {
         var items: [ListItem] = []
         // cmark decides tightness for the whole list, counting both blank
@@ -425,6 +452,10 @@ public struct MarkdownParser {
             var pendingTask = itemNode.flatMap { taskState(of: $0, lineTable: lineTable) }
             let itemStartLine = itemNode.map { Int(cmark_node_get_start_line($0)) } ?? 0
             var paragraphs: [String] = []
+            // The definitions cmark consumed out of this item, in line order.
+            // Each goes back among the item's paragraphs where it was written.
+            var pendingDefinitions = itemNode
+                .flatMap { itemDefinitions[UInt(bitPattern: $0)] } ?? []
             var child = cmark_node_first_child(itemNode)
             // The author wrote ONE marker for this item, and the first piece
             // to emit spends it. Every later piece is text that ran on after a
@@ -495,8 +526,19 @@ public struct MarkdownParser {
                 markerIsSpent = true
             }
 
+            /// Put back each consumed definition that the author wrote above
+            /// `line`, or all of them when no more children follow.
+            func appendDefinitions(before line: Int?) {
+                while let definition = pendingDefinitions.first,
+                      line.map({ definition.startLine < $0 }) ?? true {
+                    paragraphs.append(definition.text)
+                    pendingDefinitions.removeFirst()
+                }
+            }
+
             while let currentChild = child {
                 let childType = cmark_node_get_type(currentChild)
+                appendDefinitions(before: Int(cmark_node_get_start_line(currentChild)))
 
                 if childType == CMARK_NODE_LIST {
                     let nestedOrdered = cmark_node_get_list_type(currentChild) == CMARK_ORDERED_LIST
@@ -504,7 +546,8 @@ public struct MarkdownParser {
                         from: currentChild,
                         indentLevel: indentLevel + 1,
                         ordered: nestedOrdered,
-                        lineTable: lineTable
+                        lineTable: lineTable,
+                        itemDefinitions: itemDefinitions
                     )
                     flushGatheredText(preservingEmptyParentMarker: !markerIsSpent)
                     items.append(contentsOf: nestedItems)
@@ -565,6 +608,7 @@ public struct MarkdownParser {
                 child = cmark_node_next(currentChild)
             }
 
+            appendDefinitions(before: nil)
             flushGatheredText()
 
             isFirstItem = false
@@ -619,6 +663,361 @@ public struct MarkdownParser {
             itemNode = cmark_node_next(item)
         }
         return false
+    }
+
+    // MARK: - Link reference definitions
+
+    /// One link reference definition put back inside the list item that held
+    /// it, at the line the author wrote it on.
+    private struct ItemDefinition {
+        let startLine: Int
+        let text: String
+    }
+
+    /// Every link reference definition cmark consumed while parsing, read
+    /// back out of the source.
+    private struct ConsumedDefinitions {
+        /// Definitions at the top level of the document, as finished blocks
+        /// in line order.
+        let topLevel: [MarkdownBlock]
+        /// Definitions that sat inside a list item, keyed by the item node's
+        /// address.
+        let byItem: [UInt: [ItemDefinition]]
+        /// The normalized label of every definition found, for deciding which
+        /// links were written in reference style.
+        let labels: Set<String>
+    }
+
+    /// Find the definitions by what they leave behind: a definition is the
+    /// only block construct that puts no node in the tree, so every nonblank
+    /// source line that no node covers belongs to one. A blockquote or table
+    /// covers its whole range, because its text is recovered from source; a
+    /// list covers only what its items' children cover, so a definition
+    /// inside an item is found the same way as one at the top level.
+    private func consumedLinkReferenceDefinitions(
+        in doc: UnsafeMutablePointer<cmark_node>?,
+        lineTable: [LineInfo]
+    ) -> ConsumedDefinitions {
+        var covered = [Bool](repeating: false, count: lineTable.count)
+        markContentLines(of: doc, lineTable: lineTable, covered: &covered)
+
+        var spans: [ClosedRange<Int>] = []
+        var line = 1
+        while line <= lineTable.count {
+            if covered[line - 1] || isCommonMarkBlankLine(lineTable[line - 1].content) {
+                line += 1
+                continue
+            }
+            var end = line
+            while end < lineTable.count,
+                  !covered[end],
+                  !isCommonMarkBlankLine(lineTable[end].content) {
+                end += 1
+            }
+            spans.append(line...end)
+            line = end + 1
+        }
+
+        var itemRanges: [(key: UInt, range: ClosedRange<Int>)] = []
+        collectItemRanges(of: doc, into: &itemRanges)
+
+        var topLevel: [MarkdownBlock] = []
+        var byItem: [UInt: [ItemDefinition]] = [:]
+        var labels: Set<String> = []
+        for span in spans {
+            // The innermost item holding the whole span owns it. Item ranges
+            // nest or stand apart, so the shortest containing range is the
+            // deepest.
+            let owner = itemRanges
+                .filter { $0.range.contains(span.lowerBound) && $0.range.contains(span.upperBound) }
+                .min { $0.range.count < $1.range.count }
+            if let owner {
+                guard let text = itemDefinitionText(
+                    for: span,
+                    itemStartLine: owner.range.lowerBound,
+                    lineTable: lineTable
+                ), isDefinitionShaped(text) else { continue }
+                byItem[owner.key, default: []].append(ItemDefinition(startLine: span.lowerBound, text: text))
+                labels.formUnion(definitionLabels(in: text))
+            } else {
+                let text = span.map { lineTable[$0 - 1].content }.joined(separator: "\n")
+                guard isDefinitionShaped(text) else { continue }
+                let startInfo = lineTable[span.lowerBound - 1]
+                let endInfo = lineTable[span.upperBound - 1]
+                topLevel.append(.linkReferenceDefinition(
+                    text: text,
+                    charRange: NSRange(
+                        location: startInfo.utf16Offset,
+                        length: endInfo.utf16Offset + endInfo.content.utf16.count - startInfo.utf16Offset
+                    ),
+                    byteRange: NSRange(
+                        location: startInfo.byteOffset,
+                        length: endInfo.byteOffset + endInfo.content.utf8.count - startInfo.byteOffset
+                    ),
+                    lineRange: span
+                ))
+                labels.formUnion(definitionLabels(in: text))
+            }
+        }
+        return ConsumedDefinitions(topLevel: topLevel, byItem: byItem, labels: labels)
+    }
+
+    /// Mark the lines whose bytes some node in the tree carries. Lists and
+    /// items are containers, so only their children cover lines: what an item
+    /// spans beyond its children is exactly what a consumed definition left
+    /// behind.
+    private func markContentLines(
+        of node: UnsafeMutablePointer<cmark_node>?,
+        lineTable: [LineInfo],
+        covered: inout [Bool]
+    ) {
+        var child = cmark_node_first_child(node)
+        while let current = child {
+            let type = cmark_node_get_type(current)
+            if type == CMARK_NODE_LIST || type == CMARK_NODE_ITEM {
+                markContentLines(of: current, lineTable: lineTable, covered: &covered)
+            } else {
+                let startLine = Int(cmark_node_get_start_line(current))
+                var endLine = Int(cmark_node_get_end_line(current))
+                if type == CMARK_NODE_HTML_BLOCK {
+                    // cmark reports delimiter-terminated raw HTML short of its
+                    // closing line; repair it the way calculateRanges does.
+                    let literal = cmark_node_get_literal(current).map { String(cString: $0) } ?? ""
+                    endLine = Swift.max(endLine, startLine + Swift.max(1, sourceLineCount(literal)) - 1)
+                }
+                if startLine >= 1, startLine <= lineTable.count {
+                    for line in startLine...Swift.min(Swift.max(endLine, startLine), lineTable.count) {
+                        covered[line - 1] = true
+                    }
+                }
+            }
+            child = cmark_node_next(current)
+        }
+    }
+
+    private func collectItemRanges(
+        of node: UnsafeMutablePointer<cmark_node>?,
+        into itemRanges: inout [(key: UInt, range: ClosedRange<Int>)]
+    ) {
+        var child = cmark_node_first_child(node)
+        while let current = child {
+            if cmark_node_get_type(current) == CMARK_NODE_ITEM {
+                let startLine = Int(cmark_node_get_start_line(current))
+                let endLine = Int(cmark_node_get_end_line(current))
+                if startLine >= 1, endLine >= startLine {
+                    itemRanges.append((key: UInt(bitPattern: current), range: startLine...endLine))
+                }
+            }
+            collectItemRanges(of: current, into: &itemRanges)
+            child = cmark_node_next(current)
+        }
+    }
+
+    /// The source text of a definition inside an item, with the item's
+    /// container syntax taken off. On the item's own first line the marker
+    /// stands before the definition, so the text starts at the bracket.
+    /// Continuation lines drop the content indent while keeping any extra
+    /// indent the author gave them.
+    private func itemDefinitionText(
+        for span: ClosedRange<Int>,
+        itemStartLine: Int,
+        lineTable: [LineInfo]
+    ) -> String? {
+        let firstLine = lineTable[span.lowerBound - 1].content
+        let stripWidth: Int
+        var lines: [String] = []
+        if span.lowerBound == itemStartLine {
+            let firstBytes = Array(firstLine.utf8)
+            guard let bracket = firstBytes.firstIndex(of: UInt8(ascii: "[")) else { return nil }
+            stripWidth = bracket
+            lines.append(String(decoding: firstBytes[bracket...], as: UTF8.self))
+        } else {
+            stripWidth = span.map { leadingSpaceCount(lineTable[$0 - 1].content) }.min() ?? 0
+            lines.append(droppingLeadingSpaces(firstLine, upTo: stripWidth))
+        }
+        for line in span.dropFirst() {
+            lines.append(droppingLeadingSpaces(lineTable[line - 1].content, upTo: stripWidth))
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func leadingSpaceCount(_ line: String) -> Int {
+        var count = 0
+        for byte in line.utf8 {
+            guard byte == Self.spaceByte else { break }
+            count += 1
+        }
+        return count
+    }
+
+    private func droppingLeadingSpaces(_ line: String, upTo width: Int) -> String {
+        let bytes = Array(line.utf8)
+        let strip = Swift.min(width, leadingSpaceCount(line))
+        return String(decoding: bytes[strip...], as: UTF8.self)
+    }
+
+    /// True when the recovered text opens with a definition. The lines no
+    /// node covers are definitions by elimination, but a container can also
+    /// drop source for another reason — the checkbox cmark takes off a task
+    /// item leaves its line uncovered too — so only text that opens with a
+    /// labelled colon is put back.
+    private func isDefinitionShaped(_ text: String) -> Bool {
+        guard let firstLine = text.split(separator: "\n", omittingEmptySubsequences: false).first else {
+            return false
+        }
+        return definitionLabel(inLine: firstLine) != nil
+    }
+
+    /// The labels defined in a recovered span. Each definition begins a line:
+    /// up to three spaces, a bracketed label, then a colon.
+    private func definitionLabels(in text: String) -> [String] {
+        text.split(separator: "\n", omittingEmptySubsequences: true)
+            .compactMap { definitionLabel(inLine: $0) }
+    }
+
+    private func definitionLabel(inLine line: Substring) -> String? {
+        let bytes = Array(line.utf8)
+        var index = 0
+        while index < bytes.count, index < 3, bytes[index] == Self.spaceByte {
+            index += 1
+        }
+        guard index < bytes.count, bytes[index] == UInt8(ascii: "["),
+              let close = matchingCloseBracket(in: bytes, opening: index),
+              close + 1 < bytes.count,
+              bytes[close + 1] == UInt8(ascii: ":") else { return nil }
+        let label = normalizedLabel(String(decoding: bytes[(index + 1)..<close], as: UTF8.self))
+        return label.isEmpty ? nil : label
+    }
+
+    /// Labels match case-insensitively with runs of whitespace collapsed, so
+    /// `[REF]` finds `[ref]: /url`.
+    private func normalizedLabel(_ label: String) -> String {
+        label.lowercased()
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+    }
+
+    /// The index of the `]` that closes the `[` at `opening`, skipping
+    /// escaped brackets and balanced inner pairs.
+    private func matchingCloseBracket(in bytes: [UInt8], opening: Int) -> Int? {
+        var depth = 0
+        var index = opening
+        while index < bytes.count {
+            switch bytes[index] {
+            case UInt8(ascii: "\\"):
+                index += 1
+            case UInt8(ascii: "["):
+                depth += 1
+            case UInt8(ascii: "]"):
+                depth -= 1
+                if depth == 0 { return index }
+            default:
+                break
+            }
+            index += 1
+        }
+        return nil
+    }
+
+    /// Pin each link and image the author wrote in reference style to its
+    /// authored spelling. cmark resolves such a node to hold the URL inline,
+    /// and its writer would paste that URL into the text as `[ref](url)`. The
+    /// node's source position still points at the authored bytes, so a node
+    /// whose source reads as a reference to a recovered definition becomes a
+    /// custom inline holding those bytes, which every writer emits verbatim.
+    /// A node whose position cannot be trusted keeps today's inline form,
+    /// which loses the spelling but never the URL.
+    private func restoreReferenceStyleLinks(
+        in doc: UnsafeMutablePointer<cmark_node>?,
+        labels: Set<String>,
+        lineTable: [LineInfo]
+    ) {
+        guard !labels.isEmpty, let doc else { return }
+        // Gather first: replacing nodes mid-iteration breaks the iterator.
+        var references: [UnsafeMutablePointer<cmark_node>] = []
+        let iterator = cmark_iter_new(doc)
+        defer { cmark_iter_free(iterator) }
+        while true {
+            let event = cmark_iter_next(iterator)
+            if event == CMARK_EVENT_DONE { break }
+            guard event == CMARK_EVENT_ENTER, let node = cmark_iter_get_node(iterator) else { continue }
+            let type = cmark_node_get_type(node)
+            if type == CMARK_NODE_LINK || type == CMARK_NODE_IMAGE {
+                references.append(node)
+            }
+        }
+        for node in references {
+            guard let source = singleLineSource(of: node, lineTable: lineTable),
+                  let label = referenceLabel(inLinkSource: source),
+                  labels.contains(label),
+                  let replacement = cmark_node_new(CMARK_NODE_CUSTOM_INLINE) else { continue }
+            cmark_node_set_on_enter(replacement, source)
+            guard cmark_node_insert_before(node, replacement) == 1 else {
+                cmark_node_free(replacement)
+                continue
+            }
+            cmark_node_unlink(node)
+            cmark_node_free(node)
+        }
+    }
+
+    /// The authored bytes of an inline node that sits on one source line, or
+    /// nil when the reported position cannot be trusted to slice with.
+    private func singleLineSource(
+        of node: UnsafeMutablePointer<cmark_node>,
+        lineTable: [LineInfo]
+    ) -> String? {
+        let startLine = Int(cmark_node_get_start_line(node))
+        let endLine = Int(cmark_node_get_end_line(node))
+        let startColumn = Int(cmark_node_get_start_column(node))
+        let endColumn = Int(cmark_node_get_end_column(node))
+        guard startLine == endLine, startLine >= 1, startLine <= lineTable.count else { return nil }
+        let bytes = Array(lineTable[startLine - 1].content.utf8)
+        guard startColumn >= 1, startColumn <= endColumn, endColumn <= bytes.count else { return nil }
+        return String(decoding: bytes[(startColumn - 1)...(endColumn - 1)], as: UTF8.self)
+    }
+
+    /// The label a reference-style link or image points at, or nil for any
+    /// other spelling. `[ref]` and `[ref][]` use their own text; `[text][ref]`
+    /// names the label second. An inline `[text](url)` ends with a paren and
+    /// matches none of these.
+    private func referenceLabel(inLinkSource source: String) -> String? {
+        var bytes = Array(source.utf8)
+        if bytes.first == UInt8(ascii: "!") {
+            bytes.removeFirst()
+        }
+        guard bytes.first == UInt8(ascii: "["),
+              let firstClose = matchingCloseBracket(in: bytes, opening: 0) else { return nil }
+        let firstLabel = String(decoding: bytes[1..<firstClose], as: UTF8.self)
+        if firstClose == bytes.count - 1 {
+            let label = normalizedLabel(firstLabel)
+            return label.isEmpty ? nil : label
+        }
+        guard bytes[firstClose + 1] == UInt8(ascii: "["),
+              let secondClose = matchingCloseBracket(in: bytes, opening: firstClose + 1),
+              secondClose == bytes.count - 1 else { return nil }
+        let secondLabel = String(decoding: bytes[(firstClose + 2)..<secondClose], as: UTF8.self)
+        let label = normalizedLabel(secondLabel.isEmpty ? firstLabel : secondLabel)
+        return label.isEmpty ? nil : label
+    }
+
+    /// Interleave the recovered top-level definitions with the parsed blocks
+    /// by their position in the source.
+    private func merged(_ blocks: [MarkdownBlock], with definitions: [MarkdownBlock]) -> [MarkdownBlock] {
+        guard !definitions.isEmpty else { return blocks }
+        var result: [MarkdownBlock] = []
+        result.reserveCapacity(blocks.count + definitions.count)
+        var remaining = definitions[...]
+        for block in blocks {
+            while let definition = remaining.first,
+                  definition.lineRange.lowerBound < block.lineRange.lowerBound {
+                result.append(definition)
+                remaining.removeFirst()
+            }
+            result.append(block)
+        }
+        result.append(contentsOf: remaining)
+        return result
     }
 
     private func getChildrenText(_ node: UnsafeMutablePointer<cmark_node>?, context: InlineTextContext) -> String {
@@ -755,12 +1154,16 @@ public struct MarkdownParser {
             // goes back into a file, thus each marker that is live where it sits needs
             // its backslash again.
             let next = cmark_node_next(node)
+            let nextType = cmark_node_get_type(next)
             return MarkdownEscaper.escape(
                 text,
                 context: context,
                 startsLine: beginsLine(node),
                 endsBlock: next == nil,
-                isFollowedByLink: cmark_node_get_type(next) == CMARK_NODE_LINK
+                // A custom inline is a reference-style link kept in its
+                // authored spelling, so it opens with a bracket the same way
+                // a link does.
+                isFollowedByLink: nextType == CMARK_NODE_LINK || nextType == CMARK_NODE_CUSTOM_INLINE
             )
         }
 
