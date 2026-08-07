@@ -366,4 +366,19 @@ final class FormatCommandTests: XCTestCase {
         XCTAssertEqual(once, input)
         XCTAssertEqual(runFormat(once), once)
     }
+
+    /// A reference-style link can wrap an inline image, making a clickable
+    /// badge. Restoring the outer link replaces the link node and its whole
+    /// subtree, so the inner image must already be decided by then.
+    func testFormatKeepsAReferenceLinkWrappingAnInlineImage() {
+        let input = "[![alt](i.png)][link]\n\n[link]: /url\n"
+        XCTAssertEqual(runFormat(input), input)
+    }
+
+    /// The same badge with the image itself in reference style: both labels
+    /// resolve, and both authored spellings survive.
+    func testFormatKeepsAReferenceLinkWrappingAReferenceImage() {
+        let input = "[![alt][img]][link]\n\n[img]: /i.png\n[link]: /url\n"
+        XCTAssertEqual(runFormat(input), input)
+    }
 }

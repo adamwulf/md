@@ -946,7 +946,12 @@ public struct MarkdownParser {
                 references.append(node)
             }
         }
-        for node in references {
+        // A replaced node frees its whole subtree, and a link can hold a
+        // reference-style image (or another link's bytes) inside it. The
+        // pre-order gather puts every descendant after its ancestor, so the
+        // walk runs backwards: each descendant is decided while its ancestor
+        // still owns live memory, and never read after that ancestor is freed.
+        for node in references.reversed() {
             guard let source = singleLineSource(of: node, lineTable: lineTable),
                   let label = referenceLabel(inLinkSource: source),
                   labels.contains(label),
