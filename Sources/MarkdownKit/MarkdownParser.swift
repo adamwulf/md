@@ -1129,12 +1129,8 @@ public struct MarkdownParser {
         // walk runs backwards: each descendant is decided while its ancestor
         // still owns live memory, and never read after that ancestor is freed.
         for node in references.reversed() {
-            // Inline positions inside a paragraph that lost leading
-            // definitions are short by the stripped line count, because
-            // cmark parses the stripped buffer as if it began at the node's
-            // reported start line.
-            let lineShift = foldedAncestorLineShift(of: node, lineTable: lineTable)
-            guard let source = singleLineSource(of: node, lineTable: lineTable, lineShift: lineShift),
+            let ancestor = inlineCoordinateAncestor(of: node)
+            guard let source = singleLineSource(of: node, lineTable: lineTable, ancestor: ancestor),
                   let label = referenceLabel(inLinkSource: source),
                   labels.contains(label),
                   let replacement = cmark_node_new(CMARK_NODE_CUSTOM_INLINE) else { continue }
@@ -1148,40 +1144,71 @@ public struct MarkdownParser {
         }
     }
 
-    /// The lines cmark's inline positions are short by inside this node's
-    /// nearest paragraph or heading, which is the count of leading
-    /// definition lines cmark stripped from it.
-    private func foldedAncestorLineShift(
-        of node: UnsafeMutablePointer<cmark_node>,
-        lineTable: [LineInfo]
-    ) -> Int {
+    /// The paragraph or heading whose content buffer this inline's reported
+    /// position is relative to, or nil for an inline outside one, such as a
+    /// table cell's.
+    private func inlineCoordinateAncestor(
+        of node: UnsafeMutablePointer<cmark_node>
+    ) -> UnsafeMutablePointer<cmark_node>? {
         var ancestor = cmark_node_parent(node)
         while let current = ancestor {
             let type = cmark_node_get_type(current)
             if type == CMARK_NODE_PARAGRAPH || type == CMARK_NODE_HEADING {
-                return contentStartLine(of: current, lineTable: lineTable)
-                    - Int(cmark_node_get_start_line(current))
+                return current
             }
             ancestor = cmark_node_parent(current)
         }
-        return 0
+        return nil
     }
 
     /// The authored bytes of an inline node that sits on one source line, or
     /// nil when the reported position cannot be trusted to slice with.
+    ///
+    /// cmark reports inline positions against the block's content buffer,
+    /// mapped as if that buffer began at the block's start: lines are short
+    /// by the definitions stripped off the block's front, and every line's
+    /// columns carry the block's first-line indent while each later line's
+    /// own indent was stripped from the buffer. Both are rebased onto the
+    /// real source line here. The block's first line, with nothing stripped,
+    /// is the one place the reported columns are already real.
     private func singleLineSource(
         of node: UnsafeMutablePointer<cmark_node>,
         lineTable: [LineInfo],
-        lineShift: Int = 0
+        ancestor: UnsafeMutablePointer<cmark_node>?
     ) -> String? {
-        let startLine = Int(cmark_node_get_start_line(node)) + lineShift
-        let endLine = Int(cmark_node_get_end_line(node)) + lineShift
-        let startColumn = Int(cmark_node_get_start_column(node))
-        let endColumn = Int(cmark_node_get_end_column(node))
+        var startLine = Int(cmark_node_get_start_line(node))
+        var endLine = Int(cmark_node_get_end_line(node))
+        var startColumn = Int(cmark_node_get_start_column(node))
+        var endColumn = Int(cmark_node_get_end_column(node))
+        if let ancestor {
+            let contentStart = contentStartLine(of: ancestor, lineTable: lineTable)
+            let lineShift = contentStart - Int(cmark_node_get_start_line(ancestor))
+            startLine += lineShift
+            endLine += lineShift
+            guard startLine == endLine, startLine >= 1, startLine <= lineTable.count else { return nil }
+            if lineShift > 0 || startLine > contentStart {
+                let blockOffset = Int(cmark_node_get_start_column(ancestor)) - 1
+                let columnShift = leadingWhitespaceByteCount(lineTable[startLine - 1].content) - blockOffset
+                startColumn += columnShift
+                endColumn += columnShift
+            }
+        }
         guard startLine == endLine, startLine >= 1, startLine <= lineTable.count else { return nil }
         let bytes = Array(lineTable[startLine - 1].content.utf8)
         guard startColumn >= 1, startColumn <= endColumn, endColumn <= bytes.count else { return nil }
         return String(decoding: bytes[(startColumn - 1)...(endColumn - 1)], as: UTF8.self)
+    }
+
+    /// The bytes of a line's leading spaces and tabs — cmark's first
+    /// nonspace position, which is where a continuation line's content
+    /// enters the block buffer.
+    private func leadingWhitespaceByteCount(_ line: String) -> Int {
+        var count = 0
+        for byte in line.utf8 {
+            guard byte == Self.spaceByte || byte == Self.tabByte else { break }
+            count += 1
+        }
+        return count
     }
 
     /// The label a reference-style link or image points at, or nil for any

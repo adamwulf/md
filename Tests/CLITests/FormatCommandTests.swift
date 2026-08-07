@@ -421,4 +421,34 @@ final class FormatCommandTests: XCTestCase {
             "- [ref]: https://example.com\n\n  Uses [ref].\n"
         )
     }
+
+    /// The folded shape with the definition indented: cmark bakes the
+    /// block's first-line indent into every inline's reported column, so
+    /// the link on the surviving line must be rebased before its authored
+    /// bytes can be sliced. At each legal indent the definition and the
+    /// `[a]` spelling both survive.
+    func testFormatKeepsAnIndentedDefinitionAboveItsParagraph() {
+        for indent in ["   ", "  ", " "] {
+            let once = runFormat("\(indent)[a]: /x\nUses [a].\n")
+            XCTAssertEqual(once, "\(indent)[a]: /x\n\nUses [a].\n")
+            XCTAssertEqual(runFormat(once), once)
+        }
+    }
+
+    /// The same rebase on a LATER line of the folded paragraph: the column
+    /// offset applies to every surviving line, not only the first.
+    func testFormatKeepsARefOnALaterLineBelowAnIndentedDefinition() {
+        let once = runFormat("  [a]: /x\nx [a] y\nz [a] w\n")
+        XCTAssertEqual(once, "  [a]: /x\n\nx [a] y\nz [a] w\n")
+        XCTAssertEqual(runFormat(once), once)
+    }
+
+    /// The surviving line can carry its own indent too, which cmark strips
+    /// from the buffer: the rebase adds the line's real indent back before
+    /// slicing, so the reference spelling still survives.
+    func testFormatKeepsARefOnAnIndentedLineBelowAnIndentedDefinition() {
+        let once = runFormat("   [a]: /x\n  Uses [a].\n")
+        XCTAssertEqual(once, "   [a]: /x\n\nUses [a].\n")
+        XCTAssertEqual(runFormat(once), once)
+    }
 }
