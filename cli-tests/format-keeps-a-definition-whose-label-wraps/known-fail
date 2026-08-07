@@ -1,0 +1,33 @@
+A DEFINITION WHOSE LABEL WRAPS ACROSS LINES IS DROPPED, AND ITS USE IS
+RESOLVED INLINE.
+
+WHAT md DOES TODAY. The whole output is one line:
+
+    Uses [foo bar](/url).
+
+The definition is gone and the reference spelling with it. This is not
+a fold problem: the same input WITH the blank line, as this case is
+written, fails the same way, so it predates the folded-definition work
+and was found during it (defect 28).
+
+WHAT IT SHOULD DO. Keep both, byte for byte, like every single-line
+definition: the wrapped `[foo\nbar]: /url` block and the `[foo bar]`
+reference.
+
+CAUSE. Both recovery grammars read a definition's label from ONE line.
+`definitionLabel(inLine:)` scans each line of an uncovered span for
+`[label]:`, so `[foo` on the first line yields no label, the span fails
+`isDefinitionShaped`, and the definition is never written back. With no
+recovered label, `restoreReferenceStyleLinks` has nothing to match and
+the `[foo bar]` link keeps cmark's pasted-URL form. The folded-paragraph
+scanner (`leadingDefinitionLineCount`) is single-line-label in the same
+way.
+
+THE FIX NEEDS BOTH GRAMMARS EXTENDED TOGETHER. A label may contain up
+to one line ending (labels normalize internal whitespace, which is how
+`[foo\nbar]` matches `[foo bar]`). Extending only the span grammar
+would recover the definition while the link still resolves inline,
+duplicating the URL — the same trap defect 27 documents. Keep the
+strict-or-equal-to-cmark rule from the grammar audit: a multi-line
+label parser must not accept anything cmark rejects, such as a label
+with a blank line inside it or one over cmark's length cap.

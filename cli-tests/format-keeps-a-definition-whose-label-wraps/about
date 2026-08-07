@@ -1,0 +1,5 @@
+A link reference definition's label may wrap across a line ending:
+`[foo\nbar]` defines the label `foo bar`, because labels normalize
+their whitespace. The definition and the `[foo bar]` reference that
+uses it must both survive a format, the same as any single-line
+definition.

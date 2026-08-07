@@ -61,7 +61,7 @@ and the instrumented subprocess hits that limit writing its own profile.
 reported 88.73% where the truth was 98.24%, which were the figures of that
 day. `--build-tests` fixes it.
 
-## Defects: 27 found, 23 fixed, 2 open, 2 withdrawn
+## Defects: 28 found, 23 fixed, 3 open, 2 withdrawn
 
 Each open defect is pinned by tests holding the CORRECT expectation, marked as
 known failures, so it turns green by itself when it is fixed. **The `known-fail`
@@ -75,6 +75,7 @@ Numbers are stable. A fixed defect keeps its number, because commit messages and
 | --- | --- | --- |
 | 21 | A refusal prints the usage of `md`, not of the subcommand | 4 CLI |
 | 22 | `format` has no `-i` | 1 CLI |
+| 28 | A definition whose label wraps across lines is dropped | 1 CLI |
 
 Fixed: **1** non-finite JSON number abort, **2** soft line break dropped, **3**
 hard line break dropped, **4** HTML blocks deleted, **5** backslash escapes
