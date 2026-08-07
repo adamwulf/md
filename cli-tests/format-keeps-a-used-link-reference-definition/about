@@ -1,0 +1,4 @@
+A link reference definition that a link DOES point at is still text the
+author wrote. `format` must keep the reference style: the `[ref]` link and
+its `[ref]: url` definition, both unchanged. It must not resolve the link to
+inline `[ref](url)` and drop the definition line.

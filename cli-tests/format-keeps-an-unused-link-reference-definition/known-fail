@@ -14,5 +14,7 @@ MarkdownParser.parse never sees one and FormatCommand has nothing to write.
 Keeping it needs the definitions read out of the source text before the tree
 is walked, since the parser will not hand them back.
 
-Related, and owned by another case: a definition that IS used survives only as
-the inline URL pasted into the link that referenced it.
+Related, and owned by `format-keeps-a-used-link-reference-definition`: a
+definition that IS used survives only as the inline URL pasted into the link
+that referenced it. That case needs this fix plus one more step, because cmark
+also resolves the link node itself.

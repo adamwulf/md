@@ -61,7 +61,7 @@ and the instrumented subprocess hits that limit writing its own profile.
 reported 88.73% where the truth was 98.24%, which were the figures of that
 day. `--build-tests` fixes it.
 
-## Defects: 26 found, 21 fixed, 3 open, 2 withdrawn
+## Defects: 27 found, 21 fixed, 4 open, 2 withdrawn
 
 Each open defect is pinned by tests holding the CORRECT expectation, marked as
 known failures, so it turns green by itself when it is fixed. **The `known-fail`
@@ -76,6 +76,7 @@ Numbers are stable. A fixed defect keeps its number, because commit messages and
 | 7 | An unused link reference definition is deleted | 3 CLI |
 | 21 | A refusal prints the usage of `md`, not of the subcommand | 4 CLI |
 | 22 | `format` has no `-i`. **Do not add it yet** — see below | 1 CLI |
+| 27 | A used link reference is resolved inline and its definition dropped | 1 CLI |
 
 Fixed: **1** non-finite JSON number abort, **2** soft line break dropped, **3**
 hard line break dropped, **4** HTML blocks deleted, **5** backslash escapes
@@ -143,5 +144,9 @@ Ordered by tests turned green for code changed:
 1. **21** is small, but touches each editing command.
 2. **7** needs the parsed document model to grow a case for link reference
    definitions and touches every `switch` over the enum.
-3. **22** only after **7**, so in-place formatting cannot write that loss into
+3. **27** builds on **7**. Writing the definition back is necessary but not
+   enough: cmark also resolves the `[ref]` link to an inline URL, so fixing
+   **7** alone would duplicate the URL. The formatter must carry the
+   reference style through and render `[ref]`, not `[ref](url)`.
+4. **22** only after **7**, so in-place formatting cannot write that loss into
    the user's file.

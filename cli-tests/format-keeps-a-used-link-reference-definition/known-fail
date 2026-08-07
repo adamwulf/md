@@ -1,0 +1,50 @@
+A LINK REFERENCE DEFINITION THAT IS USED IS RESOLVED INLINE, AND ITS
+DEFINITION LINE IS DROPPED.
+
+WHAT md DOES TODAY. The reference link is pasted inline and the definition
+disappears. The whole output is one line:
+
+    paragraph [ref](url) here
+
+WHAT IT SHOULD DO. Keep the author's reference style, byte-for-byte: the
+`[ref]` link and its `[ref]: url` definition, both unchanged.
+
+    paragraph [ref] here
+
+    [ref]: url
+
+WHY THIS IS DISTINCT FROM `format-keeps-an-unused-link-reference-definition`.
+That case (defect 7) loses an UNUSED definition entirely: the URL appears
+nowhere else, so it is gone for good. Here the URL survives, but in the wrong
+shape and the wrong place. Two things go wrong, not one:
+
+  1. cmark consumes `[ref]: url` into the document reference map and leaves no
+     node, so `MarkdownParser.parse` never sees it — the same root cause as
+     defect 7.
+  2. cmark ALSO resolves the `[ref]` link node to hold `url` inline, and the
+     commonmark renderer writes it back as `[ref](url)`.
+
+That second point is why defect 7's fix is necessary but NOT sufficient here.
+Writing the definition back out from the source, on its own, would produce:
+
+    paragraph [ref](url) here
+
+    [ref]: url
+
+which is worse than today: the URL is now DUPLICATED — once inline, once in
+the definition. To fix this case the formatter must also know the link was
+reference-style and render it as `[ref]`, not `[ref](url)`. cmark tracks that
+a link came from a reference; the renderer here does not carry it through.
+
+WHY THE EXPECTATION IS PRESERVE, NOT INLINE. `format` normalizes spelling, it
+does not rewrite the author's structure. The editing commands splice source to
+keep untouched bytes exact (defect 19). A reference definition is a block the
+author wrote on purpose, often to reuse one URL from several links. Converting
+it to inline, and deleting the definition, changes the document shape and would
+duplicate the URL if defect 7 is fixed first. Preserve is the only expectation
+consistent with the rest of this suite.
+
+`[ref]: url` IS A DEFINITION, NOT A DROPPED LINK. Proof, as the neighbouring
+cases state it: `"[ref]: /url\n\nSee [ref] here.\n"` resolves — cmark pastes
+the URL inline because that is all it kept. The colon makes a definition; the
+brackets alone are ordinary text.
