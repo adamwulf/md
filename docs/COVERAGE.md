@@ -61,7 +61,7 @@ and the instrumented subprocess hits that limit writing its own profile.
 reported 88.73% where the truth was 98.24%, which were the figures of that
 day. `--build-tests` fixes it.
 
-## Defects: 27 found, 21 fixed, 4 open, 2 withdrawn
+## Defects: 27 found, 23 fixed, 2 open, 2 withdrawn
 
 Each open defect is pinned by tests holding the CORRECT expectation, marked as
 known failures, so it turns green by itself when it is fixed. **The `known-fail`
@@ -73,15 +73,14 @@ Numbers are stable. A fixed defect keeps its number, because commit messages and
 
 | # | Defect | Pinned by |
 | --- | --- | --- |
-| 7 | An unused link reference definition is deleted | 3 CLI |
 | 21 | A refusal prints the usage of `md`, not of the subcommand | 4 CLI |
-| 22 | `format` has no `-i`. **Do not add it yet** — see below | 1 CLI |
-| 27 | A used link reference is resolved inline and its definition dropped | 1 CLI |
+| 22 | `format` has no `-i` | 1 CLI |
 
 Fixed: **1** non-finite JSON number abort, **2** soft line break dropped, **3**
 hard line break dropped, **4** HTML blocks deleted, **5** backslash escapes
 resolved away, **6** two
-blockquote paragraphs flattened into one run, **9** non-ASCII
+blockquote paragraphs flattened into one run, **7** link reference definitions
+deleted, at the top level and inside list items, **9** non-ASCII
 YAML values escaped, **10** phantom final line counted, **11** a list block
 absorbed the blank line below it, **12** editing commands
 counted frontmatter as blocks, **13** malformed frontmatter read as empty,
@@ -91,7 +90,8 @@ commands invented a final newline, **19** editing commands re-spelled untouched
 blocks, **20** ordered lists renumbered from one, **23** `list --key` split one
 file across multiple lines, **24** empty JSON arrays spanned three lines,
 **25** an edit destroyed the code block below it, **26** a code fence was closed
-by the backticks it enclosed.
+by the backticks it enclosed, **27** a used link reference resolved inline while
+its definition was dropped.
 
 Withdrawn: **8** expected a list continuation to be a separate block, but the
 continuation belongs to the item and formatting is idempotent. **17** expected
@@ -126,9 +126,10 @@ fix for 25 would have carried the defect into `remove` and `replace`.
 
 ## Two things to know before you fix
 
-**Defect 22 must wait.** Adding `format -i` is one line, but `format` still
-loses link reference definitions. An in-place flag would write that loss into
-the user's file. Fix 7 first.
+**Defect 22 is unblocked.** It had to wait while `format` lost link reference
+definitions, because an in-place flag would have written that loss into the
+user's file. Defects 7 and 27 are fixed, so `format -i` can now be added
+safely.
 
 **Defect 3 has an intentional canonical spelling.** A hard break has two
 spellings and both mean the same break. `format` writes the backslash because
@@ -142,11 +143,5 @@ asterisk bullet, or thematic break remains byte-for-byte unchanged.
 Ordered by tests turned green for code changed:
 
 1. **21** is small, but touches each editing command.
-2. **7** needs the parsed document model to grow a case for link reference
-   definitions and touches every `switch` over the enum.
-3. **27** builds on **7**. Writing the definition back is necessary but not
-   enough: cmark also resolves the `[ref]` link to an inline URL, so fixing
-   **7** alone would duplicate the URL. The formatter must carry the
-   reference style through and render `[ref]`, not `[ref](url)`.
-4. **22** only after **7**, so in-place formatting cannot write that loss into
-   the user's file.
+2. **22** is one flag on `format`, unblocked now that 7 and 27 no longer
+   lose link reference definitions.
