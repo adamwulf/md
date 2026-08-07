@@ -11,7 +11,8 @@ and md must tell them apart:
     - <!-- note -->   a child that renders nothing   KEPT, this case
     -                 no child, written empty        KEPT as `-`,
                                                      format-keeps-an-empty-list-item
-    - [ref]: /url     no child, cmark ate it         known-fail, its URL is lost
+    - [ref]: /url     no child, cmark ate it         KEPT, recovered from source,
+                                                     format-keeps-a-link-reference-definition-in-a-list-item
 
 Only the middle two share a mechanism. `collectListItems` decides an item's
 fate by asking whether the item node has any children, so this case is the one

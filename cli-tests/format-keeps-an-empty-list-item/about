@@ -24,11 +24,13 @@ tell those apart from an item that was empty to begin with. An item the author
 wrote empty has NO CHILDREN, which a mid-item flush cannot say, so the guard
 now asks that question too.
 
-THE TRAP THAT MAKES THIS EXCEPTION NARROWER THAN IT LOOKS.
-`format-keeps-a-link-reference-definition-in-a-list-item` is a known-fail
-because `- [ref]: /url` ALSO has no children: cmark consumes a link reference
-definition into the document's reference map and leaves no node behind. So
-this fix gives that input a bare `-` and its URL stays lost. That is an
-improvement — before, the entire list block vanished — but it is not the end
-of it, and the source line is the only thing that can tell an item written
-empty from one whose definition was eaten.
+THE TRAP THAT MADE THIS EXCEPTION NARROWER THAN IT LOOKED.
+`- [ref]: /url` ALSO has no children: cmark consumes a link reference
+definition into the document's reference map and leaves no node behind, so
+for a while this fix gave that input a bare `-` and its URL stayed lost.
+Exactly as predicted here, the source line was the thing that could tell an
+item written empty from one whose definition was eaten: the parser now reads
+the definition back out of the lines no node covers and puts it inside its
+item, and `format-keeps-a-link-reference-definition-in-a-list-item` pins the
+fixed behaviour. The two shapes still reach the empty-item machinery the same
+way — no children — so change that branch and run both cases.
