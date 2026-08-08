@@ -61,12 +61,14 @@ and the instrumented subprocess hits that limit writing its own profile.
 reported 88.73% where the truth was 98.24%, which were the figures of that
 day. `--build-tests` fixes it.
 
-## Defects: 28 found, 23 fixed, 3 open, 2 withdrawn
+## Defects: 28 found, 23 fixed, 2 open, 1 won't fix, 2 withdrawn
 
 Each open defect is pinned by tests holding the CORRECT expectation, marked as
 known failures, so it turns green by itself when it is fixed. **The `known-fail`
 file of each case holds the detail: what `md` does today, what it should do, and
-the cause.** This is only the index.
+the cause.** This is only the index. The one won't-fix defect is pinned the same
+way, so the choice can be reversed later without having lost the correct
+expectation.
 
 Numbers are stable. A fixed defect keeps its number, because commit messages and
 `known-fail` files name them.
@@ -75,7 +77,6 @@ Numbers are stable. A fixed defect keeps its number, because commit messages and
 | --- | --- | --- |
 | 21 | A refusal prints the usage of `md`, not of the subcommand | 4 CLI |
 | 22 | `format` has no `-i` | 1 CLI |
-| 28 | A definition whose label wraps across lines is dropped | 1 CLI |
 
 Fixed: **1** non-finite JSON number abort, **2** soft line break dropped, **3**
 hard line break dropped, **4** HTML blocks deleted, **5** backslash escapes
@@ -93,6 +94,16 @@ file across multiple lines, **24** empty JSON arrays spanned three lines,
 **25** an edit destroyed the code block below it, **26** a code fence was closed
 by the backticks it enclosed, **27** a used link reference resolved inline while
 its definition was dropped.
+
+Won't fix: **28** a link reference definition whose label wraps across lines is
+dropped and its use is resolved inline. This is real data loss, but wrapping a
+label across lines is rare and the fix is not contained — both recovery
+grammars would have to learn multi-line labels together, or fixing one side
+duplicates the URL (see defect 27). The project accepts the current behaviour.
+The case keeps the CORRECT expectation and a `wont-fix` marker, so the suite
+stays green, the decision is documented and reversible, and the runner reports
+an unexpected pass if the behaviour ever changes. Distinct from *withdrawn*:
+the expectation is right, the fix is simply declined.
 
 Withdrawn: **8** expected a list continuation to be a separate block, but the
 continuation belongs to the item and formatting is idempotent. **17** expected

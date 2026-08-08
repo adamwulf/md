@@ -36,11 +36,12 @@ EXPECTED_FILE = "expected-file.md"
 EXPECTED_EXIT = "expected-exit"
 EXPECTED_STDERR = "expected-stderr"
 KNOWN_FAIL = "known-fail"
+WONT_FIX = "wont-fix"
 ABOUT = "about"
 
 CONTROL_FILES = frozenset([
     ARGS, THEN_ARGS, STDIN, EXPECTED_STDOUT, EXPECTED_FILE,
-    EXPECTED_EXIT, EXPECTED_STDERR, KNOWN_FAIL, ABOUT,
+    EXPECTED_EXIT, EXPECTED_STDERR, KNOWN_FAIL, WONT_FIX, ABOUT,
 ])
 
 BLESS_FLAG = "--rewrite-expected-files-i-have-read-the-diff"
@@ -49,6 +50,7 @@ TIMEOUT_SECONDS = 60
 PASS = "PASS"
 FAIL = "FAIL"
 KNOWN = "KNOWN FAIL"
+WONTFIX = "WONT FIX"
 UNEXPECTED = "UNEXPECTED PASS"
 
 
@@ -359,12 +361,22 @@ def bless(directory, result, scratch):
 def run_case(name, binary, options):
     """Run one case and return (status, report_lines)."""
     directory = TESTS_DIR / name
-    marker = directory / KNOWN_FAIL
-    is_known_fail = marker.is_file()
+    known_fail_marker = directory / KNOWN_FAIL
+    wont_fix_marker = directory / WONT_FIX
+    is_known_fail = known_fail_marker.is_file()
+    is_wont_fix = wont_fix_marker.is_file()
     scratch = Path(tempfile.mkdtemp(prefix="md-cli-test-%s-" % name))
 
     try:
         try:
+            if is_known_fail and is_wont_fix:
+                # The two markers state opposite intentions — a defect still to
+                # fix versus one the project has decided to leave. A case
+                # declares one, not both.
+                return FAIL, ["a case cannot have both a %s and a %s marker; "
+                              "keep the one that states the decision"
+                              % (KNOWN_FAIL, WONT_FIX)]
+
             result, argv = execute(directory, binary, scratch)
 
             if options.bless:
@@ -375,15 +387,23 @@ def run_case(name, binary, options):
             failures.extend(check_edited_file(directory, scratch))
 
             lines = []
-            if is_known_fail:
-                reason = read_bytes(marker).decode(
+            # A known-fail case pins a defect still to be fixed; a wont-fix case
+            # pins one the project has decided to leave alone. Both keep the
+            # CORRECT expectation and both are tolerated while they fail, so the
+            # suite stays green. Both also report an unexpected pass if the
+            # behaviour ever changes, so a stale marker cannot hide a regression.
+            if is_known_fail or is_wont_fix:
+                marker_path = known_fail_marker if is_known_fail else wont_fix_marker
+                status = KNOWN if is_known_fail else WONTFIX
+                label = KNOWN_FAIL if is_known_fail else WONT_FIX
+                reason = read_bytes(marker_path).decode(
                     "utf-8", errors="replace").strip()
                 if not failures:
-                    lines.append("This case is marked known-fail but it "
-                                 "PASSED.")
-                    lines.append("Someone fixed the defect. Read the marker, "
-                                 "confirm the fix, then delete %s/%s."
-                                 % (name, KNOWN_FAIL))
+                    lines.append("This case is marked %s but it PASSED."
+                                 % label)
+                    lines.append("The behaviour changed. Read the marker, "
+                                 "confirm it, then delete %s/%s and update the "
+                                 "ledger." % (name, label))
                     if reason:
                         lines.extend("  marker: " + line
                                      for line in reason.splitlines())
@@ -395,7 +415,7 @@ def run_case(name, binary, options):
                         lines.extend(failure)
                 else:
                     lines.append("Run with --verbose to see the diff.")
-                return KNOWN, lines
+                return status, lines
 
             if failures:
                 for failure in failures:
@@ -407,8 +427,9 @@ def run_case(name, binary, options):
 
             return PASS, []
         except CaseError as error:
-            # A malformed case is always a real failure. A known-fail marker
-            # describes a defect in md, and cannot excuse broken fixtures.
+            # A malformed case is always a real failure. A known-fail or
+            # wont-fix marker describes md's behaviour, and cannot excuse
+            # broken fixtures.
             return FAIL, str(error).splitlines()
     finally:
         if options.keep_scratch:
@@ -477,7 +498,12 @@ def main(argv):
 
     if options.list_only:
         for name in available:
-            marker = " (known-fail)" if (TESTS_DIR / name / KNOWN_FAIL).is_file() else ""
+            if (TESTS_DIR / name / KNOWN_FAIL).is_file():
+                marker = " (known-fail)"
+            elif (TESTS_DIR / name / WONT_FIX).is_file():
+                marker = " (wont-fix)"
+            else:
+                marker = ""
             print(name + marker)
         return 0
 
@@ -496,11 +522,12 @@ def main(argv):
     if options.bless:
         if not options.names:
             selected = [name for name in selected
-                        if not (TESTS_DIR / name / KNOWN_FAIL).is_file()]
+                        if not (TESTS_DIR / name / KNOWN_FAIL).is_file()
+                        and not (TESTS_DIR / name / WONT_FIX).is_file()]
             skipped = len(available) - len(selected)
             if skipped:
-                print("Skipping %d case(s) marked known-fail. Name them "
-                      "explicitly to rewrite them." % skipped)
+                print("Skipping %d case(s) marked known-fail or wont-fix. Name "
+                      "them explicitly to rewrite them." % skipped)
         print("Rewriting expected files for %d case(s)." % len(selected))
         print("")
 
@@ -508,7 +535,7 @@ def main(argv):
         build()
     binary = resolve_binary()
 
-    counts = {PASS: 0, FAIL: 0, KNOWN: 0, UNEXPECTED: 0}
+    counts = {PASS: 0, FAIL: 0, KNOWN: 0, WONTFIX: 0, UNEXPECTED: 0}
     unexpected_names = []
 
     for name in selected:
@@ -526,18 +553,20 @@ def main(argv):
     print("-" * 68)
     summary = ("%d case(s): %d passed, %d failed, %d known-fail"
                % (len(selected), counts[PASS], counts[FAIL], counts[KNOWN]))
+    if counts[WONTFIX]:
+        summary += ", %d wont-fix" % counts[WONTFIX]
     if counts[UNEXPECTED]:
         summary += ", %d unexpected pass" % counts[UNEXPECTED]
     print(summary)
 
     if unexpected_names:
         print("")
-        print("%d case(s) marked known-fail are now PASSING:"
+        print("%d case(s) marked known-fail or wont-fix are now PASSING:"
               % len(unexpected_names))
         for name in unexpected_names:
             print("  %s" % name)
-        print("Read each marker, confirm the fix is real, then delete the "
-              "known-fail file.")
+        print("Read each marker, confirm the change is real, then delete the "
+              "marker file and update the ledger.")
 
     return 1 if (counts[FAIL] or counts[UNEXPECTED]) else 0
 

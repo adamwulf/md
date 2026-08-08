@@ -145,6 +145,23 @@ Delete the marker when the defect is fixed. If a case marked `known-fail`
 starts passing, the runner reports `UNEXPECTED PASS` and exits non-zero, on
 purpose: a stale marker hides the next regression.
 
+### `wont-fix`: a case whose defect the project has decided to leave
+
+Add a `wont-fix` file instead when `md` is wrong, the expectation in
+`expected.md` is right, but the project has decided NOT to fix it — the shape is
+too rare, or the fix costs more than it is worth. Write into the marker what
+`md` does today, what correct would be, and why the fix is declined.
+
+It behaves like `known-fail` in every mechanical way: the runner reports the
+case as `WONT FIX`, does not count it toward the exit code so the suite stays
+green, and reports `UNEXPECTED PASS` (exiting non-zero) if the case ever starts
+passing — the signal to reclassify it as fixed. Keeping the correct
+`expected.md` is what makes the decision reversible.
+
+The one difference is intent, and it is the same line the coverage ledger
+draws: a `known-fail` is a worklist item still to do; a `wont-fix` is a closed
+decision. A case declares one marker or the other, never both.
+
 ## Coverage
 
 ```bash
