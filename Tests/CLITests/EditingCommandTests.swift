@@ -51,6 +51,32 @@ final class EditingCommandTests: XCTestCase {
         return try scratch.read("document.md")
     }
 
+    /// Asserts that the arguments are rejected at parse time: the guard
+    /// throws from validate(), so the refusal keeps the command stack and
+    /// names the subcommand in its usage, with exactly `expectedMessage`.
+    private func assertValidateRejects<Command: ParsableArguments>(
+        _ type: Command.Type,
+        _ arguments: [String],
+        on content: String,
+        withMessage expectedMessage: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
+        let path = try scratch.write(content, to: "document.md")
+        XCTAssertThrowsError(
+            try type.parse(arguments + ["--file", path]),
+            file: file,
+            line: line
+        ) { error in
+            XCTAssertEqual(
+                type.message(for: error),
+                expectedMessage,
+                file: file,
+                line: line
+            )
+        }
+    }
+
     func testEditingCommandsCanTargetAnExistingHtmlBlock() async throws {
         let source = "Before.\n\n<!--  raw HTML  -->\n\nAfter.\n"
 
@@ -177,30 +203,34 @@ final class EditingCommandTests: XCTestCase {
         XCTAssertEqual(written, "# One\n")
     }
 
-    // MARK: - remove: index guards
+    // MARK: - remove: index guards, thrown from validate()
 
-    func testRemoveRejectsAStartBelowOne() async {
-        await XCTAssertThrowsErrorMessage("Start index must be >= 1, got 0") {
-            _ = try await self.run(RemoveCommand.self, ["0"], on: self.twoHeadings)
-        }
+    func testRemoveRejectsAStartBelowOne() throws {
+        try assertValidateRejects(
+            RemoveCommand.self, ["0"], on: twoHeadings,
+            withMessage: "Start index must be >= 1, got 0"
+        )
     }
 
-    func testRemoveRejectsAnEndBeforeTheStart() async {
-        await XCTAssertThrowsErrorMessage("End index must be >= start, got 2...1") {
-            _ = try await self.run(RemoveCommand.self, ["2", "1"], on: self.twoHeadings)
-        }
+    func testRemoveRejectsAnEndBeforeTheStart() throws {
+        try assertValidateRejects(
+            RemoveCommand.self, ["2", "1"], on: twoHeadings,
+            withMessage: "End index must be >= start, got 2...1"
+        )
     }
 
-    func testRemoveRejectsAnEndPastTheLastBlock() async {
-        await XCTAssertThrowsErrorMessage("End index must be <= 2, got 3") {
-            _ = try await self.run(RemoveCommand.self, ["1", "3"], on: self.twoHeadings)
-        }
+    func testRemoveRejectsAnEndPastTheLastBlock() throws {
+        try assertValidateRejects(
+            RemoveCommand.self, ["1", "3"], on: twoHeadings,
+            withMessage: "End index must be <= 2, got 3"
+        )
     }
 
-    func testRemoveRejectsAnyIndexInAnEmptyDocument() async {
-        await XCTAssertThrowsErrorMessage("End index must be <= 0, got 1") {
-            _ = try await self.run(RemoveCommand.self, ["1"], on: "")
-        }
+    func testRemoveRejectsAnyIndexInAnEmptyDocument() throws {
+        try assertValidateRejects(
+            RemoveCommand.self, ["1"], on: "",
+            withMessage: "End index must be <= 0, got 1"
+        )
     }
 
     func testRemoveRejectsInPlaceWithStandardInput() {
@@ -246,12 +276,11 @@ final class EditingCommandTests: XCTestCase {
 
     /// A second argument that parses as an integer is read as an end index, so
     /// replacing a block with the literal text "2" needs the three-argument form.
-    func testReplaceReadsANumericSecondArgumentAsAnEndIndex() async {
-        await XCTAssertThrowsErrorMessage(
-            "Expected: md replace <start> <end> \"content\" --file <file>"
-        ) {
-            _ = try await self.run(ReplaceCommand.self, ["1", "2"], on: self.twoHeadings)
-        }
+    func testReplaceReadsANumericSecondArgumentAsAnEndIndex() throws {
+        try assertValidateRejects(
+            ReplaceCommand.self, ["1", "2"], on: twoHeadings,
+            withMessage: "Expected: md replace <start> <end> \"content\" --file <file>"
+        )
     }
 
     func testReplaceReadsANonNumericSecondArgumentAsContent() async throws {
@@ -281,30 +310,27 @@ final class EditingCommandTests: XCTestCase {
         XCTAssertEqual(written, "# New\n\n# Two\n")
     }
 
-    // MARK: - replace: index guards
+    // MARK: - replace: index guards, thrown from validate()
 
-    func testReplaceRejectsAStartBelowOne() async {
-        await XCTAssertThrowsErrorMessage("Start index must be >= 1, got 0") {
-            _ = try await self.run(
-                ReplaceCommand.self, ["0", "# New"], on: self.twoHeadings
-            )
-        }
+    func testReplaceRejectsAStartBelowOne() throws {
+        try assertValidateRejects(
+            ReplaceCommand.self, ["0", "# New"], on: twoHeadings,
+            withMessage: "Start index must be >= 1, got 0"
+        )
     }
 
-    func testReplaceRejectsAnEndBeforeTheStart() async {
-        await XCTAssertThrowsErrorMessage("End index must be >= start, got 2...1") {
-            _ = try await self.run(
-                ReplaceCommand.self, ["2", "1", "# New"], on: self.twoHeadings
-            )
-        }
+    func testReplaceRejectsAnEndBeforeTheStart() throws {
+        try assertValidateRejects(
+            ReplaceCommand.self, ["2", "1", "# New"], on: twoHeadings,
+            withMessage: "End index must be >= start, got 2...1"
+        )
     }
 
-    func testReplaceRejectsAnEndPastTheLastBlock() async {
-        await XCTAssertThrowsErrorMessage("End index must be <= 2, got 3") {
-            _ = try await self.run(
-                ReplaceCommand.self, ["1", "3", "# New"], on: self.twoHeadings
-            )
-        }
+    func testReplaceRejectsAnEndPastTheLastBlock() throws {
+        try assertValidateRejects(
+            ReplaceCommand.self, ["1", "3", "# New"], on: twoHeadings,
+            withMessage: "End index must be <= 2, got 3"
+        )
     }
 
     func testReplaceRejectsInPlaceWithStandardInput() {
@@ -356,32 +382,25 @@ final class EditingCommandTests: XCTestCase {
         XCTAssertEqual(written, "# One\n\nNew.\n\n# Two\n")
     }
 
-    func testInsertAfterRejectsAnIndexBelowOne() async {
-        await XCTAssertThrowsErrorMessage(
-            "Block index must be in range 1...2, got 0"
-        ) {
-            _ = try await self.run(
-                InsertAfterCommand.self, ["0", "New."], on: self.twoHeadings
-            )
-        }
+    func testInsertAfterRejectsAnIndexBelowOne() throws {
+        try assertValidateRejects(
+            InsertAfterCommand.self, ["0", "New."], on: twoHeadings,
+            withMessage: "Block index must be in range 1...2, got 0"
+        )
     }
 
-    func testInsertAfterRejectsAnIndexPastTheLastBlock() async {
-        await XCTAssertThrowsErrorMessage(
-            "Block index must be in range 1...2, got 3"
-        ) {
-            _ = try await self.run(
-                InsertAfterCommand.self, ["3", "New."], on: self.twoHeadings
-            )
-        }
+    func testInsertAfterRejectsAnIndexPastTheLastBlock() throws {
+        try assertValidateRejects(
+            InsertAfterCommand.self, ["3", "New."], on: twoHeadings,
+            withMessage: "Block index must be in range 1...2, got 3"
+        )
     }
 
-    func testInsertAfterRejectsAnyIndexInAnEmptyDocument() async {
-        await XCTAssertThrowsErrorMessage(
-            "Block index must be in range 1...0, got 1"
-        ) {
-            _ = try await self.run(InsertAfterCommand.self, ["1", "New."], on: "")
-        }
+    func testInsertAfterRejectsAnyIndexInAnEmptyDocument() throws {
+        try assertValidateRejects(
+            InsertAfterCommand.self, ["1", "New."], on: "",
+            withMessage: "Block index must be in range 1...0, got 1"
+        )
     }
 
     func testInsertAfterRejectsInPlaceWithStandardInput() {
@@ -439,24 +458,18 @@ final class EditingCommandTests: XCTestCase {
         XCTAssertEqual(written, "# One\n\nNew.\n\n# Two\n")
     }
 
-    func testInsertBeforeRejectsAnIndexBelowOne() async {
-        await XCTAssertThrowsErrorMessage(
-            "Block index must be in range 1...2, got 0"
-        ) {
-            _ = try await self.run(
-                InsertBeforeCommand.self, ["0", "New."], on: self.twoHeadings
-            )
-        }
+    func testInsertBeforeRejectsAnIndexBelowOne() throws {
+        try assertValidateRejects(
+            InsertBeforeCommand.self, ["0", "New."], on: twoHeadings,
+            withMessage: "Block index must be in range 1...2, got 0"
+        )
     }
 
-    func testInsertBeforeRejectsAnIndexPastTheLastBlock() async {
-        await XCTAssertThrowsErrorMessage(
-            "Block index must be in range 1...2, got 3"
-        ) {
-            _ = try await self.run(
-                InsertBeforeCommand.self, ["3", "New."], on: self.twoHeadings
-            )
-        }
+    func testInsertBeforeRejectsAnIndexPastTheLastBlock() throws {
+        try assertValidateRejects(
+            InsertBeforeCommand.self, ["3", "New."], on: twoHeadings,
+            withMessage: "Block index must be in range 1...2, got 3"
+        )
     }
 
     func testInsertBeforeRejectsInPlaceWithStandardInput() {
@@ -486,39 +499,77 @@ final class EditingCommandTests: XCTestCase {
         XCTAssertEqual(output, "2\n")
     }
 
-    func testRemoveNumbersBlocksTheSameWayAsBlocksCommand() async {
-        await XCTAssertThrowsErrorMessage("End index must be <= 2, got 3") {
-            _ = try await self.run(
-                RemoveCommand.self, ["3"], on: self.frontmatterDocument
-            )
+    func testRemoveNumbersBlocksTheSameWayAsBlocksCommand() throws {
+        try assertValidateRejects(
+            RemoveCommand.self, ["3"], on: frontmatterDocument,
+            withMessage: "End index must be <= 2, got 3"
+        )
+    }
+
+    func testReplaceNumbersBlocksTheSameWayAsBlocksCommand() throws {
+        try assertValidateRejects(
+            ReplaceCommand.self, ["3", "# New"], on: frontmatterDocument,
+            withMessage: "End index must be <= 2, got 3"
+        )
+    }
+
+    func testInsertAfterNumbersBlocksTheSameWayAsBlocksCommand() throws {
+        try assertValidateRejects(
+            InsertAfterCommand.self, ["3", "New."], on: frontmatterDocument,
+            withMessage: "Block index must be in range 1...2, got 3"
+        )
+    }
+
+    func testInsertBeforeNumbersBlocksTheSameWayAsBlocksCommand() throws {
+        try assertValidateRejects(
+            InsertBeforeCommand.self, ["3", "New."], on: frontmatterDocument,
+            withMessage: "Block index must be in range 1...2, got 3"
+        )
+    }
+
+    // MARK: - The stdin path keeps its index guard in run()
+
+    // validate() cannot count the blocks of a stdin document without
+    // consuming the stream before run() reads it. So parsing succeeds, and
+    // run() must still refuse an index outside the document.
+
+    func testRemoveOnStdinStillRejectsAnEndPastTheLastBlock() async throws {
+        let command = try RemoveCommand.parse(["1", "3", "--stdin"])
+        try await StandardStream.withStandardInput(twoHeadings) {
+            await XCTAssertThrowsErrorMessage("End index must be <= 2, got 3") {
+                try await command.run()
+            }
         }
     }
 
-    func testReplaceNumbersBlocksTheSameWayAsBlocksCommand() async {
-        await XCTAssertThrowsErrorMessage("End index must be <= 2, got 3") {
-            _ = try await self.run(
-                ReplaceCommand.self, ["3", "# New"], on: self.frontmatterDocument
-            )
+    func testReplaceOnStdinStillRejectsAnEndPastTheLastBlock() async throws {
+        let command = try ReplaceCommand.parse(["1", "3", "# New", "--stdin"])
+        try await StandardStream.withStandardInput(twoHeadings) {
+            await XCTAssertThrowsErrorMessage("End index must be <= 2, got 3") {
+                try await command.run()
+            }
         }
     }
 
-    func testInsertAfterNumbersBlocksTheSameWayAsBlocksCommand() async {
-        await XCTAssertThrowsErrorMessage(
-            "Block index must be in range 1...2, got 3"
-        ) {
-            _ = try await self.run(
-                InsertAfterCommand.self, ["3", "New."], on: self.frontmatterDocument
-            )
+    func testInsertAfterOnStdinStillRejectsAnIndexPastTheLastBlock() async throws {
+        let command = try InsertAfterCommand.parse(["3", "New.", "--stdin"])
+        try await StandardStream.withStandardInput(twoHeadings) {
+            await XCTAssertThrowsErrorMessage(
+                "Block index must be in range 1...2, got 3"
+            ) {
+                try await command.run()
+            }
         }
     }
 
-    func testInsertBeforeNumbersBlocksTheSameWayAsBlocksCommand() async {
-        await XCTAssertThrowsErrorMessage(
-            "Block index must be in range 1...2, got 3"
-        ) {
-            _ = try await self.run(
-                InsertBeforeCommand.self, ["3", "New."], on: self.frontmatterDocument
-            )
+    func testInsertBeforeOnStdinStillRejectsAnIndexBelowOne() async throws {
+        let command = try InsertBeforeCommand.parse(["0", "New.", "--stdin"])
+        try await StandardStream.withStandardInput(twoHeadings) {
+            await XCTAssertThrowsErrorMessage(
+                "Block index must be in range 1...2, got 0"
+            ) {
+                try await command.run()
+            }
         }
     }
 

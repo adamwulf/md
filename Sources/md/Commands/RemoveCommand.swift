@@ -40,6 +40,18 @@ struct RemoveCommand: AsyncParsableCommand {
         if inPlace && input.file == nil {
             throw ValidationError("Cannot use --in-place with --stdin")
         }
+        let end = end ?? start
+        guard start >= 1 else {
+            throw ValidationError("Start index must be >= 1, got \(start)")
+        }
+        guard end >= start else {
+            throw ValidationError("End index must be >= start, got \(start)...\(end)")
+        }
+        if let count = input.validationBlockCount() {
+            guard end <= count else {
+                throw ValidationError("End index must be <= \(count), got \(end)")
+            }
+        }
     }
 
     func run() async throws {
@@ -50,12 +62,8 @@ struct RemoveCommand: AsyncParsableCommand {
         let parser = MarkdownParser()
         let blocks = parser.parseDocument(content)
 
-        guard start >= 1 else {
-            throw ValidationError("Start index must be >= 1, got \(start)")
-        }
-        guard end >= start else {
-            throw ValidationError("End index must be >= start, got \(start)...\(end)")
-        }
+        // validate() cannot count the blocks of the stdin path, so the count
+        // guard repeats here.
         guard end <= blocks.count else {
             throw ValidationError("End index must be <= \(blocks.count), got \(end)")
         }

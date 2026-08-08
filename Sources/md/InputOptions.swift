@@ -7,6 +7,7 @@
 
 import ArgumentParser
 import Foundation
+import MarkdownKit
 
 struct InputOptions: ParsableArguments {
     @Option(name: .shortAndLong, help: "Path to the markdown file")
@@ -34,5 +35,18 @@ struct InputOptions: ParsableArguments {
         } else {
             return InputReader.readSourceFromStdin()
         }
+    }
+
+    /// The block count of the document, for range checks in `validate()`,
+    /// where a thrown error still names the subcommand in its usage. Returns
+    /// nil on the stdin path — reading stdin here would consume the stream
+    /// before `run()` reads it — and nil for a file that cannot be read, so
+    /// `run()` reports that failure itself.
+    func validationBlockCount() -> Int? {
+        guard let file = file,
+              let source = try? InputReader.readSource(from: file) else {
+            return nil
+        }
+        return MarkdownParser().parseDocument(source.content).count
     }
 }
