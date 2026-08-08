@@ -1,0 +1,5 @@
+A reference link can sit in a table cell. The cell's extension refuses
+the custom inline that carries a restored reference elsewhere, so the
+authored bytes ride in an inline-HTML node there instead — every writer
+emits that literal verbatim too. The cell must keep `[a]`, the
+definition must survive below the table, and the URL must appear once.

@@ -1195,9 +1195,18 @@ public struct MarkdownParser {
                   labels.contains(label),
                   let replacement = cmark_node_new(CMARK_NODE_CUSTOM_INLINE) else { continue }
             cmark_node_set_on_enter(replacement, source)
-            guard cmark_node_insert_before(node, replacement) == 1 else {
+            if cmark_node_insert_before(node, replacement) != 1 {
                 cmark_node_free(replacement)
-                continue
+                // A table cell lists the child kinds it accepts, and a
+                // custom inline is not among them — but inline HTML is, and
+                // every writer emits its literal verbatim too, so the
+                // authored bytes ride in that node instead.
+                guard let cellReplacement = cmark_node_new(CMARK_NODE_HTML_INLINE) else { continue }
+                cmark_node_set_literal(cellReplacement, source)
+                guard cmark_node_insert_before(node, cellReplacement) == 1 else {
+                    cmark_node_free(cellReplacement)
+                    continue
+                }
             }
             cmark_node_unlink(node)
             cmark_node_free(node)
@@ -1448,16 +1457,12 @@ public struct MarkdownParser {
             // goes back into a file, thus each marker that is live where it sits needs
             // its backslash again.
             let next = cmark_node_next(node)
-            let nextType = cmark_node_get_type(next)
             return MarkdownEscaper.escape(
                 text,
                 context: context,
                 startsLine: beginsLine(node),
                 endsBlock: next == nil,
-                // A custom inline is a reference-style link kept in its
-                // authored spelling, so it opens with a bracket the same way
-                // a link does.
-                isFollowedByLink: nextType == CMARK_NODE_LINK || nextType == CMARK_NODE_CUSTOM_INLINE
+                isFollowedByLink: isRestoredOrResolvedLink(next)
             )
         }
 
@@ -1491,6 +1496,25 @@ public struct MarkdownParser {
         }
 
         return ""
+    }
+
+    /// True when the node's output opens with a link's bracket, so a `!` at
+    /// the end of the text before it would make an image. A link node is
+    /// one; so is a reference kept in its authored spelling, whether it
+    /// rides in a custom inline or — inside a table cell — in an inline-HTML
+    /// node whose literal opens with the bracket. Authored inline HTML
+    /// always opens with `<`, so the literal check cannot mistake it.
+    private func isRestoredOrResolvedLink(_ node: UnsafeMutablePointer<cmark_node>?) -> Bool {
+        guard let node else { return false }
+        switch cmark_node_get_type(node) {
+        case CMARK_NODE_LINK, CMARK_NODE_CUSTOM_INLINE:
+            return true
+        case CMARK_NODE_HTML_INLINE:
+            let literal = cmark_node_get_literal(node).map { String(cString: $0) } ?? ""
+            return literal.hasPrefix("[")
+        default:
+            return false
+        }
     }
 
     /// True when this node begins a line of its block: it is the first node, or a line

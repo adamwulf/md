@@ -500,6 +500,24 @@ final class FormatCommandTests: XCTestCase {
         }
     }
 
+    /// A table cell refuses the custom inline that carries a restored
+    /// reference elsewhere, so the authored bytes ride in an inline-HTML
+    /// node there: the cell keeps `[a]` and its reference image `![a]`,
+    /// the definition survives, and the URL appears once.
+    func testFormatKeepsAReferenceLinkAndImageInATableCell() {
+        let once = runFormat("| c [a] d | ![a] |\n| --- | --- |\n\n[a]: /x\n")
+        XCTAssertEqual(once, "| c [a] d | ![a] |\n| ------- | ---- |\n\n[a]: /x\n")
+        XCTAssertEqual(runFormat(once), once)
+    }
+
+    /// A table nested in a list item renders through cmark's own writer
+    /// rather than the table formatter, and the inline-HTML carrier is
+    /// emitted verbatim there too.
+    func testFormatKeepsAReferenceLinkInATableInsideAListItem() {
+        let input = "- table item\n\n  | [a] | b |\n  | --- | --- |\n\n[a]: /x\n"
+        XCTAssertEqual(runFormat(input), input)
+    }
+
     /// cmark rejects only a label OVER its 1000-byte cap: a label of
     /// exactly 1000 is a definition and comes back, while one of 1001 is
     /// paragraph text to both cmark and the recovery.
