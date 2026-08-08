@@ -43,6 +43,8 @@ struct InsertBeforeCommand: AsyncParsableCommand {
             guard blockIndex >= 1, blockIndex <= count else {
                 throw ValidationError("Block index must be in range 1...\(count), got \(blockIndex)")
             }
+        } else if blockIndex < 1 {
+            throw ValidationError("Block index must be >= 1, got \(blockIndex)")
         }
     }
 
