@@ -27,7 +27,7 @@ coverage cannot see what that suite is for:
   taken the Swift test process with it. In the CLI suite it was only an exit
   code, and the case now guards the clean refusal.
 
-Every open defect below sits on a line that coverage already counted.
+Every defect this suite pinned sits on a line that coverage already counted.
 
 ## The misses are not a backlog
 
@@ -61,36 +61,50 @@ and the instrumented subprocess hits that limit writing its own profile.
 reported 88.73% where the truth was 98.24%, which were the figures of that
 day. `--build-tests` fixes it.
 
-## Defects: 26 found, 21 fixed, 3 open, 2 withdrawn
+## Defects: 28 found, 25 fixed, 0 open, 1 won't fix, 2 withdrawn
 
-Each open defect is pinned by tests holding the CORRECT expectation, marked as
-known failures, so it turns green by itself when it is fixed. **The `known-fail`
-file of each case holds the detail: what `md` does today, what it should do, and
-the cause.** This is only the index.
+Every defect found is now resolved: fixed, declined as won't-fix, or withdrawn.
+None remain open. Each defect was pinned by tests holding the CORRECT
+expectation, marked as a known failure, so it turned green by itself once it was
+fixed. **The `known-fail` file of each case held the detail: what `md` did, what
+it should do, and the cause.** This is only the index. The one won't-fix defect
+is pinned the same way, so the choice can be reversed later without having lost
+the correct expectation.
 
 Numbers are stable. A fixed defect keeps its number, because commit messages and
 `known-fail` files name them.
 
-| # | Defect | Pinned by |
-| --- | --- | --- |
-| 7 | An unused link reference definition is deleted | 3 CLI |
-| 21 | A refusal prints the usage of `md`, not of the subcommand | 4 CLI |
-| 22 | `format` has no `-i`. **Do not add it yet** — see below | 1 CLI |
+There are no open defects.
 
 Fixed: **1** non-finite JSON number abort, **2** soft line break dropped, **3**
 hard line break dropped, **4** HTML blocks deleted, **5** backslash escapes
 resolved away, **6** two
-blockquote paragraphs flattened into one run, **9** non-ASCII
+blockquote paragraphs flattened into one run, **7** link reference definitions
+deleted, at the top level and inside list items, **9** non-ASCII
 YAML values escaped, **10** phantom final line counted, **11** a list block
 absorbed the blank line below it, **12** editing commands
 counted frontmatter as blocks, **13** malformed frontmatter read as empty,
 **14** `list` reported success for invalid paths, **15** `--key` mapping printed
 as a Swift dictionary, **16** null value serialized as `<null>`, **18** editing
 commands invented a final newline, **19** editing commands re-spelled untouched
-blocks, **20** ordered lists renumbered from one, **23** `list --key` split one
-file across multiple lines, **24** empty JSON arrays spanned three lines,
+blocks, **20** ordered lists renumbered from one, **21** an index refusal
+printed the usage of `md` instead of the subcommand that refused, **22** `format`
+had no `-i`/`--in-place` flag, **23**
+`list --key` split one file across multiple lines, **24** empty JSON arrays
+spanned three lines,
 **25** an edit destroyed the code block below it, **26** a code fence was closed
-by the backticks it enclosed.
+by the backticks it enclosed, **27** a used link reference resolved inline while
+its definition was dropped.
+
+Won't fix: **28** a link reference definition whose label wraps across lines is
+dropped and its use is resolved inline. This is real data loss, but wrapping a
+label across lines is rare and the fix is not contained — both recovery
+grammars would have to learn multi-line labels together, or fixing one side
+duplicates the URL (see defect 27). The project accepts the current behaviour.
+The case keeps the CORRECT expectation and a `wont-fix` marker, so the suite
+stays green, the decision is documented and reversible, and the runner reports
+an unexpected pass if the behaviour ever changes. Distinct from *withdrawn*:
+the expectation is right, the fix is simply declined.
 
 Withdrawn: **8** expected a list continuation to be a separate block, but the
 continuation belongs to the item and formatting is idempotent. **17** expected
@@ -123,11 +137,7 @@ fence, so code holding a line of three backticks closed its own fence. The
 fence is now one longer than the longest run it encloses. Without that, the
 fix for 25 would have carried the defect into `remove` and `replace`.
 
-## Two things to know before you fix
-
-**Defect 22 must wait.** Adding `format -i` is one line, but `format` still
-loses link reference definitions. An in-place flag would write that loss into
-the user's file. Fix 7 first.
+## One thing to know before you fix
 
 **Defect 3 has an intentional canonical spelling.** A hard break has two
 spellings and both mean the same break. `format` writes the backslash because
@@ -138,10 +148,5 @@ asterisk bullet, or thematic break remains byte-for-byte unchanged.
 
 ## Where to start
 
-Ordered by tests turned green for code changed:
-
-1. **21** is small, but touches each editing command.
-2. **7** needs the parsed document model to grow a case for link reference
-   definitions and touches every `switch` over the enum.
-3. **22** only after **7**, so in-place formatting cannot write that loss into
-   the user's file.
+Nothing is left to start: every defect is fixed, declined as won't-fix, or
+withdrawn.

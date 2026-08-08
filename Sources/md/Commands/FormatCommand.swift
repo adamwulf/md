@@ -22,18 +22,28 @@ struct FormatCommand: AsyncParsableCommand {
             Use --frontmatter <yaml|toml|json> to convert non-empty frontmatter \
             to a different format while normalizing the body.
 
-            Output is written to stdout.
+            Output is written to stdout unless -i/--in-place is used.
 
               $ md format --file README.md
               $ cat README.md | md format --stdin
               $ md format --frontmatter json --file README.md
+              $ md format --file README.md -i
             """
     )
+
+    @Flag(name: .shortAndLong, help: "Edit the file in place")
+    var inPlace: Bool = false
 
     @Option(name: .long, help: "Convert frontmatter to the given format (yaml, toml, or json)")
     var frontmatter: FrontmatterFormat?
 
     @OptionGroup var input: InputOptions
+
+    func validate() throws {
+        if inPlace && input.file == nil {
+            throw ValidationError("Cannot use --in-place with --stdin")
+        }
+    }
 
     func run() async throws {
         let source = try input.readSource()
@@ -55,13 +65,21 @@ struct FormatCommand: AsyncParsableCommand {
         case .absent, .malformed:
             break
         }
-        try InputReader.writeToStdout(
-            FormatCommand.format(
-                content: source.content,
-                targetFrontmatter: frontmatter
-            ),
-            includeByteOrderMark: source.hasUTF8ByteOrderMark
+        let formatted = FormatCommand.format(
+            content: source.content,
+            targetFrontmatter: frontmatter
         )
+        if inPlace {
+            guard let file = input.file else {
+                throw ValidationError("Cannot use --in-place with --stdin")
+            }
+            try InputReader.write(formatted, to: file)
+        } else {
+            try InputReader.writeToStdout(
+                formatted,
+                includeByteOrderMark: source.hasUTF8ByteOrderMark
+            )
+        }
     }
 
     /// Format markdown content. If the source has non-empty frontmatter and

@@ -74,6 +74,8 @@ enum EscapeCases {
                 return "table:" + rows.map { $0.joined(separator: "!") }.joined(separator: "|")
             case .htmlBlock(let literal, _, _, _):
                 return "html:\(literal)"
+            case .linkReferenceDefinition(let text, _, _, _):
+                return "linkref:\(text)"
             }
         }.joined(separator: "\n")
     }

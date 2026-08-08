@@ -1,0 +1,5 @@
+A definition with no blank line below it is folded into the paragraph
+that follows: cmark strips it from the paragraph's front but leaves the
+paragraph's reported start on the definition line, so nothing in the
+tree points at the definition. It must come back above the paragraph,
+and the link must keep its reference spelling, not the pasted URL.

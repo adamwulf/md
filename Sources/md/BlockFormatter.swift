@@ -168,6 +168,11 @@ enum BlockFormatter {
             if !literal.hasSuffix("\n") {
                 output += "\n"
             }
+
+        case .linkReferenceDefinition(let text, _, _, _):
+            // The parser recovers a definition's source verbatim, and its
+            // label, destination, and title have no spelling to normalize.
+            output += "\(text)\n"
         }
 
         return output

@@ -39,6 +39,13 @@ struct InsertAfterCommand: AsyncParsableCommand {
         if inPlace && input.file == nil {
             throw ValidationError("Cannot use --in-place with --stdin")
         }
+        if let count = input.validationBlockCount() {
+            guard blockIndex >= 1, blockIndex <= count else {
+                throw ValidationError("Block index must be in range 1...\(count), got \(blockIndex)")
+            }
+        } else if blockIndex < 1 {
+            throw ValidationError("Block index must be >= 1, got \(blockIndex)")
+        }
     }
 
     func run() async throws {
@@ -47,6 +54,8 @@ struct InsertAfterCommand: AsyncParsableCommand {
         let fileContent = source.content
         let blocks = parser.parseDocument(fileContent)
 
+        // validate() cannot count the blocks of the stdin path, so the index
+        // guard repeats here.
         guard blockIndex >= 1, blockIndex <= blocks.count else {
             throw ValidationError("Block index must be in range 1...\(blocks.count), got \(blockIndex)")
         }

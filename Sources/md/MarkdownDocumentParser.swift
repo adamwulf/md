@@ -72,6 +72,8 @@ private extension MarkdownBlock {
             return .table(rows: rows, charRange: newChar, byteRange: newByte, lineRange: newLines)
         case .htmlBlock(let literal, _, _, _):
             return .htmlBlock(literal: literal, charRange: newChar, byteRange: newByte, lineRange: newLines)
+        case .linkReferenceDefinition(let text, _, _, _):
+            return .linkReferenceDefinition(text: text, charRange: newChar, byteRange: newByte, lineRange: newLines)
         }
     }
 }

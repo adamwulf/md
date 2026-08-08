@@ -1,0 +1,5 @@
+A reference-style link can wrap an image, making a clickable badge.
+Restoring the outer [..][link] spelling replaces the link node and its
+whole subtree, so the inner image has to be decided before the link that
+holds it is freed. The outer spelling, the inner image, and the
+definition must all survive one format.

@@ -1,0 +1,35 @@
+WON'T FIX: a link reference definition whose LABEL wraps across lines is
+dropped, and its use is resolved inline. The project accepts this and does not
+plan to fix it.
+
+WHY WON'T FIX. Wrapping a link label across lines is rare, and the correct fix
+is not contained. Both recovery grammars read a label from ONE line, so BOTH
+must learn multi-line labels together. Extending only the definition side would
+recover the definition while the link still resolves inline, duplicating the
+URL — the trap defect 27 documents. A multi-line-label parser must also stay
+strict-or-equal to cmark (reject a blank line inside a label, honour cmark's
+length cap). For how rarely the shape appears, that cost is not worth paying, so
+the current behaviour stands.
+
+WHAT md DOES TODAY. The whole output is one line:
+
+    Uses [foo bar](/url).
+
+The definition is gone and the reference spelling with it.
+
+WHY THE EXPECTATION STAYS CORRECT. expected.md holds what a fix WOULD produce —
+both kept byte for byte, like every single-line definition: the wrapped
+`[foo\nbar]: /url` block and the `[foo bar]` reference. Keeping it means the
+decision is reversible, and if the behaviour ever changes this case turns green
+and the runner reports an unexpected pass — the signal to reclassify it as
+fixed rather than let a stale marker hide the change.
+
+CAUSE. `definitionLabel(inLine:)` scans each line of an uncovered span for
+`[label]:`, so `[foo` on the first line yields no label, the span fails
+`isDefinitionShaped`, and the definition is never written back. With no
+recovered label, `restoreReferenceStyleLinks` has nothing to match and the
+`[foo bar]` link keeps cmark's pasted-URL form. The folded-paragraph scanner
+`leadingDefinitionLineCount` is single-line-label in the same way.
+
+NOT A REGRESSION. The same input WITH a blank line fails the same way, so it
+predates the folded-definition work and was found during it (defect 28).

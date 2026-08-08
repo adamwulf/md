@@ -325,4 +325,230 @@ final class FormatCommandTests: XCTestCase {
             return
         }
     }
+
+    // MARK: - Link reference definitions (defects 7 and 27)
+
+    /// Defect 7: a definition that no link uses is still text the author
+    /// wrote, and the URL appears nowhere else in the file. `format` writes
+    /// it back instead of deleting it.
+    func testFormatKeepsAnUnusedLinkReferenceDefinition() {
+        let input = "Just a paragraph.\n\n[unused]: https://example.org\n"
+        XCTAssertEqual(runFormat(input), input)
+    }
+
+    /// Defect 27: a used definition keeps the author's reference style. The
+    /// link stays `[ref]`, not the resolved `[ref](url)`, and the definition
+    /// line stays below it, so the URL appears once.
+    func testFormatKeepsAUsedLinkReferenceDefinitionAndItsLink() {
+        let input = "paragraph [ref] here\n\n[ref]: url\n"
+        XCTAssertEqual(runFormat(input), input)
+    }
+
+    /// Defect 7 in a list: a definition that was an item's only content goes
+    /// back inside its bullet, not after the list.
+    func testFormatKeepsADefinitionThatIsAnItemsOnlyContent() {
+        let input = "# Title\n\n- [ref]: /url\n"
+        XCTAssertEqual(runFormat(input), input)
+    }
+
+    /// Defect 7 in a list: a definition below an item's text goes back at the
+    /// item's content indent, where the author put it.
+    func testFormatKeepsADefinitionBelowItemText() {
+        let input = "- Some text\n\n  [ref]: /url\n"
+        XCTAssertEqual(runFormat(input), input)
+    }
+
+    /// A titled definition and a full `[text][label]` reference survive a
+    /// round trip unchanged, and a second pass changes nothing.
+    func testFormatKeepsAFullReferenceAndATitledDefinition() {
+        let input = "See [the docs][ref] here.\n\n[ref]: /url \"A title\"\n"
+        let once = runFormat(input)
+        XCTAssertEqual(once, input)
+        XCTAssertEqual(runFormat(once), once)
+    }
+
+    /// A reference-style link can wrap an inline image, making a clickable
+    /// badge. Restoring the outer link replaces the link node and its whole
+    /// subtree, so the inner image must already be decided by then.
+    func testFormatKeepsAReferenceLinkWrappingAnInlineImage() {
+        let input = "[![alt](i.png)][link]\n\n[link]: /url\n"
+        XCTAssertEqual(runFormat(input), input)
+    }
+
+    /// The same badge with the image itself in reference style: both labels
+    /// resolve, and both authored spellings survive.
+    func testFormatKeepsAReferenceLinkWrappingAReferenceImage() {
+        let input = "[![alt][img]][link]\n\n[img]: /i.png\n[link]: /url\n"
+        XCTAssertEqual(runFormat(input), input)
+    }
+
+    /// With no blank line below it, cmark folds a definition into the
+    /// paragraph that follows and strips it, leaving the paragraph's
+    /// reported start on the definition line. The definition comes back
+    /// above the paragraph, separated by the one blank line format writes
+    /// between blocks, and the link keeps its reference spelling.
+    func testFormatKeepsADefinitionDirectlyAboveItsParagraph() {
+        XCTAssertEqual(
+            runFormat("[ref]: https://example.com\nUses [ref].\n"),
+            "[ref]: https://example.com\n\nUses [ref].\n"
+        )
+    }
+
+    /// The unused variant of the folded shape: nothing links to the
+    /// definition, and it still comes back above the paragraph.
+    func testFormatKeepsAnUnusedDefinitionDirectlyAboveAParagraph() {
+        XCTAssertEqual(
+            runFormat("[unused]: https://example.com\nSome body text here.\n"),
+            "[unused]: https://example.com\n\nSome body text here.\n"
+        )
+    }
+
+    /// A run of definitions folds as one leading strip; both come back on
+    /// adjacent lines and both links keep their reference spelling.
+    func testFormatKeepsTwoDefinitionsDirectlyAboveTheirParagraph() {
+        XCTAssertEqual(
+            runFormat("[a]: https://a.com\n[b]: https://b.com\nUses [a] and [b].\n"),
+            "[a]: https://a.com\n[b]: https://b.com\n\nUses [a] and [b].\n"
+        )
+    }
+
+    /// The folded shape inside a list item: the definition sits on the
+    /// marker line and the text continues below it. Both stay inside the
+    /// bullet, in the author's order.
+    func testFormatKeepsADefinitionOnAnItemAboveItsText() {
+        XCTAssertEqual(
+            runFormat("- [ref]: https://example.com\n  Uses [ref].\n"),
+            "- [ref]: https://example.com\n\n  Uses [ref].\n"
+        )
+    }
+
+    /// The folded shape with the definition indented: cmark bakes the
+    /// block's first-line indent into every inline's reported column, so
+    /// the link on the surviving line must be rebased before its authored
+    /// bytes can be sliced. At each legal indent the definition and the
+    /// `[a]` spelling both survive.
+    func testFormatKeepsAnIndentedDefinitionAboveItsParagraph() {
+        for indent in ["   ", "  ", " "] {
+            let once = runFormat("\(indent)[a]: /x\nUses [a].\n")
+            XCTAssertEqual(once, "\(indent)[a]: /x\n\nUses [a].\n")
+            XCTAssertEqual(runFormat(once), once)
+        }
+    }
+
+    /// The same rebase on a LATER line of the folded paragraph: the column
+    /// offset applies to every surviving line, not only the first.
+    func testFormatKeepsARefOnALaterLineBelowAnIndentedDefinition() {
+        let once = runFormat("  [a]: /x\nx [a] y\nz [a] w\n")
+        XCTAssertEqual(once, "  [a]: /x\n\nx [a] y\nz [a] w\n")
+        XCTAssertEqual(runFormat(once), once)
+    }
+
+    /// The surviving line can carry its own indent too, which cmark strips
+    /// from the buffer: the rebase adds the line's real indent back before
+    /// slicing, so the reference spelling still survives.
+    func testFormatKeepsARefOnAnIndentedLineBelowAnIndentedDefinition() {
+        let once = runFormat("   [a]: /x\n  Uses [a].\n")
+        XCTAssertEqual(once, "   [a]: /x\n\nUses [a].\n")
+        XCTAssertEqual(runFormat(once), once)
+    }
+
+    /// A backslash cannot jump the space that ends a bare destination, so
+    /// cmark reads this whole shape as one paragraph and so must the
+    /// recovery: no definition comes back, the text stays escaped text, and
+    /// a second pass changes nothing.
+    func testFormatDoesNotReadAnEscapedSpaceDestinationAsADefinition() {
+        let once = runFormat("[a]: /foo\\ bar\nUses [a].\n")
+        XCTAssertEqual(once, "\\[a]: /foo\\\\ bar\nUses \\[a].\n")
+        XCTAssertEqual(runFormat(once), once)
+    }
+
+    /// A definition label ends at the first unescaped bracket, so an
+    /// unescaped `[` inside one means there is no definition at all: the
+    /// line stays paragraph text and no definition is recovered beside it.
+    func testFormatDoesNotReadALabelWithInnerBracketsAsADefinition() {
+        let once = runFormat("[ref [1]]: /url\ntext\n")
+        XCTAssertEqual(once, "\\[ref \\[1]]: /url\ntext\n")
+        XCTAssertEqual(runFormat(once), once)
+    }
+
+    /// cmark's bare-destination scanner treats a control byte as an
+    /// ordinary character, so a definition holding one is consumed and must
+    /// be recovered like any other.
+    func testFormatKeepsADefinitionWhoseDestinationHoldsAControlByte() {
+        let once = runFormat("[a]: /u\u{01}rest\ntext\n")
+        XCTAssertEqual(once, "[a]: /u\u{01}rest\n\ntext\n")
+        XCTAssertEqual(runFormat(once), once)
+    }
+
+    /// cmark's bare-destination scanner has no final balance check, so an
+    /// unbalanced OPEN paren stays part of the destination and the folded
+    /// definition is consumed: it must come back, reference spelling intact.
+    func testFormatKeepsADefinitionWhoseDestinationHoldsAStrayOpenParen() {
+        let once = runFormat("[a]: https://x.com/foo(bar\nUses [a].\n")
+        XCTAssertEqual(once, "[a]: https://x.com/foo(bar\n\nUses [a].\n")
+        XCTAssertEqual(runFormat(once), once)
+    }
+
+    /// cmark's ctype table does not class a vertical tab or form feed as
+    /// whitespace, so a bare destination holding one is consumed whole and
+    /// the folded definition must be recovered.
+    func testFormatKeepsADefinitionWhoseDestinationHoldsAVerticalTabOrFormFeed() {
+        for control in ["\u{0B}", "\u{0C}"] {
+            let once = runFormat("[a]: /x\(control)more\nUses [a].\n")
+            XCTAssertEqual(once, "[a]: /x\(control)more\n\nUses [a].\n")
+            XCTAssertEqual(runFormat(once), once)
+        }
+    }
+
+    /// A table cell refuses the custom inline that carries a restored
+    /// reference elsewhere, so the authored bytes ride in an inline-HTML
+    /// node there: the cell keeps `[a]` and its reference image `![a]`,
+    /// the definition survives, and the URL appears once.
+    func testFormatKeepsAReferenceLinkAndImageInATableCell() {
+        let once = runFormat("| c [a] d | ![a] |\n| --- | --- |\n\n[a]: /x\n")
+        XCTAssertEqual(once, "| c [a] d | ![a] |\n| ------- | ---- |\n\n[a]: /x\n")
+        XCTAssertEqual(runFormat(once), once)
+    }
+
+    /// A table nested in a list item renders through cmark's own writer
+    /// rather than the table formatter, and the inline-HTML carrier is
+    /// emitted verbatim there too.
+    func testFormatKeepsAReferenceLinkInATableInsideAListItem() {
+        let input = "- table item\n\n  | [a] | b |\n  | --- | --- |\n\n[a]: /x\n"
+        XCTAssertEqual(runFormat(input), input)
+    }
+
+    /// A restored reference IMAGE opens with its own bang, and a bang
+    /// before it makes nothing, so the text's trailing `!` keeps no
+    /// backslash it never needed.
+    func testFormatAddsNoBackslashBeforeARestoredReferenceImage() {
+        let input = "a!![b][i]\n\n[b]: /b\n[i]: /i\n"
+        let once = runFormat(input)
+        XCTAssertEqual(once, input)
+        XCTAssertEqual(runFormat(once), once)
+    }
+
+    /// The other direction: a `!` before a restored reference LINK would
+    /// make an image on the next parse, so its backslash must stay.
+    func testFormatKeepsTheBackslashOnABangBeforeARestoredReferenceLink() {
+        let input = "x\\![a] y\n\n[a]: /x\n"
+        let once = runFormat(input)
+        XCTAssertEqual(once, input)
+        XCTAssertEqual(runFormat(once), once)
+    }
+
+    /// cmark rejects only a label OVER its 1000-byte cap: a label of
+    /// exactly 1000 is a definition and comes back, while one of 1001 is
+    /// paragraph text to both cmark and the recovery.
+    func testFormatKeepsADefinitionWithAThousandByteLabel() {
+        let label = String(repeating: "x", count: 1000)
+        let once = runFormat("[\(label)]: /x\nUses [\(label)].\n")
+        XCTAssertEqual(once, "[\(label)]: /x\n\nUses [\(label)].\n")
+        XCTAssertEqual(runFormat(once), once)
+
+        let overLimit = String(repeating: "x", count: 1001)
+        let escaped = runFormat("[\(overLimit)]: /x\nUses [\(overLimit)].\n")
+        XCTAssertEqual(escaped, "\\[\(overLimit)]: /x\nUses \\[\(overLimit)].\n")
+        XCTAssertEqual(runFormat(escaped), escaped)
+    }
 }

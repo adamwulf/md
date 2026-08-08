@@ -1,0 +1,5 @@
+The folded shape inside a list item: the definition sits on the marker
+line and the item's text continues below it with no blank line. cmark
+strips the definition from the item's paragraph, whose reported start
+stays on the marker line. Both must stay inside the bullet, in the
+author's order: the definition first, then the text.

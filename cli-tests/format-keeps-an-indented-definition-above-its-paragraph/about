@@ -1,0 +1,6 @@
+A folded definition may be indented up to three spaces. cmark bakes
+that first-line indent into the reported column of every inline in the
+paragraph, so the surviving line's link must be rebased before its
+authored bytes can be sliced. Without the rebase the slice misses, the
+link falls back to the pasted URL, and /x appears twice — once inline,
+once in the kept definition.

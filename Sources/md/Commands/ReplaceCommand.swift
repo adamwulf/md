@@ -51,6 +51,28 @@ struct ReplaceCommand: AsyncParsableCommand {
         if inPlace && input.file == nil {
             throw ValidationError("Cannot use --in-place with --stdin")
         }
+        // The same parse as run(): an integer second argument is the end
+        // index, anything else is the content and the end is the start.
+        let end: Int
+        if let e = Int(endOrContent) {
+            guard content != nil else {
+                throw ValidationError("Expected: md replace <start> <end> \"content\" --file <file>")
+            }
+            end = e
+        } else {
+            end = start
+        }
+        guard start >= 1 else {
+            throw ValidationError("Start index must be >= 1, got \(start)")
+        }
+        guard end >= start else {
+            throw ValidationError("End index must be >= start, got \(start)...\(end)")
+        }
+        if let count = input.validationBlockCount() {
+            guard end <= count else {
+                throw ValidationError("End index must be <= \(count), got \(end)")
+            }
+        }
     }
 
     func run() async throws {
@@ -73,12 +95,8 @@ struct ReplaceCommand: AsyncParsableCommand {
         let fileContent = source.content
         let blocks = parser.parseDocument(fileContent)
 
-        guard start >= 1 else {
-            throw ValidationError("Start index must be >= 1, got \(start)")
-        }
-        guard end >= start else {
-            throw ValidationError("End index must be >= start, got \(start)...\(end)")
-        }
+        // validate() cannot count the blocks of the stdin path, so the count
+        // guard repeats here.
         guard end <= blocks.count else {
             throw ValidationError("End index must be <= \(blocks.count), got \(end)")
         }

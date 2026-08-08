@@ -116,6 +116,11 @@ public enum MarkdownBlock: Sendable {
     case thematicBreak(charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
     case table(rows: [[String]], charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
     case htmlBlock(literal: String, charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
+    /// A link reference definition such as `[ref]: /url`, or a run of adjacent
+    /// ones, recovered from the source text. cmark consumes a definition into
+    /// the document's reference map and leaves no node in the tree, so the
+    /// parser reads it back out of the lines no other block covers.
+    case linkReferenceDefinition(text: String, charRange: NSRange, byteRange: NSRange, lineRange: ClosedRange<Int>)
 
     /// Character offset range (for text extraction and display)
     public var charRange: NSRange {
@@ -128,6 +133,7 @@ public enum MarkdownBlock: Sendable {
         case .thematicBreak(let charRange, _, _): return charRange
         case .table(_, let charRange, _, _): return charRange
         case .htmlBlock(_, let charRange, _, _): return charRange
+        case .linkReferenceDefinition(_, let charRange, _, _): return charRange
         }
     }
 
@@ -142,6 +148,7 @@ public enum MarkdownBlock: Sendable {
         case .thematicBreak(_, let byteRange, _): return byteRange
         case .table(_, _, let byteRange, _): return byteRange
         case .htmlBlock(_, _, let byteRange, _): return byteRange
+        case .linkReferenceDefinition(_, _, let byteRange, _): return byteRange
         }
     }
 
@@ -156,6 +163,7 @@ public enum MarkdownBlock: Sendable {
         case .thematicBreak(_, _, let lineRange): return lineRange
         case .table(_, _, _, let lineRange): return lineRange
         case .htmlBlock(_, _, _, let lineRange): return lineRange
+        case .linkReferenceDefinition(_, _, _, let lineRange): return lineRange
         }
     }
 }
@@ -210,15 +218,23 @@ public struct MarkdownParser {
         let doc = cmark_parser_finish(parser)
         defer { cmark_node_free(doc) }
 
+        // cmark consumes each link reference definition into the document's
+        // reference map and leaves no node, so the definitions have to come
+        // back out of the source before the tree is walked. It also resolves
+        // each link that used one, so those links are pinned to their authored
+        // spelling before the resolved URL can be pasted inline.
+        let definitions = consumedLinkReferenceDefinitions(in: doc, lineTable: lineTable)
+        restoreReferenceStyleLinks(in: doc, labels: definitions.labels, lineTable: lineTable)
+
         var node = cmark_node_first_child(doc)
         while node != nil {
-            if let block = parseNode(node, lineTable: lineTable) {
+            if let block = parseNode(node, lineTable: lineTable, itemDefinitions: definitions.byItem) {
                 blocks.append(block)
             }
             node = cmark_node_next(node)
         }
 
-        return blocks
+        return merged(blocks, with: definitions.topLevel)
     }
 
     private func buildLineTable(for markdown: String) -> [LineInfo] {
@@ -270,7 +286,11 @@ public struct MarkdownParser {
         return table
     }
 
-    private func parseNode(_ node: UnsafeMutablePointer<cmark_node>?, lineTable: [LineInfo]) -> MarkdownBlock? {
+    private func parseNode(
+        _ node: UnsafeMutablePointer<cmark_node>?,
+        lineTable: [LineInfo],
+        itemDefinitions: [UInt: [ItemDefinition]] = [:]
+    ) -> MarkdownBlock? {
         guard let node = node else { return nil }
 
         let type = cmark_node_get_type(node)
@@ -283,7 +303,8 @@ public struct MarkdownParser {
             for: node,
             lineTable: lineTable,
             trimTrailingBlankLines: type == CMARK_NODE_LIST,
-            sourceLineCount: htmlLiteral.map(sourceLineCount)
+            sourceLineCount: htmlLiteral.map(sourceLineCount),
+            contentStartLine: contentStartLine(of: node, lineTable: lineTable)
         )
 
         switch type {
@@ -307,7 +328,13 @@ public struct MarkdownParser {
 
         case CMARK_NODE_LIST:
             let ordered = cmark_node_get_list_type(node) == CMARK_ORDERED_LIST
-            let items = collectListItems(from: node, indentLevel: 0, ordered: ordered, lineTable: lineTable)
+            let items = collectListItems(
+                from: node,
+                indentLevel: 0,
+                ordered: ordered,
+                lineTable: lineTable,
+                itemDefinitions: itemDefinitions
+            )
             return .list(items: items, ordered: ordered, charRange: ranges.charRange, byteRange: ranges.byteRange, lineRange: ranges.lineRange)
 
         case CMARK_NODE_BLOCK_QUOTE:
@@ -406,7 +433,8 @@ public struct MarkdownParser {
         from listNode: UnsafeMutablePointer<cmark_node>,
         indentLevel: Int,
         ordered: Bool,
-        lineTable: [LineInfo]
+        lineTable: [LineInfo],
+        itemDefinitions: [UInt: [ItemDefinition]] = [:]
     ) -> [ListItem] {
         var items: [ListItem] = []
         // cmark decides tightness for the whole list, counting both blank
@@ -425,6 +453,10 @@ public struct MarkdownParser {
             var pendingTask = itemNode.flatMap { taskState(of: $0, lineTable: lineTable) }
             let itemStartLine = itemNode.map { Int(cmark_node_get_start_line($0)) } ?? 0
             var paragraphs: [String] = []
+            // The definitions cmark consumed out of this item, in line order.
+            // Each goes back among the item's paragraphs where it was written.
+            var pendingDefinitions = itemNode
+                .flatMap { itemDefinitions[UInt(bitPattern: $0)] } ?? []
             var child = cmark_node_first_child(itemNode)
             // The author wrote ONE marker for this item, and the first piece
             // to emit spends it. Every later piece is text that ran on after a
@@ -495,8 +527,22 @@ public struct MarkdownParser {
                 markerIsSpent = true
             }
 
+            /// Put back each consumed definition that the author wrote above
+            /// `line`, or all of them when no more children follow.
+            func appendDefinitions(before line: Int?) {
+                while let definition = pendingDefinitions.first,
+                      line.map({ definition.startLine < $0 }) ?? true {
+                    paragraphs.append(definition.text)
+                    pendingDefinitions.removeFirst()
+                }
+            }
+
             while let currentChild = child {
                 let childType = cmark_node_get_type(currentChild)
+                // The child's surviving content decides the order: a
+                // definition stripped off the front of this child's own
+                // paragraph sits above that content and goes back first.
+                appendDefinitions(before: contentStartLine(of: currentChild, lineTable: lineTable))
 
                 if childType == CMARK_NODE_LIST {
                     let nestedOrdered = cmark_node_get_list_type(currentChild) == CMARK_ORDERED_LIST
@@ -504,7 +550,8 @@ public struct MarkdownParser {
                         from: currentChild,
                         indentLevel: indentLevel + 1,
                         ordered: nestedOrdered,
-                        lineTable: lineTable
+                        lineTable: lineTable,
+                        itemDefinitions: itemDefinitions
                     )
                     flushGatheredText(preservingEmptyParentMarker: !markerIsSpent)
                     items.append(contentsOf: nestedItems)
@@ -565,6 +612,7 @@ public struct MarkdownParser {
                 child = cmark_node_next(currentChild)
             }
 
+            appendDefinitions(before: nil)
             flushGatheredText()
 
             isFirstItem = false
@@ -619,6 +667,660 @@ public struct MarkdownParser {
             itemNode = cmark_node_next(item)
         }
         return false
+    }
+
+    // MARK: - Link reference definitions
+
+    /// One link reference definition put back inside the list item that held
+    /// it, at the line the author wrote it on.
+    private struct ItemDefinition {
+        let startLine: Int
+        let text: String
+    }
+
+    /// Every link reference definition cmark consumed while parsing, read
+    /// back out of the source.
+    private struct ConsumedDefinitions {
+        /// Definitions at the top level of the document, as finished blocks
+        /// in line order.
+        let topLevel: [MarkdownBlock]
+        /// Definitions that sat inside a list item, keyed by the item node's
+        /// address.
+        let byItem: [UInt: [ItemDefinition]]
+        /// The normalized label of every definition found, for deciding which
+        /// links were written in reference style.
+        let labels: Set<String>
+    }
+
+    /// Find the definitions by what they leave behind: a definition is the
+    /// only block construct that puts no node in the tree, so every nonblank
+    /// source line that no node covers belongs to one. A blockquote or table
+    /// covers its whole range, because its text is recovered from source; a
+    /// list covers only what its items' children cover, so a definition
+    /// inside an item is found the same way as one at the top level.
+    private func consumedLinkReferenceDefinitions(
+        in doc: UnsafeMutablePointer<cmark_node>?,
+        lineTable: [LineInfo]
+    ) -> ConsumedDefinitions {
+        var covered = [Bool](repeating: false, count: lineTable.count)
+        markContentLines(of: doc, lineTable: lineTable, covered: &covered)
+
+        var spans: [ClosedRange<Int>] = []
+        var line = 1
+        while line <= lineTable.count {
+            if covered[line - 1] || isCommonMarkBlankLine(lineTable[line - 1].content) {
+                line += 1
+                continue
+            }
+            var end = line
+            while end < lineTable.count,
+                  !covered[end],
+                  !isCommonMarkBlankLine(lineTable[end].content) {
+                end += 1
+            }
+            spans.append(line...end)
+            line = end + 1
+        }
+
+        var itemRanges: [(key: UInt, range: ClosedRange<Int>)] = []
+        collectItemRanges(of: doc, into: &itemRanges)
+
+        var topLevel: [MarkdownBlock] = []
+        var byItem: [UInt: [ItemDefinition]] = [:]
+        var labels: Set<String> = []
+        for span in spans {
+            // The innermost item holding the whole span owns it. Item ranges
+            // nest or stand apart, so the shortest containing range is the
+            // deepest.
+            let owner = itemRanges
+                .filter { $0.range.contains(span.lowerBound) && $0.range.contains(span.upperBound) }
+                .min { $0.range.count < $1.range.count }
+            if let owner {
+                guard let text = itemDefinitionText(
+                    for: span,
+                    itemStartLine: owner.range.lowerBound,
+                    lineTable: lineTable
+                ), isDefinitionShaped(text) else { continue }
+                byItem[owner.key, default: []].append(ItemDefinition(startLine: span.lowerBound, text: text))
+                labels.formUnion(definitionLabels(in: text))
+            } else {
+                let text = span.map { lineTable[$0 - 1].content }.joined(separator: "\n")
+                guard isDefinitionShaped(text) else { continue }
+                let startInfo = lineTable[span.lowerBound - 1]
+                let endInfo = lineTable[span.upperBound - 1]
+                topLevel.append(.linkReferenceDefinition(
+                    text: text,
+                    charRange: NSRange(
+                        location: startInfo.utf16Offset,
+                        length: endInfo.utf16Offset + endInfo.content.utf16.count - startInfo.utf16Offset
+                    ),
+                    byteRange: NSRange(
+                        location: startInfo.byteOffset,
+                        length: endInfo.byteOffset + endInfo.content.utf8.count - startInfo.byteOffset
+                    ),
+                    lineRange: span
+                ))
+                labels.formUnion(definitionLabels(in: text))
+            }
+        }
+        return ConsumedDefinitions(topLevel: topLevel, byItem: byItem, labels: labels)
+    }
+
+    /// The line where a node's surviving content begins. cmark strips the
+    /// leading link reference definitions out of a paragraph — or the
+    /// paragraph a setext heading grew from — without advancing the node's
+    /// start line, so the node still reports definition lines its content no
+    /// longer holds, and every inline position inside it is short by the
+    /// same count. The stripped run is re-read from the source with a
+    /// grammar stricter than CommonMark's: a line this accepts is one cmark
+    /// consumed, so text can never be recovered as a definition while it
+    /// also stays in the block.
+    private func contentStartLine(
+        of node: UnsafeMutablePointer<cmark_node>,
+        lineTable: [LineInfo]
+    ) -> Int {
+        let startLine = Int(cmark_node_get_start_line(node))
+        let type = cmark_node_get_type(node)
+        guard type == CMARK_NODE_PARAGRAPH || type == CMARK_NODE_HEADING,
+              startLine >= 1, startLine <= lineTable.count else { return startLine }
+        let endLine = Swift.min(Int(cmark_node_get_end_line(node)), lineTable.count)
+        guard endLine > startLine else { return startLine }
+        let lines = (startLine...endLine).map { lineTable[$0 - 1].content }
+        let containerIndent = Swift.max(0, Int(cmark_node_get_start_column(node)) - 1)
+        return startLine + leadingDefinitionLineCount(lines: lines, containerIndent: containerIndent)
+    }
+
+    /// How many leading lines of a block's source cmark consumed as link
+    /// reference definitions. The first line begins at the block's own
+    /// column, past any container syntax; later lines drop the same indent.
+    /// At least one line is always left for the block's surviving content.
+    private func leadingDefinitionLineCount(lines: [String], containerIndent: Int) -> Int {
+        let rows: [[UInt8]] = lines.enumerated().map { index, line in
+            let bytes = Array(line.utf8)
+            if index == 0 {
+                return Array(bytes.dropFirst(Swift.min(containerIndent, bytes.count)))
+            }
+            var strip = 0
+            while strip < containerIndent, strip < bytes.count, bytes[strip] == Self.spaceByte {
+                strip += 1
+            }
+            return Array(bytes.dropFirst(strip))
+        }
+        var consumed = 0
+        while consumed < rows.count - 1 {
+            guard let end = definitionEndLine(in: rows, startingAt: consumed),
+                  end < rows.count - 1 else { break }
+            consumed = end + 1
+        }
+        return consumed
+    }
+
+    /// The last row of the one definition that starts at `startRow`, or nil
+    /// when no definition starts there. The label and its colon sit on the
+    /// start row; the destination may follow one line ending; a title may
+    /// span further rows. A title that opens on the destination's own row
+    /// must close cleanly or the whole definition is invalid, while a title
+    /// on the next row that fails to close is content, and the definition
+    /// ends with its destination — the same backtrack CommonMark asks for.
+    private func definitionEndLine(in rows: [[UInt8]], startingAt startRow: Int) -> Int? {
+        let startBytes = rows[startRow]
+        var column = 0
+        while column < startBytes.count, column < 3, startBytes[column] == Self.spaceByte {
+            column += 1
+        }
+        guard column < startBytes.count, startBytes[column] == UInt8(ascii: "["),
+              let close = definitionLabelEnd(in: startBytes, opening: column),
+              close + 1 < startBytes.count,
+              startBytes[close + 1] == UInt8(ascii: ":"),
+              !normalizedLabel(String(decoding: startBytes[(column + 1)..<close], as: UTF8.self)).isEmpty
+        else { return nil }
+
+        var row = startRow
+        column = skipLineWhitespace(in: rows[row], from: close + 2)
+        if column == rows[row].count {
+            // the destination may sit on the next line, after one line ending
+            guard row + 1 < rows.count else { return nil }
+            row += 1
+            column = skipLineWhitespace(in: rows[row], from: 0)
+        }
+        guard let afterDestination = destinationEnd(in: rows[row], from: column) else { return nil }
+
+        column = skipLineWhitespace(in: rows[row], from: afterDestination)
+        if column < rows[row].count {
+            guard column > afterDestination,
+                  let titleEnd = titleEndPosition(in: rows, row: row, column: column) else { return nil }
+            return titleEnd.row
+        }
+        if row + 1 < rows.count {
+            let titleRow = rows[row + 1]
+            let titleColumn = skipLineWhitespace(in: titleRow, from: 0)
+            if titleColumn < titleRow.count,
+               isTitleOpener(titleRow[titleColumn]),
+               let titleEnd = titleEndPosition(in: rows, row: row + 1, column: titleColumn) {
+                return titleEnd.row
+            }
+        }
+        return row
+    }
+
+    /// The index past a link destination that begins at `start`: either a
+    /// `<...>` form closed on the same line, or a nonempty run of
+    /// non-whitespace with balanced unescaped parentheses.
+    ///
+    /// A backslash escapes only ASCII punctuation, exactly as cmark reads
+    /// it: it can never jump the whitespace that ends a bare destination,
+    /// and `\` before an ordinary character is that character's neighbour,
+    /// not an escape. An unmatched close paren ends the run and an
+    /// unbalanced open paren is kept — cmark's scanner has no final balance
+    /// check — while nesting past 32 deep fails, cmark's own cap. Control
+    /// characters are ordinary bytes to cmark's scanner, so they are
+    /// ordinary here.
+    private func destinationEnd(in bytes: [UInt8], from start: Int) -> Int? {
+        guard start < bytes.count else { return nil }
+        if bytes[start] == UInt8(ascii: "<") {
+            var index = start + 1
+            while index < bytes.count {
+                let byte = bytes[index]
+                if byte == UInt8(ascii: "\\"), index + 1 < bytes.count, isASCIIPunctuation(bytes[index + 1]) {
+                    index += 2
+                    continue
+                }
+                if byte == UInt8(ascii: ">") { return index + 1 }
+                if byte == UInt8(ascii: "<") { return nil }
+                index += 1
+            }
+            return nil
+        }
+        var index = start
+        var parenDepth = 0
+        while index < bytes.count, !isLineWhitespace(bytes[index]) {
+            let byte = bytes[index]
+            if byte == UInt8(ascii: "\\") {
+                if index + 1 < bytes.count, isASCIIPunctuation(bytes[index + 1]) {
+                    index += 2
+                } else {
+                    index += 1
+                }
+                continue
+            }
+            if byte == UInt8(ascii: "(") {
+                parenDepth += 1
+                guard parenDepth <= 32 else { return nil }
+            } else if byte == UInt8(ascii: ")") {
+                if parenDepth == 0 { break }
+                parenDepth -= 1
+            }
+            index += 1
+        }
+        guard index > start else { return nil }
+        return index
+    }
+
+    /// cmark's `cmark_isspace`, restricted to bytes that can sit inside a
+    /// line. Its ctype table classes only space, tab, and the line-ending
+    /// bytes as whitespace: a vertical tab or form feed is an ordinary byte.
+    private func isLineWhitespace(_ byte: UInt8) -> Bool {
+        byte == Self.spaceByte || byte == Self.tabByte
+    }
+
+    /// cmark's `cmark_ispunct`: the four ASCII punctuation ranges.
+    private func isASCIIPunctuation(_ byte: UInt8) -> Bool {
+        (0x21...0x2F).contains(byte) || (0x3A...0x40).contains(byte)
+            || (0x5B...0x60).contains(byte) || (0x7B...0x7E).contains(byte)
+    }
+
+    private func isTitleOpener(_ byte: UInt8) -> Bool {
+        byte == UInt8(ascii: "\"") || byte == UInt8(ascii: "'") || byte == UInt8(ascii: "(")
+    }
+
+    /// Where the title that opens at (`startRow`, `startColumn`) closes, or
+    /// nil when it never closes cleanly. Only whitespace may follow the
+    /// closer on its line.
+    private func titleEndPosition(
+        in rows: [[UInt8]],
+        row startRow: Int,
+        column startColumn: Int
+    ) -> (row: Int, column: Int)? {
+        let opener = rows[startRow][startColumn]
+        guard isTitleOpener(opener) else { return nil }
+        let closer = opener == UInt8(ascii: "(") ? UInt8(ascii: ")") : opener
+        var row = startRow
+        var column = startColumn + 1
+        while row < rows.count {
+            let bytes = rows[row]
+            while column < bytes.count {
+                let byte = bytes[column]
+                if byte == UInt8(ascii: "\\") { column += 2; continue }
+                if byte == closer {
+                    guard skipLineWhitespace(in: bytes, from: column + 1) == bytes.count else { return nil }
+                    return (row, column)
+                }
+                if opener == UInt8(ascii: "("), byte == UInt8(ascii: "(") { return nil }
+                column += 1
+            }
+            row += 1
+            column = 0
+        }
+        return nil
+    }
+
+    private func skipLineWhitespace(in bytes: [UInt8], from start: Int) -> Int {
+        var index = start
+        while index < bytes.count, isLineWhitespace(bytes[index]) {
+            index += 1
+        }
+        return index
+    }
+
+    /// Mark the lines whose bytes some node in the tree carries. Lists and
+    /// items are containers, so only their children cover lines: what an item
+    /// spans beyond its children is exactly what a consumed definition left
+    /// behind. A paragraph's coverage starts at its surviving content, so the
+    /// definitions cmark stripped off its front stay uncovered too.
+    private func markContentLines(
+        of node: UnsafeMutablePointer<cmark_node>?,
+        lineTable: [LineInfo],
+        covered: inout [Bool]
+    ) {
+        var child = cmark_node_first_child(node)
+        while let current = child {
+            let type = cmark_node_get_type(current)
+            if type == CMARK_NODE_LIST || type == CMARK_NODE_ITEM {
+                markContentLines(of: current, lineTable: lineTable, covered: &covered)
+            } else {
+                let startLine = contentStartLine(of: current, lineTable: lineTable)
+                var endLine = Int(cmark_node_get_end_line(current))
+                if type == CMARK_NODE_HTML_BLOCK {
+                    // cmark reports delimiter-terminated raw HTML short of its
+                    // closing line; repair it the way calculateRanges does.
+                    let literal = cmark_node_get_literal(current).map { String(cString: $0) } ?? ""
+                    endLine = Swift.max(endLine, startLine + Swift.max(1, sourceLineCount(literal)) - 1)
+                }
+                if startLine >= 1, startLine <= lineTable.count {
+                    for line in startLine...Swift.min(Swift.max(endLine, startLine), lineTable.count) {
+                        covered[line - 1] = true
+                    }
+                }
+            }
+            child = cmark_node_next(current)
+        }
+    }
+
+    private func collectItemRanges(
+        of node: UnsafeMutablePointer<cmark_node>?,
+        into itemRanges: inout [(key: UInt, range: ClosedRange<Int>)]
+    ) {
+        var child = cmark_node_first_child(node)
+        while let current = child {
+            if cmark_node_get_type(current) == CMARK_NODE_ITEM {
+                let startLine = Int(cmark_node_get_start_line(current))
+                let endLine = Int(cmark_node_get_end_line(current))
+                if startLine >= 1, endLine >= startLine {
+                    itemRanges.append((key: UInt(bitPattern: current), range: startLine...endLine))
+                }
+            }
+            collectItemRanges(of: current, into: &itemRanges)
+            child = cmark_node_next(current)
+        }
+    }
+
+    /// The source text of a definition inside an item, with the item's
+    /// container syntax taken off. On the item's own first line the marker
+    /// stands before the definition, so the text starts at the bracket.
+    /// Continuation lines drop the content indent while keeping any extra
+    /// indent the author gave them.
+    private func itemDefinitionText(
+        for span: ClosedRange<Int>,
+        itemStartLine: Int,
+        lineTable: [LineInfo]
+    ) -> String? {
+        let firstLine = lineTable[span.lowerBound - 1].content
+        let stripWidth: Int
+        var lines: [String] = []
+        if span.lowerBound == itemStartLine {
+            let firstBytes = Array(firstLine.utf8)
+            guard let bracket = firstBytes.firstIndex(of: UInt8(ascii: "[")) else { return nil }
+            stripWidth = bracket
+            lines.append(String(decoding: firstBytes[bracket...], as: UTF8.self))
+        } else {
+            stripWidth = span.map { leadingSpaceCount(lineTable[$0 - 1].content) }.min() ?? 0
+            lines.append(droppingLeadingSpaces(firstLine, upTo: stripWidth))
+        }
+        for line in span.dropFirst() {
+            lines.append(droppingLeadingSpaces(lineTable[line - 1].content, upTo: stripWidth))
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func leadingSpaceCount(_ line: String) -> Int {
+        var count = 0
+        for byte in line.utf8 {
+            guard byte == Self.spaceByte else { break }
+            count += 1
+        }
+        return count
+    }
+
+    private func droppingLeadingSpaces(_ line: String, upTo width: Int) -> String {
+        let bytes = Array(line.utf8)
+        let strip = Swift.min(width, leadingSpaceCount(line))
+        return String(decoding: bytes[strip...], as: UTF8.self)
+    }
+
+    /// True when the recovered text opens with a definition. The lines no
+    /// node covers are definitions by elimination, but a container can also
+    /// drop source for another reason — the checkbox cmark takes off a task
+    /// item leaves its line uncovered too — so only text that opens with a
+    /// labelled colon is put back.
+    private func isDefinitionShaped(_ text: String) -> Bool {
+        guard let firstLine = text.split(separator: "\n", omittingEmptySubsequences: false).first else {
+            return false
+        }
+        return definitionLabel(inLine: firstLine) != nil
+    }
+
+    /// The labels defined in a recovered span. Each definition begins a line:
+    /// up to three spaces, a bracketed label, then a colon.
+    private func definitionLabels(in text: String) -> [String] {
+        text.split(separator: "\n", omittingEmptySubsequences: true)
+            .compactMap { definitionLabel(inLine: $0) }
+    }
+
+    private func definitionLabel(inLine line: some StringProtocol) -> String? {
+        let bytes = Array(line.utf8)
+        var index = 0
+        while index < bytes.count, index < 3, bytes[index] == Self.spaceByte {
+            index += 1
+        }
+        guard index < bytes.count, bytes[index] == UInt8(ascii: "["),
+              let close = definitionLabelEnd(in: bytes, opening: index),
+              close + 1 < bytes.count,
+              bytes[close + 1] == UInt8(ascii: ":") else { return nil }
+        let label = normalizedLabel(String(decoding: bytes[(index + 1)..<close], as: UTF8.self))
+        return label.isEmpty ? nil : label
+    }
+
+    /// The index of the `]` that closes a DEFINITION label opened at
+    /// `opening`, or nil. Unlike link text, which nests, a definition label
+    /// ends at the first unescaped bracket of either kind: an unescaped `[`
+    /// inside it makes the label invalid, and cmark caps a label's length,
+    /// so anything this accepts cmark read as a label too.
+    private func definitionLabelEnd(in bytes: [UInt8], opening: Int) -> Int? {
+        var index = opening + 1
+        while index < bytes.count {
+            switch bytes[index] {
+            case UInt8(ascii: "\\"):
+                index += 1
+            case UInt8(ascii: "["):
+                return nil
+            case UInt8(ascii: "]"):
+                // cmark rejects only a label OVER its 1000-byte cap, so a
+                // label of exactly 1000 is accepted.
+                guard index - opening - 1 <= 1000 else { return nil }
+                return index
+            default:
+                break
+            }
+            index += 1
+        }
+        return nil
+    }
+
+    /// Labels match case-insensitively with runs of whitespace collapsed, so
+    /// `[REF]` finds `[ref]: /url`.
+    private func normalizedLabel(_ label: String) -> String {
+        label.lowercased()
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+    }
+
+    /// The index of the `]` that closes the `[` at `opening`, skipping
+    /// escaped brackets and balanced inner pairs.
+    private func matchingCloseBracket(in bytes: [UInt8], opening: Int) -> Int? {
+        var depth = 0
+        var index = opening
+        while index < bytes.count {
+            switch bytes[index] {
+            case UInt8(ascii: "\\"):
+                index += 1
+            case UInt8(ascii: "["):
+                depth += 1
+            case UInt8(ascii: "]"):
+                depth -= 1
+                if depth == 0 { return index }
+            default:
+                break
+            }
+            index += 1
+        }
+        return nil
+    }
+
+    /// Pin each link and image the author wrote in reference style to its
+    /// authored spelling. cmark resolves such a node to hold the URL inline,
+    /// and its writer would paste that URL into the text as `[ref](url)`. The
+    /// node's source position still points at the authored bytes, so a node
+    /// whose source reads as a reference to a recovered definition becomes a
+    /// custom inline holding those bytes, which every writer emits verbatim.
+    /// A node whose position cannot be trusted keeps today's inline form,
+    /// which loses the spelling but never the URL.
+    private func restoreReferenceStyleLinks(
+        in doc: UnsafeMutablePointer<cmark_node>?,
+        labels: Set<String>,
+        lineTable: [LineInfo]
+    ) {
+        guard !labels.isEmpty, let doc else { return }
+        // Gather first: replacing nodes mid-iteration breaks the iterator.
+        var references: [UnsafeMutablePointer<cmark_node>] = []
+        let iterator = cmark_iter_new(doc)
+        defer { cmark_iter_free(iterator) }
+        while true {
+            let event = cmark_iter_next(iterator)
+            if event == CMARK_EVENT_DONE { break }
+            guard event == CMARK_EVENT_ENTER, let node = cmark_iter_get_node(iterator) else { continue }
+            let type = cmark_node_get_type(node)
+            if type == CMARK_NODE_LINK || type == CMARK_NODE_IMAGE {
+                references.append(node)
+            }
+        }
+        // A replaced node frees its whole subtree, and a link can hold a
+        // reference-style image (or another link's bytes) inside it. The
+        // pre-order gather puts every descendant after its ancestor, so the
+        // walk runs backwards: each descendant is decided while its ancestor
+        // still owns live memory, and never read after that ancestor is freed.
+        for node in references.reversed() {
+            let ancestor = inlineCoordinateAncestor(of: node)
+            guard let source = singleLineSource(of: node, lineTable: lineTable, ancestor: ancestor),
+                  let label = referenceLabel(inLinkSource: source),
+                  labels.contains(label),
+                  let replacement = cmark_node_new(CMARK_NODE_CUSTOM_INLINE) else { continue }
+            cmark_node_set_on_enter(replacement, source)
+            if cmark_node_insert_before(node, replacement) != 1 {
+                cmark_node_free(replacement)
+                // A table cell lists the child kinds it accepts, and a
+                // custom inline is not among them — but inline HTML is, and
+                // every writer emits its literal verbatim too, so the
+                // authored bytes ride in that node instead.
+                guard let cellReplacement = cmark_node_new(CMARK_NODE_HTML_INLINE) else { continue }
+                cmark_node_set_literal(cellReplacement, source)
+                guard cmark_node_insert_before(node, cellReplacement) == 1 else {
+                    cmark_node_free(cellReplacement)
+                    continue
+                }
+            }
+            cmark_node_unlink(node)
+            cmark_node_free(node)
+        }
+    }
+
+    /// The paragraph or heading whose content buffer this inline's reported
+    /// position is relative to, or nil for an inline outside one, such as a
+    /// table cell's.
+    private func inlineCoordinateAncestor(
+        of node: UnsafeMutablePointer<cmark_node>
+    ) -> UnsafeMutablePointer<cmark_node>? {
+        var ancestor = cmark_node_parent(node)
+        while let current = ancestor {
+            let type = cmark_node_get_type(current)
+            if type == CMARK_NODE_PARAGRAPH || type == CMARK_NODE_HEADING {
+                return current
+            }
+            ancestor = cmark_node_parent(current)
+        }
+        return nil
+    }
+
+    /// The authored bytes of an inline node that sits on one source line, or
+    /// nil when the reported position cannot be trusted to slice with.
+    ///
+    /// cmark reports inline positions against the block's content buffer,
+    /// mapped as if that buffer began at the block's start: lines are short
+    /// by the definitions stripped off the block's front, and every line's
+    /// columns carry the block's first-line indent while each later line's
+    /// own indent was stripped from the buffer. Both are rebased onto the
+    /// real source line here. The block's first line, with nothing stripped,
+    /// is the one place the reported columns are already real.
+    private func singleLineSource(
+        of node: UnsafeMutablePointer<cmark_node>,
+        lineTable: [LineInfo],
+        ancestor: UnsafeMutablePointer<cmark_node>?
+    ) -> String? {
+        var startLine = Int(cmark_node_get_start_line(node))
+        var endLine = Int(cmark_node_get_end_line(node))
+        var startColumn = Int(cmark_node_get_start_column(node))
+        var endColumn = Int(cmark_node_get_end_column(node))
+        if let ancestor {
+            let contentStart = contentStartLine(of: ancestor, lineTable: lineTable)
+            let lineShift = contentStart - Int(cmark_node_get_start_line(ancestor))
+            startLine += lineShift
+            endLine += lineShift
+            guard startLine == endLine, startLine >= 1, startLine <= lineTable.count else { return nil }
+            if lineShift > 0 || startLine > contentStart {
+                let blockOffset = Int(cmark_node_get_start_column(ancestor)) - 1
+                let columnShift = leadingWhitespaceByteCount(lineTable[startLine - 1].content) - blockOffset
+                startColumn += columnShift
+                endColumn += columnShift
+            }
+        }
+        guard startLine == endLine, startLine >= 1, startLine <= lineTable.count else { return nil }
+        let bytes = Array(lineTable[startLine - 1].content.utf8)
+        guard startColumn >= 1, startColumn <= endColumn, endColumn <= bytes.count else { return nil }
+        return String(decoding: bytes[(startColumn - 1)...(endColumn - 1)], as: UTF8.self)
+    }
+
+    /// The bytes of a line's leading spaces and tabs — cmark's first
+    /// nonspace position, which is where a continuation line's content
+    /// enters the block buffer.
+    private func leadingWhitespaceByteCount(_ line: String) -> Int {
+        var count = 0
+        for byte in line.utf8 {
+            guard byte == Self.spaceByte || byte == Self.tabByte else { break }
+            count += 1
+        }
+        return count
+    }
+
+    /// The label a reference-style link or image points at, or nil for any
+    /// other spelling. `[ref]` and `[ref][]` use their own text; `[text][ref]`
+    /// names the label second. An inline `[text](url)` ends with a paren and
+    /// matches none of these.
+    private func referenceLabel(inLinkSource source: String) -> String? {
+        var bytes = Array(source.utf8)
+        if bytes.first == UInt8(ascii: "!") {
+            bytes.removeFirst()
+        }
+        guard bytes.first == UInt8(ascii: "["),
+              let firstClose = matchingCloseBracket(in: bytes, opening: 0) else { return nil }
+        let firstLabel = String(decoding: bytes[1..<firstClose], as: UTF8.self)
+        if firstClose == bytes.count - 1 {
+            let label = normalizedLabel(firstLabel)
+            return label.isEmpty ? nil : label
+        }
+        guard bytes[firstClose + 1] == UInt8(ascii: "["),
+              let secondClose = matchingCloseBracket(in: bytes, opening: firstClose + 1),
+              secondClose == bytes.count - 1 else { return nil }
+        let secondLabel = String(decoding: bytes[(firstClose + 2)..<secondClose], as: UTF8.self)
+        let label = normalizedLabel(secondLabel.isEmpty ? firstLabel : secondLabel)
+        return label.isEmpty ? nil : label
+    }
+
+    /// Interleave the recovered top-level definitions with the parsed blocks
+    /// by their position in the source.
+    private func merged(_ blocks: [MarkdownBlock], with definitions: [MarkdownBlock]) -> [MarkdownBlock] {
+        guard !definitions.isEmpty else { return blocks }
+        var result: [MarkdownBlock] = []
+        result.reserveCapacity(blocks.count + definitions.count)
+        var remaining = definitions[...]
+        for block in blocks {
+            while let definition = remaining.first,
+                  definition.lineRange.lowerBound < block.lineRange.lowerBound {
+                result.append(definition)
+                remaining.removeFirst()
+            }
+            result.append(block)
+        }
+        result.append(contentsOf: remaining)
+        return result
     }
 
     private func getChildrenText(_ node: UnsafeMutablePointer<cmark_node>?, context: InlineTextContext) -> String {
@@ -760,7 +1462,7 @@ public struct MarkdownParser {
                 context: context,
                 startsLine: beginsLine(node),
                 endsBlock: next == nil,
-                isFollowedByLink: cmark_node_get_type(next) == CMARK_NODE_LINK
+                isFollowedByLink: isRestoredOrResolvedLink(next)
             )
         }
 
@@ -796,6 +1498,30 @@ public struct MarkdownParser {
         return ""
     }
 
+    /// True when the node's output opens with a link's bracket, so a `!` at
+    /// the end of the text before it would make an image. A link node is
+    /// one; so is a reference kept in its authored spelling, whether it
+    /// rides in a custom inline or — inside a table cell — in an inline-HTML
+    /// node. Both carriers are asked for their literal, because a restored
+    /// reference IMAGE opens with its own bang, and a bang before that
+    /// makes nothing. Authored inline HTML always opens with `<`, so the
+    /// literal check cannot mistake it.
+    private func isRestoredOrResolvedLink(_ node: UnsafeMutablePointer<cmark_node>?) -> Bool {
+        guard let node else { return false }
+        switch cmark_node_get_type(node) {
+        case CMARK_NODE_LINK:
+            return true
+        case CMARK_NODE_CUSTOM_INLINE:
+            let literal = cmark_node_get_on_enter(node).map { String(cString: $0) } ?? ""
+            return literal.hasPrefix("[")
+        case CMARK_NODE_HTML_INLINE:
+            let literal = cmark_node_get_literal(node).map { String(cString: $0) } ?? ""
+            return literal.hasPrefix("[")
+        default:
+            return false
+        }
+    }
+
     /// True when this node begins a line of its block: it is the first node, or a line
     /// break comes before it. A block marker is live only at the start of a line.
     private func beginsLine(_ node: UnsafeMutablePointer<cmark_node>) -> Bool {
@@ -808,9 +1534,14 @@ public struct MarkdownParser {
         for node: UnsafeMutablePointer<cmark_node>,
         lineTable: [LineInfo],
         trimTrailingBlankLines: Bool = false,
-        sourceLineCount: Int? = nil
+        sourceLineCount: Int? = nil,
+        contentStartLine: Int? = nil
     ) -> RangePair {
-        let startLine = Int(cmark_node_get_start_line(node))
+        // A block's public ranges address its surviving content. For a
+        // paragraph that cmark stripped leading definitions from, that
+        // content starts below the node's reported line, and the recovered
+        // definition block owns the lines above it.
+        let startLine = contentStartLine ?? Int(cmark_node_get_start_line(node))
         var endLine = Int(cmark_node_get_end_line(node))
         var endColumn = Int(cmark_node_get_end_column(node))
 

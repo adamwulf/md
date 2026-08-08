@@ -1,0 +1,4 @@
+A below-one block index read from stdin must be refused from
+validate(), so the usage names the SUBCOMMAND (insert-before),
+not the root command. This mirrors the --file refusal, and the
+lower-bound wording matches remove/replace: "must be >= 1".
