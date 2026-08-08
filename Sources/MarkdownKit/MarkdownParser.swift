@@ -870,10 +870,11 @@ public struct MarkdownParser {
     /// A backslash escapes only ASCII punctuation, exactly as cmark reads
     /// it: it can never jump the whitespace that ends a bare destination,
     /// and `\` before an ordinary character is that character's neighbour,
-    /// not an escape. Whitespace is cmark's own set — a vertical tab or form
-    /// feed ends the run the way a space does — and parentheses nest at most
-    /// 32 deep, cmark's own cap. Control characters are ordinary bytes to
-    /// cmark's scanner, so they are ordinary here.
+    /// not an escape. An unmatched close paren ends the run and an
+    /// unbalanced open paren is kept — cmark's scanner has no final balance
+    /// check — while nesting past 32 deep fails, cmark's own cap. Control
+    /// characters are ordinary bytes to cmark's scanner, so they are
+    /// ordinary here.
     private func destinationEnd(in bytes: [UInt8], from start: Int) -> Int? {
         guard start < bytes.count else { return nil }
         if bytes[start] == UInt8(ascii: "<") {
@@ -905,21 +906,21 @@ public struct MarkdownParser {
             if byte == UInt8(ascii: "(") {
                 parenDepth += 1
                 guard parenDepth <= 32 else { return nil }
-            }
-            if byte == UInt8(ascii: ")") {
+            } else if byte == UInt8(ascii: ")") {
+                if parenDepth == 0 { break }
                 parenDepth -= 1
-                guard parenDepth >= 0 else { return nil }
             }
             index += 1
         }
-        guard index > start, parenDepth == 0 else { return nil }
+        guard index > start else { return nil }
         return index
     }
 
     /// cmark's `cmark_isspace`, restricted to bytes that can sit inside a
-    /// line: space, tab, vertical tab, and form feed.
+    /// line. Its ctype table classes only space, tab, and the line-ending
+    /// bytes as whitespace: a vertical tab or form feed is an ordinary byte.
     private func isLineWhitespace(_ byte: UInt8) -> Bool {
-        byte == Self.spaceByte || byte == Self.tabByte || byte == 0x0B || byte == 0x0C
+        byte == Self.spaceByte || byte == Self.tabByte
     }
 
     /// cmark's `cmark_ispunct`: the four ASCII punctuation ranges.
@@ -1113,7 +1114,9 @@ public struct MarkdownParser {
             case UInt8(ascii: "["):
                 return nil
             case UInt8(ascii: "]"):
-                guard index - opening - 1 <= 999 else { return nil }
+                // cmark rejects only a label OVER its 1000-byte cap, so a
+                // label of exactly 1000 is accepted.
+                guard index - opening - 1 <= 1000 else { return nil }
                 return index
             default:
                 break

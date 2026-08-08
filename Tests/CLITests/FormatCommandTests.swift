@@ -479,4 +479,39 @@ final class FormatCommandTests: XCTestCase {
         XCTAssertEqual(once, "[a]: /u\u{01}rest\n\ntext\n")
         XCTAssertEqual(runFormat(once), once)
     }
+
+    /// cmark's bare-destination scanner has no final balance check, so an
+    /// unbalanced OPEN paren stays part of the destination and the folded
+    /// definition is consumed: it must come back, reference spelling intact.
+    func testFormatKeepsADefinitionWhoseDestinationHoldsAStrayOpenParen() {
+        let once = runFormat("[a]: https://x.com/foo(bar\nUses [a].\n")
+        XCTAssertEqual(once, "[a]: https://x.com/foo(bar\n\nUses [a].\n")
+        XCTAssertEqual(runFormat(once), once)
+    }
+
+    /// cmark's ctype table does not class a vertical tab or form feed as
+    /// whitespace, so a bare destination holding one is consumed whole and
+    /// the folded definition must be recovered.
+    func testFormatKeepsADefinitionWhoseDestinationHoldsAVerticalTabOrFormFeed() {
+        for control in ["\u{0B}", "\u{0C}"] {
+            let once = runFormat("[a]: /x\(control)more\nUses [a].\n")
+            XCTAssertEqual(once, "[a]: /x\(control)more\n\nUses [a].\n")
+            XCTAssertEqual(runFormat(once), once)
+        }
+    }
+
+    /// cmark rejects only a label OVER its 1000-byte cap: a label of
+    /// exactly 1000 is a definition and comes back, while one of 1001 is
+    /// paragraph text to both cmark and the recovery.
+    func testFormatKeepsADefinitionWithAThousandByteLabel() {
+        let label = String(repeating: "x", count: 1000)
+        let once = runFormat("[\(label)]: /x\nUses [\(label)].\n")
+        XCTAssertEqual(once, "[\(label)]: /x\n\nUses [\(label)].\n")
+        XCTAssertEqual(runFormat(once), once)
+
+        let overLimit = String(repeating: "x", count: 1001)
+        let escaped = runFormat("[\(overLimit)]: /x\nUses [\(overLimit)].\n")
+        XCTAssertEqual(escaped, "\\[\(overLimit)]: /x\nUses \\[\(overLimit)].\n")
+        XCTAssertEqual(runFormat(escaped), escaped)
+    }
 }
