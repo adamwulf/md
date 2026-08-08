@@ -61,7 +61,7 @@ and the instrumented subprocess hits that limit writing its own profile.
 reported 88.73% where the truth was 98.24%, which were the figures of that
 day. `--build-tests` fixes it.
 
-## Defects: 28 found, 23 fixed, 2 open, 1 won't fix, 2 withdrawn
+## Defects: 28 found, 24 fixed, 1 open, 1 won't fix, 2 withdrawn
 
 Each open defect is pinned by tests holding the CORRECT expectation, marked as
 known failures, so it turns green by itself when it is fixed. **The `known-fail`
@@ -75,7 +75,6 @@ Numbers are stable. A fixed defect keeps its number, because commit messages and
 
 | # | Defect | Pinned by |
 | --- | --- | --- |
-| 21 | A refusal prints the usage of `md`, not of the subcommand | 4 CLI |
 | 22 | `format` has no `-i` | 1 CLI |
 
 Fixed: **1** non-finite JSON number abort, **2** soft line break dropped, **3**
@@ -89,8 +88,10 @@ counted frontmatter as blocks, **13** malformed frontmatter read as empty,
 **14** `list` reported success for invalid paths, **15** `--key` mapping printed
 as a Swift dictionary, **16** null value serialized as `<null>`, **18** editing
 commands invented a final newline, **19** editing commands re-spelled untouched
-blocks, **20** ordered lists renumbered from one, **23** `list --key` split one
-file across multiple lines, **24** empty JSON arrays spanned three lines,
+blocks, **20** ordered lists renumbered from one, **21** an index refusal
+printed the usage of `md` instead of the subcommand that refused, **23**
+`list --key` split one file across multiple lines, **24** empty JSON arrays
+spanned three lines,
 **25** an edit destroyed the code block below it, **26** a code fence was closed
 by the backticks it enclosed, **27** a used link reference resolved inline while
 its definition was dropped.
@@ -154,6 +155,5 @@ asterisk bullet, or thematic break remains byte-for-byte unchanged.
 
 Ordered by tests turned green for code changed:
 
-1. **21** is small, but touches each editing command.
-2. **22** is one flag on `format`, unblocked now that 7 and 27 no longer
+1. **22** is one flag on `format`, unblocked now that 7 and 27 no longer
    lose link reference definitions.
