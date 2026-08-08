@@ -108,6 +108,27 @@ final class FormatCommandRunTests: XCTestCase {
         XCTAssertEqual(try scratch.read("document.md"), content)
     }
 
+    func testFormatInPlaceRewritesTheFileAndWritesNothingToStandardOutput() async throws {
+        let path = try scratch.write("#   Title\n\nBody.\n", to: "document.md")
+        let command = try FormatCommand.parse(["--in-place", "--file", path])
+        let output = try await StandardStream.capturingStandardOutput {
+            try await command.run()
+        }
+        XCTAssertEqual(output, "")
+        XCTAssertEqual(try scratch.read("document.md"), "# Title\n\nBody.\n")
+    }
+
+    func testFormatRejectsInPlaceWithStandardInput() {
+        XCTAssertThrowsError(
+            try FormatCommand.parse(["--in-place", "--stdin"])
+        ) { error in
+            XCTAssertEqual(
+                FormatCommand.message(for: error),
+                "Cannot use --in-place with --stdin"
+            )
+        }
+    }
+
     func testFormatOfAnEmptyDocumentWritesNothing() async throws {
         let output = try await runFormat(on: "")
         XCTAssertEqual(output, "")
