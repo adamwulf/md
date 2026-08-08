@@ -562,14 +562,44 @@ final class EditingCommandTests: XCTestCase {
         }
     }
 
-    func testInsertBeforeOnStdinStillRejectsAnIndexBelowOne() async throws {
-        let command = try InsertBeforeCommand.parse(["0", "New.", "--stdin"])
+    func testInsertBeforeOnStdinStillRejectsAnIndexPastTheLastBlock() async throws {
+        let command = try InsertBeforeCommand.parse(["3", "New.", "--stdin"])
         try await StandardStream.withStandardInput(twoHeadings) {
             await XCTAssertThrowsErrorMessage(
-                "Block index must be in range 1...2, got 0"
+                "Block index must be in range 1...2, got 3"
             ) {
                 try await command.run()
             }
+        }
+    }
+
+    // MARK: - The stdin path refuses a below-one index in validate()
+
+    // The lower bound needs no block count, so validate() throws it even on
+    // the stdin path, and the refusal names the subcommand. remove and replace
+    // already refuse a below-one index this way; insert-after and insert-before
+    // now match. The upper bound still needs the count and stays in run(),
+    // tested above.
+
+    func testInsertAfterOnStdinRejectsAnIndexBelowOneInValidate() {
+        XCTAssertThrowsError(
+            try InsertAfterCommand.parse(["0", "New.", "--stdin"])
+        ) { error in
+            XCTAssertEqual(
+                InsertAfterCommand.message(for: error),
+                "Block index must be >= 1, got 0"
+            )
+        }
+    }
+
+    func testInsertBeforeOnStdinRejectsAnIndexBelowOneInValidate() {
+        XCTAssertThrowsError(
+            try InsertBeforeCommand.parse(["0", "New.", "--stdin"])
+        ) { error in
+            XCTAssertEqual(
+                InsertBeforeCommand.message(for: error),
+                "Block index must be >= 1, got 0"
+            )
         }
     }
 
