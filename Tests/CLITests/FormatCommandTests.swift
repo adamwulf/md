@@ -518,6 +518,25 @@ final class FormatCommandTests: XCTestCase {
         XCTAssertEqual(runFormat(input), input)
     }
 
+    /// A restored reference IMAGE opens with its own bang, and a bang
+    /// before it makes nothing, so the text's trailing `!` keeps no
+    /// backslash it never needed.
+    func testFormatAddsNoBackslashBeforeARestoredReferenceImage() {
+        let input = "a!![b][i]\n\n[b]: /b\n[i]: /i\n"
+        let once = runFormat(input)
+        XCTAssertEqual(once, input)
+        XCTAssertEqual(runFormat(once), once)
+    }
+
+    /// The other direction: a `!` before a restored reference LINK would
+    /// make an image on the next parse, so its backslash must stay.
+    func testFormatKeepsTheBackslashOnABangBeforeARestoredReferenceLink() {
+        let input = "x\\![a] y\n\n[a]: /x\n"
+        let once = runFormat(input)
+        XCTAssertEqual(once, input)
+        XCTAssertEqual(runFormat(once), once)
+    }
+
     /// cmark rejects only a label OVER its 1000-byte cap: a label of
     /// exactly 1000 is a definition and comes back, while one of 1001 is
     /// paragraph text to both cmark and the recovery.

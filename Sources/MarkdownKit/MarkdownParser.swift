@@ -1502,13 +1502,18 @@ public struct MarkdownParser {
     /// the end of the text before it would make an image. A link node is
     /// one; so is a reference kept in its authored spelling, whether it
     /// rides in a custom inline or — inside a table cell — in an inline-HTML
-    /// node whose literal opens with the bracket. Authored inline HTML
-    /// always opens with `<`, so the literal check cannot mistake it.
+    /// node. Both carriers are asked for their literal, because a restored
+    /// reference IMAGE opens with its own bang, and a bang before that
+    /// makes nothing. Authored inline HTML always opens with `<`, so the
+    /// literal check cannot mistake it.
     private func isRestoredOrResolvedLink(_ node: UnsafeMutablePointer<cmark_node>?) -> Bool {
         guard let node else { return false }
         switch cmark_node_get_type(node) {
-        case CMARK_NODE_LINK, CMARK_NODE_CUSTOM_INLINE:
+        case CMARK_NODE_LINK:
             return true
+        case CMARK_NODE_CUSTOM_INLINE:
+            let literal = cmark_node_get_on_enter(node).map { String(cString: $0) } ?? ""
+            return literal.hasPrefix("[")
         case CMARK_NODE_HTML_INLINE:
             let literal = cmark_node_get_literal(node).map { String(cString: $0) } ?? ""
             return literal.hasPrefix("[")
